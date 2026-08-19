@@ -36,7 +36,7 @@ main()
      │   └─ switch (g->state)
      │       └─ GS_PLAY → UpdatePlaying()
      │            ├─ PlayerUpdate()          movimento, gravità, stamina
-     │            ├─ PlayerCamera()           camera dalla posizione+yaw/pitch
+     │            ├─ PlayerCamera()           camera in prima o terza persona
      │            ├─ WorldUpdateStreaming()   carica/scarica chunk
      │            ├─ EntitiesPopulate()       spawn/despawn nemici
      │            ├─ EntitiesUpdate()         IA e attacchi
@@ -65,6 +65,41 @@ Il mondo è una griglia di 64 × 64 chunk da 64 m. Ne restano caricati al massim
 Costruire una mesh richiede 33 × 33 = 1.089 campionamenti di `WorldHeight` più
 altrettanti di `WorldNormalAt` (che ne fa altri 4): è la parte più costosa del
 gioco, e per questo è distribuita su più frame.
+
+## Le due visuali
+
+`PlayerCamera()` costruisce la camera in prima o in terza persona partendo dagli
+stessi dati: posizione, `yaw`, `pitch`. In soggettiva la camera sta negli occhi
+(`PLAYER_EYE`) con un po' di *head bob*; in terza persona arretra di `camDist`
+lungo la direzione della visuale, con uno scostamento in alto e a destra
+(`CAM_RISE`, `CAM_SHOULDER`) perché altrimenti il personaggio coprirebbe
+esattamente il punto inquadrato.
+
+Due dettagli che è facile sbagliare:
+
+**La mira non passa dalla camera.** Prima, mischia, magia e dialoghi usavano
+`cam.target - cam.position`. In terza persona quel vettore parte da tre metri
+dietro le spalle: il dardo di fuoco sarebbe nato dietro al giocatore e i
+bersagli sarebbero risultati più lontani del vero. Ora esistono `PlayerEye()` e
+`PlayerLookDir()`, e `EntityLookedAt()` prende origine e direzione invece di una
+`Camera3D`. Il combattimento è quindi identico nelle due visuali, e la camera
+resta un puro fatto di presentazione.
+
+**Il terreno si mette in mezzo.** Se la camera arretrasse in linea retta,
+salendo una collina finirebbe sotto la superficie. `PlayerCamera()` campiona
+`WorldHeight()` in otto punti lungo l'arretramento e accorcia la distanza al
+primo che sfonda, poi alza comunque la camera di `CAM_CLEARANCE` sul terreno.
+Costa una manciata di `WorldHeight()` per frame, cioè niente, perché l'altezza è
+una funzione pura. I prop non sono considerati: un albero fra camera e
+giocatore lo si attraversa, come in molti giochi veri.
+
+Il corpo del giocatore (`PlayerDraw()`) è disegnato solo in terza persona. Se
+`assets/models/player.glb` esiste si usa quel modello con le sue animazioni
+(vedi `docs/03-asset-pubblici.md`), altrimenti le stesse primitive dei bipedi di
+`entity.c`: capsula, testa, arma, più due gambe che oscillano su `bobPhase` — la
+stessa fase che in soggettiva muove la testa.
+
+![Terza persona](img/05-terza-persona.png)
 
 ## Illuminazione senza shader
 

@@ -320,9 +320,10 @@ void EntitiesDraw(Entity *ents, World *w, Camera3D cam, Color tint)
     }
 }
 
-Entity *EntityLookedAt(Entity *ents, Camera3D cam, float maxDist, bool hostileOnly)
+Entity *EntityLookedAt(Entity *ents, Vector3 origin, Vector3 dir,
+                       float maxDist, bool hostileOnly)
 {
-    Vector3 fwd = Vector3Normalize(Vector3Subtract(cam.target, cam.position));
+    Vector3 fwd = Vector3Normalize(dir);
     Entity *best = NULL;
     float bestScore = 0.90f;   /* soglia di "mira": ~25 gradi */
 
@@ -333,7 +334,7 @@ Entity *EntityLookedAt(Entity *ents, Camera3D cam, float maxDist, bool hostileOn
         if (!hostileOnly && e->hostile) continue;
 
         Vector3 mid = { e->pos.x, e->pos.y + e->height * 0.6f, e->pos.z };
-        Vector3 rel = Vector3Subtract(mid, cam.position);
+        Vector3 rel = Vector3Subtract(mid, origin);
         float d = Vector3Length(rel);
         if (d > maxDist || d < 0.001f) continue;
 

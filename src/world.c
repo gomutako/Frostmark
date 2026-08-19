@@ -195,15 +195,18 @@ static Texture2D LoadTerrainTexture(unsigned int seed)
 /*  MODELLI ESTERNI OPZIONALI                                               */
 /* ------------------------------------------------------------------------ */
 
-/* Un modello per tipo di prop. 'scale' converte l'unita' del file (Kenney e
- * Quaternius esportano circa 1 unita' = 1 m, origine alla base) nelle
- * dimensioni che DrawProp() da' alle primitive; va ritoccata a occhio secondo
- * il pacchetto scaricato. I tipi non elencati restano procedurali. */
+/* Un modello per tipo di prop. 'scale' porta il modello alle dimensioni che
+ * DrawProp() da' alle primitive corrispondenti: i valori qui sotto sono tarati
+ * sul Nature Kit di Kenney (CC0), dove un albero e' alto 1.71 unita' mentre
+ * quello procedurale arriva a 6.5 m. Con un altro pacchetto vanno rifatti:
+ * 'scale' = altezza voluta in metri / altezza del modello.
+ * I tipi non elencati (casa, torre, cripta) restano procedurali. */
 static const struct { const char *file; float scale; } gExtProp[PROP_COUNT] = {
-    [PROP_TREE]  = { "assets/models/tree.glb",  2.0f },
-    [PROP_PINE]  = { "assets/models/pine.glb",  2.0f },
-    [PROP_ROCK]  = { "assets/models/rock.glb",  1.2f },
-    [PROP_HOUSE] = { "assets/models/house.glb", 3.0f },
+    [PROP_TREE] = { "assets/models/tree.glb", 3.8f },   /* h 1.71 -> 6.5 m */
+    [PROP_PINE] = { "assets/models/pine.glb", 4.4f },   /* h 1.53 -> 6.8 m */
+    [PROP_ROCK] = { "assets/models/rock.glb", 2.2f },   /* l 1.02 -> 2.2 m */
+    [PROP_BUSH] = { "assets/models/bush.glb", 4.2f },   /* h 0.24 -> 1.0 m */
+    [PROP_HERB] = { "assets/models/herb.glb", 4.5f },   /* h 0.19 -> 0.9 m */
 };
 
 static void LoadExtProps(World *w)

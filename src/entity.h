@@ -53,8 +53,11 @@ void EntitiesPopulate(Entity *ents, World *w, Player *p, float dt);
 
 void EntitiesDraw(Entity *ents, World *w, Camera3D cam, Color tint);
 
-/* Entita' piu' vicina davanti al giocatore (per parlare / bersagliare). */
-Entity *EntityLookedAt(Entity *ents, Camera3D cam, float maxDist, bool hostileOnly);
+/* Entita' piu' vicina nel mirino (per parlare / bersagliare), cercata a partire
+ * da un punto e una direzione: la mira parte dagli occhi del giocatore, che in
+ * terza persona non coincidono con la camera. */
+Entity *EntityLookedAt(Entity *ents, Vector3 origin, Vector3 dir,
+                       float maxDist, bool hostileOnly);
 
 /* Proiettili. */
 void ProjSpawn(Projectile *pr, Vector3 pos, Vector3 dir, float dmg, bool fromPlayer);

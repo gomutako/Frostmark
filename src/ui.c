@@ -205,7 +205,8 @@ void UIDrawCrosshair(Game *g)
 {
     int cx = GetScreenWidth() / 2, cy = GetScreenHeight() / 2;
     Color c = UI_TEXT;
-    Entity *tgt = EntityLookedAt(g->ents, g->cam, 3.6f, true);
+    Entity *tgt = EntityLookedAt(g->ents, PlayerEye(&g->player),
+                                 PlayerLookDir(&g->player), 3.6f, true);
     if (tgt) c = (Color){ 220, 90, 80, 255 };
     DrawLine(cx - 9, cy, cx - 3, cy, c);
     DrawLine(cx + 3, cy, cx + 9, cy, c);

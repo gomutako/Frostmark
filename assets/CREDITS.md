@@ -5,4 +5,9 @@ richiedono attribuzione: serve a dimostrare la provenienza in caso di dubbi.
 
 | File | Autore | Fonte (URL) | Licenza | Data |
 |---|---|---|---|---|
-|  |  |  |  |  |
+| assets/models/tree.glb | Kenney | https://kenney.nl/assets/nature-kit | CC0 | 2026-08-19 |
+| assets/models/pine.glb | Kenney | https://kenney.nl/assets/nature-kit | CC0 | 2026-08-19 |
+| assets/models/rock.glb | Kenney | https://kenney.nl/assets/nature-kit | CC0 | 2026-08-19 |
+| assets/models/bush.glb | Kenney | https://kenney.nl/assets/nature-kit | CC0 | 2026-08-19 |
+| assets/models/herb.glb | Kenney | https://kenney.nl/assets/nature-kit | CC0 | 2026-08-19 |
+| assets/models/player.glb | Kay Lousberg (KayKit Adventurers, Knight) | https://github.com/KayKit-Game-Assets/KayKit-Character-Pack-Adventures-1.0 | CC0 | 2026-08-19 |

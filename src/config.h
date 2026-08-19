@@ -57,7 +57,37 @@
 #define PLAYER_WALK    5.0f
 #define PLAYER_RUN     9.0f
 #define PLAYER_JUMP    7.5f
+#define PLAYER_HEIGHT  1.85f            /* altezza del corpo in terza persona */
 #define GRAVITY       22.0f
+
+/* --- Camera -------------------------------------------------------------
+ * In terza persona la camera orbita dietro la testa. Sotto CAM_DIST_MIN si
+ * rientra in prima persona: e' il comportamento della rotellina in Skyrim. */
+#define CAM_DIST_MIN   1.8f
+#define CAM_DIST_MAX   6.5f
+#define CAM_DIST_DEF   3.4f
+#define CAM_ZOOM_STEP  0.45f
+#define CAM_CLEARANCE  0.45f            /* stacco minimo dal terreno */
+#define CAM_SHOULDER   0.45f            /* scostamento a destra: libera il mirino */
+#define CAM_RISE       0.35f            /* la camera guarda da sopra la spalla */
+
+/* --- Modello animato del giocatore (opzionale) --------------------------
+ * Se il file esiste, in terza persona sostituisce le primitive. La scala
+ * porta l'altezza del modello a PLAYER_HEIGHT: il cavaliere KayKit misura
+ * 2.31 unita', da cui 1.85 / 2.31 = 0.80. Con un altro pacchetto va rifatta.
+ * Vedi docs/03-asset-pubblici.md. */
+#define PLAYER_MODEL_FILE  "assets/models/player.glb"
+/* Mesh da agganciare alle ossa (arma, scudo, elmo): raylib non le anima da se'.
+ * Il file lo genera tools/glb_attachments.py ed e' modificabile a mano. */
+#define PLAYER_ATTACH_FILE "assets/models/player.attach"
+#define MAX_ATTACHMENTS    8
+#define PLAYER_MODEL_SCALE 0.80f
+#define PLAYER_MODEL_YAW   0.0f         /* rotazione extra se il modello guarda -Z */
+
+/* --- Parata ------------------------------------------------------------- */
+#define BLOCK_SPEED_MUL 0.45f           /* quanto rallenta */
+#define BLOCK_DMG_MUL   0.45f           /* danno che passa comunque */
+#define BLOCK_STA_DRAIN 5.0f            /* vigore al secondo tenendo la guardia */
 
 /* --- Tempo -------------------------------------------------------------- */
 #define DAY_LENGTH_SECONDS 720.0f  /* un giorno di gioco = 12 minuti reali   */

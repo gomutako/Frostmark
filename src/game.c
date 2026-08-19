@@ -105,6 +105,7 @@ void GameNewWorld(Game *g, unsigned int seed)
 {
     /* Ripulisce eventuali risorse precedenti. */
     WorldUnload(&g->world);
+    PlayerUnload(&g->player);
     memset(g->ents,  0, sizeof(g->ents));
     memset(g->projs, 0, sizeof(g->projs));
 
@@ -145,6 +146,7 @@ void GameInit(Game *g, unsigned int seed)
 void GameShutdown(Game *g)
 {
     WorldUnload(&g->world);
+    PlayerUnload(&g->player);
 }
 
 /* ------------------------------------------------------------------------ */
@@ -180,7 +182,7 @@ static void DoMeleeAttack(Game *g)
     p->sta -= 10.0f;
     p->swing = 1.0f;
 
-    Vector3 fwd = Vector3Normalize(Vector3Subtract(g->cam.target, g->cam.position));
+    Vector3 fwd = PlayerLookDir(p);
     float reach = 3.0f;
     float best = 1e9f;
     Entity *hit = NULL;
@@ -212,8 +214,10 @@ static void DoCastSpell(Game *g)
     p->castCd = 0.75f;
     p->mp -= 12.0f;
 
-    Vector3 fwd = Vector3Normalize(Vector3Subtract(g->cam.target, g->cam.position));
-    Vector3 origin = Vector3Add(g->cam.position, Vector3Scale(fwd, 0.8f));
+    /* Il dardo parte dalla mano, non dalla camera: in terza persona la camera
+     * e' dietro le spalle e il proiettile attraverserebbe il giocatore. */
+    Vector3 fwd = PlayerLookDir(p);
+    Vector3 origin = Vector3Add(PlayerEye(p), Vector3Scale(fwd, 0.8f));
     float dmg = 16.0f * (1.0f + p->skillMagic * 0.04f);
     ProjSpawn(g->projs, origin, fwd, dmg, true);
     p->skillMagic += (GetRandomValue(0, 8) == 0) ? 1 : 0;
@@ -222,7 +226,8 @@ static void DoCastSpell(Game *g)
 static void DoInteract(Game *g)
 {
     /* 1) NPC nel mirino -> dialogo. */
-    Entity *npc = EntityLookedAt(g->ents, g->cam, 4.5f, false);
+    Entity *npc = EntityLookedAt(g->ents, PlayerEye(&g->player),
+                                 PlayerLookDir(&g->player), 4.5f, false);
     if (npc) {
         g->talkTarget  = npc;
         g->dialogueOpt = 0;
@@ -284,7 +289,7 @@ static void UpdatePlaying(Game *g, float dt)
     if (g->timeOfDay >= 1.0f) g->timeOfDay -= 1.0f;
 
     PlayerUpdate(p, &g->world, dt, true);
-    PlayerCamera(p, &g->cam);
+    PlayerCamera(p, &g->world, &g->cam);
 
     WorldUpdateStreaming(&g->world, p->pos);
     EntitiesPopulate(g->ents, &g->world, p, dt);
@@ -464,6 +469,9 @@ void GameUpdate(Game *g, float dt)
     } break;
 
     case GS_DEAD:
+        /* Il giocatore non si aggiorna piu', ma l'animazione di morte deve
+         * arrivare a fine corsa. */
+        PlayerUpdateAnimation(&g->player, dt);
         if (IsKeyPressed(KEY_ENTER)) { RespawnPlayer(g); g->state = GS_PLAY; DisableCursor(); }
         if (IsKeyPressed(KEY_Q))     { g->state = GS_MENU; }
         break;
@@ -498,8 +506,11 @@ static void DrawScene(Game *g)
         ProjDraw(g->projs, &g->world);
         WorldDrawWater(&g->world, g->player.pos, tint, g->playTime);
 
+        /* Il corpo del giocatore si vede solo in terza persona. */
+        PlayerDraw(&g->player, tint);
+
         /* Arma in prima persona: un semplice parallelepipedo che oscilla. */
-        if (g->state == GS_PLAY) {
+        if (g->state == GS_PLAY && g->player.camMode == CAM_FIRST) {
             Vector3 fwd = Vector3Normalize(Vector3Subtract(g->cam.target, g->cam.position));
             Vector3 right = Vector3Normalize(Vector3CrossProduct(fwd, g->cam.up));
             float sw = g->player.swing;

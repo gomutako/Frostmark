@@ -74,10 +74,18 @@ bool LoadGameFromFile(Game *g, const char *path)
     if (n != 1) return false;
     if (s.magic != SAVE_MAGIC || s.version != SAVE_VERSION) return false;
 
+    /* La visuale non sta nel salvataggio: e' una preferenza di vista, non
+     * stato di gioco. GameNewWorld() rifa' il giocatore da zero, quindi la si
+     * mette da parte e la si rimette dopo. */
+    CamMode camMode = g->player.camMode;
+    float   camDist = g->player.camDist;
+
     /* Rigenera il mondo dal seme salvato, poi ripristina il giocatore. */
     GameNewWorld(g, s.seed);
 
     Player *p = &g->player;
+    p->camMode = camMode;
+    p->camDist = camDist;
     p->pos = (Vector3){ s.px, s.py, s.pz };
     p->yaw = s.yaw; p->pitch = s.pitch;
     p->hp = s.hp; p->maxHp = s.maxHp;

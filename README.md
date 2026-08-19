@@ -1,7 +1,7 @@
 # Frostmark
 
-Un piccolo RPG open world in prima persona ispirato a *The Elder Scrolls V: Skyrim*,
-scritto in **C99 standard** con la sola libreria **raylib**.
+Un piccolo RPG open world ispirato a *The Elder Scrolls V: Skyrim*, in prima o
+terza persona, scritto in **C99 standard** con la sola libreria **raylib**.
 
 Il progetto ha due obiettivi dichiarati:
 
@@ -16,6 +16,7 @@ fonti pubbliche CC0 (vedi `docs/03-asset-pubblici.md`).
 
 ![Foresta](docs/img/01-foresta.png)
 ![Villaggio](docs/img/02-villaggio.png)
+![Terza persona](docs/img/05-terza-persona.png)
 
 ---
 
@@ -83,6 +84,8 @@ make web             # richiede emsdk attivo
 
 ```bash
 ./tools/fetch_assets.sh              # prepara assets/ e stampa le fonti CC0
+./tools/fetch_assets.sh models       # scarica i modelli low-poly CC0 di Kenney
+./tools/fetch_assets.sh player       # scarica il personaggio animato CC0 (KayKit)
 ./tools/fetch_assets.sh heightmap    # genera anche una heightmap di prova
 ```
 
@@ -93,7 +96,8 @@ gioco usa la versione procedurale:
 |---|---|
 | `assets/heightmap.png` | terreno esterno al posto del rumore (QGIS/GDAL, Blender, GIMP — vedi `docs/02-generazione-mondo.md`) |
 | `assets/textures/grass.png` | texture del terreno al posto della grana procedurale |
-| `assets/models/tree.glb`, `pine.glb`, `rock.glb`, `house.glb` | modelli al posto delle primitive |
+| `assets/models/tree.glb`, `pine.glb`, `rock.glb`, `bush.glb`, `herb.glb` | modelli al posto delle primitive (alberi, sassi, cespugli, erbe) |
+| `assets/models/player.glb` | personaggio animato in terza persona (camminata, corsa, attacco, parata, salto, morte) |
 
 Font e audio richiedono invece qualche riga di codice: vedi
 `docs/03-asset-pubblici.md`.
@@ -115,10 +119,13 @@ Font e audio richiedono invece qualche riga di codice: vedi
 |---|---|
 | `W A S D` | Movimento |
 | `Mouse` | Guardarsi attorno |
+| `F` | Alterna prima e terza persona |
+| `Rotellina` | Allontana o avvicina la camera (fino a rientrare in soggettiva) |
 | `Shift` | Corsa (consuma vigore) |
 | `Spazio` | Salto |
 | `Tasto sinistro` | Attacco in mischia |
 | `Tasto destro` | Dardo di fuoco (consuma magia) |
+| `Ctrl sinistro` | Para (rallenta, consuma vigore, dimezza i danni) |
 | `E` | Parla / raccogli |
 | `R` | Bevi rapidamente una pozione di cura |
 | `TAB` | Zaino (inventario) |
@@ -139,6 +146,12 @@ Nei menu: `↑ ↓` per scorrere, `Invio` per confermare, `ESC` per uscire.
   l'abitato.
 - **Ciclo giorno/notte** (12 minuti reali = 24 ore di gioco) che tinta cielo,
   terreno e personaggi.
+- **Due visuali**: prima persona con arma a schermo, terza persona con la
+  camera dietro le spalle; si alternano con `F` o con la rotellina.
+- **Personaggio animato** opzionale in terza persona: se `assets/models/player.glb`
+  esiste, le animazioni di riposo, camminata, corsa, attacco, parata,
+  incantesimo, salto, colpo ricevuto e morte vengono scelte dallo stato di gioco.
+  Arma, scudo ed elmo seguono le ossa (vedi `assets/models/player.attach`).
 - **Combattimento** in mischia a cono + magia a proiettile, con vigore e magia.
 - **Nemici** con IA a stati (lupi, banditi, redivivi) che compaiono in base al
   bioma, e un **boss** nella cripta.
@@ -156,7 +169,7 @@ src/
   config.h    tutte le costanti di gioco (scala del mondo, bilanciamento)
   noise.c/h   value noise, fBm, ridged noise deterministici
   world.c/h   altimetria, biomi, mesh dei chunk, prop, villaggi, collisioni
-  player.c/h  movimento in prima persona, statistiche, camera
+  player.c/h  movimento, statistiche, camera in prima/terza persona
   entity.c/h  NPC, nemici, IA a stati finiti, proiettili
   items.c/h   database oggetti + inventario
   quest.c/h   missioni e dialoghi generati dallo stato di gioco

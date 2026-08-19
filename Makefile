@@ -22,7 +22,10 @@ BUILD_DIR:= build
 SRCS     := $(wildcard $(SRC_DIR)/*.c)
 OBJS     := $(patsubst $(SRC_DIR)/%.c,$(BUILD_DIR)/%.o,$(SRCS))
 
-CFLAGS_COMMON := -std=c99 -Wall -Wextra -Wno-unused-result -I$(SRC_DIR)
+# -MMD -MP: genera i file .d con le dipendenze dagli header, cosi' modificare
+# config.h o player.h ricompila quello che serve invece di lasciare oggetti
+# vecchi in build/.
+CFLAGS_COMMON := -std=c99 -Wall -Wextra -Wno-unused-result -I$(SRC_DIR) -MMD -MP
 CFLAGS  ?= -O2
 LDFLAGS :=
 LDLIBS  := -lm
@@ -86,6 +89,8 @@ $(TARGET): $(OBJS) $(RAYLIB_DEP)
 
 run: all
 	./$(TARGET)
+
+-include $(OBJS:.o=.d)
 
 # ---- raylib dal submodule --------------------------------------------------
 # Serve una volta sola (~1 minuto). Su Linux richiede gli header di sviluppo di
