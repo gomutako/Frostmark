@@ -139,6 +139,7 @@ void GameInit(Game *g, unsigned int seed)
     g->cam.up  = (Vector3){ 0.0f, 1.0f, 0.0f };
     g->cam.fovy = 70.0f;
     g->cam.projection = CAMERA_PERSPECTIVE;
+    EntitiesLoadModels();          /* risorse: non dipendono dal seme */
     GameNewWorld(g, seed);
     g->state = GS_MENU;   /* GameNewWorld non cambia stato, ma restiamo espliciti */
 }
@@ -147,6 +148,7 @@ void GameShutdown(Game *g)
 {
     WorldUnload(&g->world);
     PlayerUnload(&g->player);
+    EntitiesUnloadModels();
 }
 
 /* ------------------------------------------------------------------------ */

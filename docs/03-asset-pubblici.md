@@ -19,8 +19,9 @@ Stato degli innesti nel codice:
 | `assets/textures/grass.png` | rilevato in automatico (`LoadTerrainTexture`) |
 | `assets/models/*.glb` | rilevati in automatico (`LoadExtProps`) |
 | `assets/models/player.glb` | rilevato in automatico (`PlayerLoadModel`), con animazioni |
-| `assets/fonts/ui.ttf` | **richiede modifiche a `ui.c`** (sezione 4) |
-| `assets/audio/*` | **richiede modifiche a `main.c`** (sezione 5) |
+| `assets/models/npc_*.glb` | rilevati in automatico (`EntitiesLoadModels`) |
+| `assets/fonts/ui.ttf` | **richiede modifiche a `ui.c`** (sezione 5) |
+| `assets/audio/*` | **richiede modifiche a `main.c`** (sezione 6) |
 
 I primi quattro bastano copiare al posto giusto: se il file manca, il gioco usa
 la versione procedurale e non cambia niente.
@@ -286,7 +287,63 @@ Il controllo che vale la pena fare, se si cambia pacchetto, è guardare
 l'animazione di morte: se la matrice è sbagliata il corpo cade e l'arma resta in
 piedi a mezz'aria.
 
-### 4. Font dell'interfaccia
+### 4. NPC animati
+
+```bash
+./tools/fetch_assets.sh npc
+```
+
+Installa cinque personaggi CC0 (KayKit *Adventurers* e *Skeletons*), uno per
+ruolo:
+
+| File | Chi anima | Modello |
+|---|---|---|
+| `npc_villager.glb` | popolano, mercante, anziano | Mage |
+| `npc_guard.glb` | guardia | Knight |
+| `npc_bandit.glb` | bandito | Rogue_Hooded |
+| `npc_revenant.glb` | redivivo | Skeleton_Minion |
+| `npc_boss.glb` | Vald il Sepolto | Skeleton_Warrior |
+
+![NPC animati](img/07-npc-animati.png)
+
+La tabella `NPC_MODEL` in `entity.c` associa tipo, file e altezza. Tre tipi
+puntano allo stesso file, e in quel caso il modello viene caricato una volta
+sola. Il **lupo resta procedurale**: fra i pacchetti CC0 usati non c'è un
+quadrupede animato.
+
+L'animazione la scegle lo stato dell'IA, che è già una macchina a stati:
+`AI_DEAD` → morte, `AI_ATTACK` → attacco, `AI_CHASE` → corsa, `AI_WANDER` →
+camminata, altrimenti riposo. Il passo scala con `e->speed`, così un redivivo
+lento non pattina come un bandito.
+
+**Un solo modello serve molti personaggi.** `UpdateModelAnimation()` scrive i
+vertici deformati nel buffer del modello: contiene una posa alla volta. Non
+serve però una copia per NPC — basta rideformare **dentro il ciclo di disegno**,
+una volta per personaggio, perché ogni `DrawMesh` usa la posa appena calcolata.
+Misurato: **0,06 ms per istanza** (deformazione più caricamento del buffer), cioè
+1 ms per sedici NPC visibili su un budget di 16,7 ms a 60 fps. Il numero di
+istanze è limitato dal culling, non dalla memoria.
+
+Oltre `NPC_MODEL_DIST` (140 m) si torna alle primitive: a quella distanza un
+passo non si distingue e la rideformazione non ripaga.
+
+**Il costo vero è la memoria.** Ogni pacchetto porta 76-95 clip di cui il gioco
+usa nove, e una posa sono 41 ossa × 40 byte per ogni fotogramma di ogni clip.
+Misurato con `/usr/bin/time` (picco di RSS):
+
+| Configurazione | Picco RSS |
+|---|---|
+| senza modelli di personaggio | 154 MB |
+| sei modelli, tutte le clip | 245 MB |
+| sei modelli, clip inutilizzate liberate | 207 MB |
+
+`DropUnusedAnims()` in `charmodel.c` libera le pose delle clip che nessun ruolo
+usa, azzerandone `frameCount` perché `UnloadModelAnimations()` non le ripassi.
+Restano ~53 MB per sei personaggi: sul desktop non è un problema, ma la build
+WebAssembly gira con `TOTAL_MEMORY=134217728` e va alzata. Il passo successivo,
+se serve, è togliere le clip inutilizzate direttamente dal `.glb`.
+
+### 5. Font dell'interfaccia
 
 `ui.c` usa `DrawText()`, che impiega il font di default (bitmap, un po' rigido).
 Con un TTF:
@@ -303,7 +360,7 @@ DrawTextEx(uiFont, testo, (Vector2){ x, y }, size, 1.0f, colore);
 Conviene metterlo in `Game` e passarlo alle funzioni di `ui.c`, oppure tenerlo in
 una variabile `static` del modulo.
 
-### 5. Audio
+### 6. Audio
 
 Frostmark non usa audio: aggiungerlo richiede solo `InitAudioDevice()` in
 `main.c` e quattro chiamate. Suoni consigliati: colpo a segno, passo, ambiente,

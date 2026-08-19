@@ -35,6 +35,95 @@ Color EntityColor(EntityType t)
     }
 }
 
+/* ------------------------------------------------------------------------ */
+/*  MODELLI ANIMATI (opzionali)                                             */
+/* ------------------------------------------------------------------------ */
+
+/* Un file per tipo; piu' tipi possono condividerlo, e in quel caso viene
+ * caricato una volta sola. L'altezza serve a ricavare la scala e coincide con
+ * quella usata dalle collisioni in EntitySpawn().
+ * Il lupo non c'e': fra i pacchetti CC0 usati non esiste un quadrupede
+ * animato, quindi resta procedurale. */
+static const struct { EntityType type; const char *file; float height; } NPC_MODEL[] = {
+    { ENT_VILLAGER, "assets/models/npc_villager.glb", 1.80f },
+    { ENT_MERCHANT, "assets/models/npc_villager.glb", 1.80f },
+    { ENT_ELDER,    "assets/models/npc_villager.glb", 1.80f },
+    { ENT_GUARD,    "assets/models/npc_guard.glb",    1.80f },
+    { ENT_BANDIT,   "assets/models/npc_bandit.glb",   1.80f },
+    { ENT_REVENANT, "assets/models/npc_revenant.glb", 1.80f },
+    { ENT_BOSS,     "assets/models/npc_boss.glb",     2.50f },
+};
+#define NPC_MODEL_COUNT ((int)(sizeof(NPC_MODEL) / sizeof(NPC_MODEL[0])))
+
+/* I modelli sono risorse, non stato di gioco: vivono qui, statici, invece di
+ * gonfiare Game o Entity. Ogni Entity porta solo la propria posa. */
+static CharModel gModels[NPC_MODEL_COUNT];
+static int       gModelCount = 0;
+static int       gTypeModel[ENT_BOSS + 1];      /* tipo -> indice, -1 se assente */
+
+void EntitiesLoadModels(void)
+{
+    EntitiesUnloadModels();
+    for (int t = 0; t <= ENT_BOSS; t++) gTypeModel[t] = -1;
+
+    for (int i = 0; i < NPC_MODEL_COUNT; i++) {
+        int share = -1;
+        for (int k = 0; k < i; k++)                       /* stesso file? */
+            if (TextIsEqual(NPC_MODEL[k].file, NPC_MODEL[i].file))
+                share = gTypeModel[NPC_MODEL[k].type];
+        if (share >= 0) { gTypeModel[NPC_MODEL[i].type] = share; continue; }
+
+        if (CharModelLoad(&gModels[gModelCount], NPC_MODEL[i].file, NPC_MODEL[i].height))
+            gTypeModel[NPC_MODEL[i].type] = gModelCount++;
+    }
+    if (gModelCount > 0)
+        TraceLog(LOG_INFO, "ENTITY: %d modelli di personaggio caricati", gModelCount);
+}
+
+void EntitiesUnloadModels(void)
+{
+    for (int i = 0; i < gModelCount; i++) CharModelUnload(&gModels[i]);
+    gModelCount = 0;
+}
+
+static const CharModel *ModelFor(EntityType type)
+{
+    if ((int)type < 0 || (int)type > ENT_BOSS) return NULL;
+    int i = gTypeModel[type];
+    return (i >= 0 && i < gModelCount) ? &gModels[i] : NULL;
+}
+
+/* Lo stato dell'IA e' gia' una macchina a stati: basta tradurlo. */
+static CharAnim EntityPickAnim(const Entity *e)
+{
+    switch (e->state) {
+        case AI_DEAD:   return CANIM_DEATH;
+        case AI_ATTACK: return CANIM_ATTACK;
+        case AI_CHASE:  return CANIM_RUN;
+        case AI_WANDER: return CANIM_WALK;
+        default:        return CANIM_IDLE;
+    }
+}
+
+static void EntityUpdateAnim(Entity *e, float dt)
+{
+    const CharModel *cm = ModelFor(e->type);
+    if (cm == NULL) return;
+
+    CharAnim want = CharModelResolve(cm, EntityPickAnim(e));
+    if (want != e->anim) { e->anim = want; e->animFrame = 0.0f; }
+
+    /* Il passo segue la velocita' del tipo: un redivivo lento non deve
+     * pattinare come un bandito. I riferimenti sono le andature medie. */
+    float speedMul = 1.0f;
+    if (want == CANIM_WALK) speedMul = e->speed / 1.8f;
+    if (want == CANIM_RUN)  speedMul = e->speed / 4.5f;
+
+    float seconds = (want == CANIM_DEATH) ? 1.30f
+                  : (want == CANIM_ATTACK) ? 0.60f : 0.30f;
+    e->animFrame = CharModelAdvance(cm, want, e->animFrame, dt, speedMul, seconds);
+}
+
 Entity *EntitySpawn(Entity *ents, EntityType type, Vector3 pos, World *w)
 {
     int slot = -1;
@@ -120,6 +209,10 @@ void EntitiesUpdate(Entity *ents, World *w, Player *p, float dt)
 
         if (e->attackCd   > 0.0f) e->attackCd   -= dt;
         if (e->stateTimer > 0.0f) e->stateTimer -= dt;
+
+        /* Prima dell'uscita anticipata: anche un morto deve finire la sua
+         * animazione. */
+        EntityUpdateAnim(e, dt);
 
         if (e->state == AI_DEAD) continue;
 
@@ -274,6 +367,20 @@ void EntitiesDraw(Entity *ents, World *w, Camera3D cam, Color tint)
         c = (Color){ (unsigned char)(c.r * tint.r / 255),
                      (unsigned char)(c.g * tint.g / 255),
                      (unsigned char)(c.b * tint.b / 255), 255 };
+
+        /* Modello animato, se per questo tipo esiste e siamo abbastanza
+         * vicini: oltre NPC_MODEL_DIST il costo della deformazione non
+         * ripaga, e si torna alle primitive. Il colore lo porta la texture,
+         * quindi si applica solo la tinta del ciclo giorno/notte. */
+        const CharModel *cm = ModelFor(e->type);
+        if (cm != NULL && dist < NPC_MODEL_DIST) {
+            CharModelDraw(cm, e->pos, e->yaw + PLAYER_MODEL_YAW * DEG2RAD,
+                          e->anim, e->animFrame, tint);
+            if (e->type == ENT_BOSS)
+                DrawSphereWires((Vector3){ e->pos.x, e->pos.y + 1.2f, e->pos.z },
+                                1.8f, 6, 8, Fade((Color){ 200, 60, 60, 255 }, 0.35f));
+            continue;
+        }
 
         if (e->state == AI_DEAD) {
             /* Cadavere: capsula sdraiata. */

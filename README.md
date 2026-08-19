@@ -86,6 +86,7 @@ make web             # richiede emsdk attivo
 ./tools/fetch_assets.sh              # prepara assets/ e stampa le fonti CC0
 ./tools/fetch_assets.sh models       # scarica i modelli low-poly CC0 di Kenney
 ./tools/fetch_assets.sh player       # scarica il personaggio animato CC0 (KayKit)
+./tools/fetch_assets.sh npc          # scarica i personaggi animati degli NPC
 ./tools/fetch_assets.sh heightmap    # genera anche una heightmap di prova
 ```
 
@@ -98,6 +99,7 @@ gioco usa la versione procedurale:
 | `assets/textures/grass.png` | texture del terreno al posto della grana procedurale |
 | `assets/models/tree.glb`, `pine.glb`, `rock.glb`, `bush.glb`, `herb.glb` | modelli al posto delle primitive (alberi, sassi, cespugli, erbe) |
 | `assets/models/player.glb` | personaggio animato in terza persona (camminata, corsa, attacco, parata, salto, morte) |
+| `assets/models/npc_villager.glb`, `npc_guard.glb`, `npc_bandit.glb`, `npc_revenant.glb`, `npc_boss.glb` | NPC animati; l'animazione segue lo stato dell'IA |
 
 Font e audio richiedono invece qualche riga di codice: vedi
 `docs/03-asset-pubblici.md`.
@@ -152,6 +154,10 @@ Nei menu: `↑ ↓` per scorrere, `Invio` per confermare, `ESC` per uscire.
   esiste, le animazioni di riposo, camminata, corsa, attacco, parata,
   incantesimo, salto, colpo ricevuto e morte vengono scelte dallo stato di gioco.
   Arma, scudo ed elmo seguono le ossa (vedi `assets/models/player.attach`).
+- **NPC animati**: gli stessi ruoli valgono per popolani, guardie, banditi,
+  redivivi e boss, guidati dalla macchina a stati dell'IA. Lo stesso modello
+  serve piu' personaggi con pose diverse, rideformandolo dentro il ciclo di
+  disegno (~0,06 ms per NPC visibile). I lupi restano procedurali.
 - **Combattimento** in mischia a cono + magia a proiettile, con vigore e magia.
 - **Nemici** con IA a stati (lupi, banditi, redivivi) che compaiono in base al
   bioma, e un **boss** nella cripta.
@@ -173,6 +179,7 @@ src/
   entity.c/h  NPC, nemici, IA a stati finiti, proiettili
   items.c/h   database oggetti + inventario
   quest.c/h   missioni e dialoghi generati dallo stato di gioco
+  charmodel.c/h  modello di personaggio animato, condiviso da giocatore e NPC
   ui.c/h      HUD, menu, inventario, diario, mappa, negozio
   save.c/h    salvataggio binario
   game.c/h    stato globale, ciclo di gioco, combattimento, disegno

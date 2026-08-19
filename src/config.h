@@ -71,18 +71,20 @@
 #define CAM_SHOULDER   0.45f            /* scostamento a destra: libera il mirino */
 #define CAM_RISE       0.35f            /* la camera guarda da sopra la spalla */
 
-/* --- Modello animato del giocatore (opzionale) --------------------------
- * Se il file esiste, in terza persona sostituisce le primitive. La scala
- * porta l'altezza del modello a PLAYER_HEIGHT: il cavaliere KayKit misura
- * 2.31 unita', da cui 1.85 / 2.31 = 0.80. Con un altro pacchetto va rifatta.
+/* --- Modelli animati dei personaggi (opzionali) -------------------------
+ * Se il file esiste sostituisce le primitive. La scala non si indovina: viene
+ * ricavata misurando il modello e portandolo all'altezza voluta.
  * Vedi docs/03-asset-pubblici.md. */
 #define PLAYER_MODEL_FILE  "assets/models/player.glb"
-/* Mesh da agganciare alle ossa (arma, scudo, elmo): raylib non le anima da se'.
- * Il file lo genera tools/glb_attachments.py ed e' modificabile a mano. */
-#define PLAYER_ATTACH_FILE "assets/models/player.attach"
-#define MAX_ATTACHMENTS    8
-#define PLAYER_MODEL_SCALE 0.80f
 #define PLAYER_MODEL_YAW   0.0f         /* rotazione extra se il modello guarda -Z */
+/* Mesh da agganciare alle ossa (arma, scudo, elmo): raylib non le anima da se'.
+ * L'elenco sta in un file "<modello>.attach" generato da
+ * tools/glb_attachments.py, ed e' modificabile a mano. */
+#define MAX_ATTACHMENTS    8
+/* Oltre questa distanza gli NPC tornano alle primitive: ogni personaggio
+ * animato costa una rideformazione e un caricamento del buffer per frame
+ * (~0.06 ms), e a 140 m un passo non si distingue piu'. */
+#define NPC_MODEL_DIST     140.0f
 
 /* --- Parata ------------------------------------------------------------- */
 #define BLOCK_SPEED_MUL 0.45f           /* quanto rallenta */

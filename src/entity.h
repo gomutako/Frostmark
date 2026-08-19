@@ -7,6 +7,7 @@
 #include "raylib.h"
 #include "config.h"
 #include "world.h"
+#include "charmodel.h"
 #include "player.h"
 
 typedef enum {
@@ -30,6 +31,10 @@ typedef struct Entity {
     int   xpReward, goldReward, dropItem;
     int   townIndex;               /* per gli NPC di villaggio */
     char  name[28];
+
+    /* Posa corrente, se per questo tipo esiste un modello animato. */
+    CharAnim anim;
+    float    animFrame;
 } Entity;
 
 typedef struct {
@@ -43,6 +48,12 @@ const char *EntityTypeName(EntityType t);
 Color       EntityColor(EntityType t);
 
 /* Crea un'entita' nel primo slot libero. Ritorna NULL se l'array e' pieno. */
+/* Modelli animati dei personaggi: risorse condivise, non dipendono dal seme.
+ * Si caricano una volta all'avvio; se i file non ci sono si disegnano le
+ * primitive di sempre. */
+void EntitiesLoadModels(void);
+void EntitiesUnloadModels(void);
+
 Entity *EntitySpawn(Entity *ents, EntityType type, Vector3 pos, World *w);
 
 /* Aggiorna IA, movimento e attacchi di tutte le entita'. */

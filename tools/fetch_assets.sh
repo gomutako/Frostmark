@@ -15,6 +15,7 @@
 #        ./tools/fetch_assets.sh heightmap  genera anche una heightmap di prova
 #        ./tools/fetch_assets.sh models     scarica i modelli CC0 di Kenney
 #        ./tools/fetch_assets.sh player     scarica il personaggio animato CC0
+#        ./tools/fetch_assets.sh npc        scarica i personaggi animati degli NPC
 # ============================================================================
 set -euo pipefail
 
@@ -34,6 +35,63 @@ richiedono attribuzione: serve a dimostrare la provenienza in caso di dubbi.
 |---|---|---|---|---|
 EOF
 echo "creato assets/CREDITS.md"
+fi
+
+# ---- personaggi animati per gli NPC (KayKit) ------------------------------
+#  Un modello per ruolo. Popolano, mercante e anziano condividono lo stesso file
+#  (vedi NPC_MODEL in src/entity.c), quindi viene caricato una volta sola.
+#  Il lupo resta procedurale: fra questi pacchetti non c'e' un quadrupede.
+if [ "${1:-}" = "npc" ]; then
+    for cmd in curl python3; do
+        command -v "$cmd" >/dev/null 2>&1 || { echo "serve $cmd"; exit 1; }
+    done
+
+    ADV="https://raw.githubusercontent.com/KayKit-Game-Assets/KayKit-Character-Pack-Adventures-1.0/main"
+    SKE="https://raw.githubusercontent.com/KayKit-Game-Assets/KayKit-Character-Pack-Skeletons-1.0/main"
+
+    echo "verifico le licenze..."
+    for base in "$ADV" "$SKE"; do
+        if ! curl -sSL "$base/LICENSE.txt" | grep -qi "Creative Commons Zero"; then
+            echo "ATTENZIONE: licenza non CC0 su $base. Mi fermo."
+            exit 1
+        fi
+    done
+    echo "licenze verificate: CC0"
+
+    while IFS=: read -r pack who dst; do
+        [ -n "$pack" ] || continue
+        case "$pack" in
+            adv) url="$ADV/addons/kaykit_character_pack_adventures/Characters/gltf/$who.glb" ;;
+            ske) url="$SKE/addons/kaykit_character_pack_skeletons/Characters/gltf/$who.glb" ;;
+        esac
+        echo "scarico $who.glb -> assets/models/$dst.glb"
+        if ! curl -fsSL -o "$ASSETS/models/$dst.glb" "$url"; then
+            rm -f "$ASSETS/models/$dst.glb"
+            echo "  download fallito, salto"
+            continue
+        fi
+        python3 "$ROOT/tools/glb_attachments.py" "$ASSETS/models/$dst.glb" | head -1
+
+        TODAY="$(date +%Y-%m-%d)"
+        if ! grep -q "assets/models/$dst.glb" "$ASSETS/CREDITS.md" 2>/dev/null; then
+            echo "| assets/models/$dst.glb | Kay Lousberg (KayKit, $who) | https://github.com/KayKit-Game-Assets | CC0 | $TODAY |" \
+                >> "$ASSETS/CREDITS.md"
+        fi
+    done <<'NPCS'
+adv:Mage:npc_villager
+adv:Knight:npc_guard
+adv:Rogue_Hooded:npc_bandit
+ske:Skeleton_Minion:npc_revenant
+ske:Skeleton_Warrior:npc_boss
+NPCS
+
+    cat <<'NOTE'
+
+Fatto. Gli NPC animati compaiono entro NPC_MODEL_DIST (140 m), oltre tornano
+alle primitive. Ogni modello porta con se' tutte le sue animazioni: cinque
+personaggi occupano qualche decina di MB di RAM.
+NOTE
+    exit 0
 fi
 
 # ---- personaggio animato CC0 (KayKit, Kay Lousberg) -----------------------

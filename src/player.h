@@ -7,18 +7,13 @@
 #include "raylib.h"
 #include "config.h"
 #include "items.h"
+#include "charmodel.h"
 #include "world.h"
 
 /* La visuale e' una preferenza di vista: non finisce nel salvataggio. */
 typedef enum { CAM_FIRST, CAM_THIRD } CamMode;
 
-/* Ruoli di animazione. Un pacchetto di personaggi ne offre spesso decine (il
- * cavaliere KayKit ne ha 76): al gioco servono questi, e PlayerLoadModel() li
- * cerca per nome. */
-typedef enum {
-    PANIM_IDLE, PANIM_WALK, PANIM_RUN, PANIM_ATTACK, PANIM_BLOCK,
-    PANIM_CAST, PANIM_JUMP, PANIM_HURT, PANIM_DEATH, PANIM_COUNT
-} PlayerAnim;
+
 
 typedef struct {
     Vector3 pos, vel;
@@ -31,23 +26,11 @@ typedef struct {
     float   moveSpeed;           /* velocita' orizzontale voluta, m/s      */
 
     /* Modello animato opzionale: se assets/models/player.glb non c'e', in
-     * terza persona si disegnano le primitive. */
-    Model            model;
-    /* Vista del modello con le sole mesh dotate di scheletro: serve perche'
-     * UpdateModelAnimation() di raylib non regge i modelli misti (vedi
-     * BuildSkinnedView in player.c). Condivide i dati con 'model'. */
-    Model            skinnedView;
-    bool             viewAllocated;
-    /* Mesh senza pesi da muovere a mano seguendo un osso. */
-    struct { int mesh, bone; } attach[MAX_ATTACHMENTS];
-    int              attachCount;
-
-    ModelAnimation  *anims;
-    int              animCount;
-    int              animOf[PANIM_COUNT];   /* indice in anims, -1 se assente */
-    PlayerAnim       anim;
+     * terza persona si disegnano le primitive. La posa sta qui, il modello in
+     * charmodel.c e' una risorsa condivisibile. */
+    CharModel        model;
+    CharAnim         anim;
     float            animFrame;
-    bool             hasModel, anySkinned;
 
     float   hp, maxHp;
     float   sta, maxSta;

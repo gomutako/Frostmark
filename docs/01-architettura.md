@@ -93,6 +93,13 @@ Costa una manciata di `WorldHeight()` per frame, cioè niente, perché l'altezza
 una funzione pura. I prop non sono considerati: un albero fra camera e
 giocatore lo si attraversa, come in molti giochi veri.
 
+`charmodel.c` contiene il modello di personaggio animato, condiviso fra
+giocatore e NPC: ricerca delle clip per nome, vista con le sole mesh skinnate
+(altrimenti `UpdateModelAnimation()` di raylib crolla) e agganci di arma e scudo
+alle ossa. La **posa non sta nel modello** ma in chi lo disegna, e per questo lo
+stesso modello serve molti personaggi con animazioni diverse: si rideforma una
+volta per personaggio dentro il ciclo di disegno.
+
 Il corpo del giocatore (`PlayerDraw()`) è disegnato solo in terza persona. Se
 `assets/models/player.glb` esiste si usa quel modello con le sue animazioni
 (vedi `docs/03-asset-pubblici.md`), altrimenti le stesse primitive dei bipedi di
@@ -125,6 +132,7 @@ zero e il codice resta a portata di chi sta imparando.
 |---|---|---|
 | Disegno terreno | 1 `DrawMesh` per chunk | ~121 draw call |
 | Prop | 1–5 `DrawModelEx` ciascuno | pesante nelle foreste dense |
+| Personaggi animati | skinning su CPU, ~0,06 ms per istanza | 6 draw call ciascuno; oltre 140 m tornano primitive |
 | Culling | solo dot product sul forward | niente frustum vero |
 | Collisioni | cerchi 2D contro i prop | niente collisione verticale |
 | Nemici | 12 attivi attorno al giocatore | nessuna persistenza |
