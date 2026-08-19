@@ -1,0 +1,46 @@
+# ============================================================================
+#  balance.txt - numeri che governano la sensazione di gioco.
+#
+#  Sono i valori che si cambiano provando, non progettando: stanno qui proprio
+#  per poterli ritoccare senza ricompilare.
+#
+#  Nota sulla gravita': 22 non e' un errore. Con i 9,81 reali lo stesso impulso
+#  di salto durerebbe un secondo e mezzo e sembrerebbe di essere sulla Luna.
+#  Vedi docs/05-piano-dati-esterni-e-motore.md, fase 4.
+# ============================================================================
+
+[bilanciamento]
+# --- movimento ---
+camminata            = 5.0
+corsa                = 9.0
+salto                = 7.5
+gravita              = 22.0
+altezza_occhi        = 1.72
+altezza_corpo        = 1.85
+raggio               = 0.45
+
+# --- parata (CTRL sinistro) ---
+parata_velocita      = 0.45
+parata_danno         = 0.45
+parata_vigore        = 5.0
+
+# --- vigore, magia, vita ---
+vigore_corsa         = 16.0
+vigore_recupero      = 12.0
+vigore_salto         = 10.0
+magia_recupero       = 3.5
+vita_recupero        = 0.6
+
+# --- caduta ---
+caduta_soglia        = 18.0
+caduta_fattore       = 3.0
+
+# --- crescita del personaggio ---
+esperienza_base      = 100
+esperienza_livello   = 60
+vita_livello         = 12.0
+vigore_livello       = 6.0
+magia_livello        = 8.0
+
+# --- tempo ---
+giorno_secondi       = 720

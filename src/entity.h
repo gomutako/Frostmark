@@ -10,16 +10,40 @@
 #include "charmodel.h"
 #include "player.h"
 
-typedef enum {
-    ENT_NONE, ENT_VILLAGER, ENT_GUARD, ENT_MERCHANT, ENT_ELDER,
-    ENT_WOLF, ENT_BANDIT, ENT_REVENANT, ENT_BOSS
-} EntityType;
+/* I tipi di personaggio arrivano da assets/data/entities.txt: 'type' in Entity
+ * e' un indice nel catalogo caricato, e si ottiene con EntityFind("wolf").
+ * Il comportamento invece resta codice: qui sotto ci sono quelli disponibili,
+ * e il file scegle fra questi. */
+typedef enum { AI_PEACEFUL, AI_BEAST, AI_HUMANOID } Behaviour;
+typedef enum { DRAW_BIPED, DRAW_QUADRUPED } DrawKind;
+
+#define ENT_NONE (-1)
+
+typedef struct {
+    char      id[32];
+    char      name[28];
+    Behaviour behaviour;
+    DrawKind  draw;
+    char      model[96];        /* "" se il tipo non ha un modello animato */
+    Color     color;
+    float     maxHp, damage, speed, attackRange, aggro;
+    int       xpReward, goldReward;
+    char      loot[32];         /* identificatore dell'oggetto, "" se nessuno */
+    float     radius, height;
+    bool      hostile, persistent, aura;
+} EntityDef;
+
+extern EntityDef ENTITY_TYPES[MAX_ENTITY_TYPES];
+int  EntityTypeCount(void);
+/* Indice del tipo dato l'identificatore, ENT_NONE se non esiste. */
+int  EntityFind(const char *id);
+bool EntitiesLoadTypes(const char *path);
 
 typedef enum { AI_IDLE, AI_WANDER, AI_CHASE, AI_ATTACK, AI_DEAD } AIState;
 
 typedef struct Entity {
     bool       active;
-    EntityType type;
+    int        type;      /* indice in ENTITY_TYPES */
     AIState    state;
 
     Vector3 pos, vel, home;
@@ -44,8 +68,8 @@ typedef struct {
     bool    fromPlayer;
 } Projectile;
 
-const char *EntityTypeName(EntityType t);
-Color       EntityColor(EntityType t);
+const char *EntityTypeName(int type);
+Color       EntityColor(int type);
 
 /* Crea un'entita' nel primo slot libero. Ritorna NULL se l'array e' pieno. */
 /* Modelli animati dei personaggi: risorse condivise, non dipendono dal seme.
@@ -54,7 +78,7 @@ Color       EntityColor(EntityType t);
 void EntitiesLoadModels(void);
 void EntitiesUnloadModels(void);
 
-Entity *EntitySpawn(Entity *ents, EntityType type, Vector3 pos, World *w);
+Entity *EntitySpawn(Entity *ents, int type, Vector3 pos, World *w);
 
 /* Aggiorna IA, movimento e attacchi di tutte le entita'. */
 void EntitiesUpdate(Entity *ents, World *w, Player *p, float dt);

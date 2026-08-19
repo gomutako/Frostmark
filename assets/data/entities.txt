@@ -1,0 +1,148 @@
+# ============================================================================
+#  entities.txt - tipi di personaggio: statistiche, aspetto, comportamento.
+#
+#  comportamento: pacifico | bestia | umanoide
+#      pacifico  = non attacca, resta al villaggio
+#      bestia    = quadrupede aggressivo
+#      umanoide  = bipede aggressivo
+#  disegno:  bipede | quadrupede        (usato quando manca il modello animato)
+#  modello:  file .glb opzionale; se manca si disegnano le primitive
+#  colore:   r,g,b delle primitive
+#  aggro:    distanza a cui nota il giocatore (0 per i pacifici)
+#
+#  Il comportamento resta codice: qui si sceglie fra quelli esistenti, non se
+#  ne definiscono di nuovi. Vedi docs/05-piano-dati-esterni-e-motore.md.
+# ============================================================================
+
+[entita villager]
+nome          = Popolano
+comportamento = pacifico
+disegno       = bipede
+modello       = assets/models/npc_villager.glb
+colore        = 172,148,112
+vita          = 60
+danno         = 0
+velocita      = 1.8
+portata       = 0
+aggro         = 0
+esperienza    = 0
+oro           = 0
+raggio        = 0.45
+altezza       = 1.8
+
+[entita guard]
+nome          = Guardia
+comportamento = pacifico
+disegno       = bipede
+modello       = assets/models/npc_guard.glb
+colore        = 108,122,156
+vita          = 140
+danno         = 22
+velocita      = 1.8
+portata       = 2.2
+aggro         = 0
+esperienza    = 0
+oro           = 0
+raggio        = 0.45
+altezza       = 1.8
+
+[entita merchant]
+nome          = Mercante
+comportamento = pacifico
+disegno       = bipede
+modello       = assets/models/npc_villager.glb
+colore        = 168,118,160
+vita          = 60
+danno         = 0
+velocita      = 1.8
+portata       = 0
+aggro         = 0
+esperienza    = 0
+oro           = 0
+raggio        = 0.45
+altezza       = 1.8
+
+[entita elder]
+nome          = Anziano
+comportamento = pacifico
+disegno       = bipede
+modello       = assets/models/npc_villager.glb
+colore        = 200,196,180
+vita          = 60
+danno         = 0
+velocita      = 1.8
+portata       = 0
+aggro         = 0
+esperienza    = 0
+oro           = 0
+raggio        = 0.45
+altezza       = 1.8
+
+[entita wolf]
+nome          = Lupo
+comportamento = bestia
+disegno       = quadrupede
+colore        = 98,96,94
+vita          = 45
+danno         = 9
+velocita      = 6.2
+portata       = 1.9
+aggro         = 22
+esperienza    = 28
+oro           = 0
+bottino       = wolf_pelt
+raggio        = 0.55
+altezza       = 1.0
+
+[entita bandit]
+nome          = Bandito
+comportamento = umanoide
+disegno       = bipede
+modello       = assets/models/npc_bandit.glb
+colore        = 132,84,64
+vita          = 78
+danno         = 15
+velocita      = 4.6
+portata       = 2.2
+aggro         = 22
+esperienza    = 46
+oro           = 35
+bottino       = bandit_ring
+raggio        = 0.45
+altezza       = 1.8
+
+[entita revenant]
+nome          = Redivivo
+comportamento = umanoide
+disegno       = bipede
+modello       = assets/models/npc_revenant.glb
+colore        = 92,130,118
+vita          = 110
+danno         = 20
+velocita      = 3.4
+portata       = 2.3
+aggro         = 22
+esperienza    = 65
+oro           = 20
+bottino       = bone_dust
+raggio        = 0.45
+altezza       = 1.8
+
+[entita boss]
+nome          = Vald il Sepolto
+comportamento = umanoide
+disegno       = bipede
+modello       = assets/models/npc_boss.glb
+colore        = 150,70,70
+vita          = 420
+danno         = 32
+velocita      = 4.2
+portata       = 2.8
+aggro         = 34
+esperienza    = 400
+oro           = 600
+bottino       = ancient_blade
+raggio        = 0.75
+altezza       = 2.5
+persistente   = si
+aura          = si

@@ -1,4 +1,5 @@
 #include "player.h"
+#include "balance.h"
 #include "raymath.h"
 #include <math.h>
 #include <string.h>
@@ -50,7 +51,7 @@ void PlayerUpdateAnimation(Player *p, float dt)
     /* Il passo segue la velocita' reale, cosi' i piedi non slittano. */
     float speedMul = 1.0f;
     if (want == CANIM_WALK || want == CANIM_RUN)
-        speedMul = p->moveSpeed / ((want == CANIM_RUN) ? PLAYER_RUN : PLAYER_WALK);
+        speedMul = p->moveSpeed / ((want == CANIM_RUN) ? BAL.run : BAL.walk);
 
     p->animFrame = CharModelAdvance(&p->model, want, p->animFrame, dt,
                                     speedMul, OneShotSeconds(want));
@@ -92,12 +93,12 @@ void PlayerInit(Player *p, Vector3 spawn)
 
     /* Modello animato opzionale: la scala viene ricavata dall'altezza voluta.
      * Va dopo il memset, che azzera la struttura. */
-    CharModelLoad(&p->model, PLAYER_MODEL_FILE, PLAYER_HEIGHT);
+    CharModelLoad(&p->model, PLAYER_MODEL_FILE, BAL.bodyHeight);
 }
 
 Vector3 PlayerEye(const Player *p)
 {
-    return (Vector3){ p->pos.x, p->pos.y + PLAYER_EYE, p->pos.z };
+    return (Vector3){ p->pos.x, p->pos.y + BAL.eyeHeight, p->pos.z };
 }
 
 Vector3 PlayerLookDir(const Player *p)
@@ -179,7 +180,7 @@ void PlayerDraw(const Player *p, Color tint)
                    (unsigned char)(152 * tint.b / 255), 255 };
 
     /* Stessa grammatica visiva dei bipedi in entity.c: capsula, testa, arma.
-     * Il raggio e' piu' sottile di PLAYER_RADIUS, che serve alle collisioni:
+     * Il raggio e' piu' sottile di BAL.radius, che serve alle collisioni:
      * disegnarlo a 0.45 m dava un personaggio a forma di botte che copriva
      * anche la spada. */
     const float BODY_R = 0.30f;
@@ -187,9 +188,9 @@ void PlayerDraw(const Player *p, Color tint)
     Vector3 r = { -cosf(p->yaw), 0.0f, sinf(p->yaw) };
 
     Vector3 a = { p->pos.x, p->pos.y + 0.45f, p->pos.z };
-    Vector3 b = { p->pos.x, p->pos.y + PLAYER_HEIGHT - 0.55f, p->pos.z };
+    Vector3 b = { p->pos.x, p->pos.y + BAL.bodyHeight - 0.55f, p->pos.z };
     DrawCapsule(a, b, BODY_R, 10, 6, body);
-    DrawSphere((Vector3){ p->pos.x, p->pos.y + PLAYER_HEIGHT - 0.22f, p->pos.z },
+    DrawSphere((Vector3){ p->pos.x, p->pos.y + BAL.bodyHeight - 0.22f, p->pos.z },
                0.24f, skin);
 
     /* Gambe: due parallelepipedi che oscillano su bobPhase, la stessa fase che
@@ -209,7 +210,7 @@ void PlayerDraw(const Player *p, Color tint)
     if (p->weapon != ITEM_NONE) {
         float sw = p->swing;                     /* 1 -> 0 durante il fendente */
         Vector3 hand = { p->pos.x + r.x * 0.42f + f.x * (0.20f + sw * 0.45f),
-                         p->pos.y + PLAYER_HEIGHT * 0.58f - sw * 0.10f,
+                         p->pos.y + BAL.bodyHeight * 0.58f - sw * 0.10f,
                          p->pos.z + r.z * 0.42f + f.z * (0.20f + sw * 0.45f) };
         DrawCube(hand, 0.08f, 0.85f - sw * 0.45f, 0.08f,
                  (Color){ (unsigned char)(200 * tint.r / 255),
@@ -238,7 +239,7 @@ void PlayerTakeDamage(Player *p, float dmg)
     if (p->blocking) {
         p->sta -= reduced * 0.35f;
         if (p->sta < 0.0f) p->sta = 0.0f;
-        reduced *= BLOCK_DMG_MUL;
+        reduced *= BAL.blockDamageMul;
     }
     p->hp -= reduced;
     p->hurtFlash = 0.35f;
@@ -251,10 +252,10 @@ void PlayerAddXP(Player *p, int amount)
     while (p->xp >= p->xpNext) {
         p->xp -= p->xpNext;
         p->level++;
-        p->xpNext = 100 + p->level * 60;
-        p->maxHp  += 12.0f;  p->hp  = p->maxHp;
-        p->maxSta +=  6.0f;  p->sta = p->maxSta;
-        p->maxMp  +=  8.0f;  p->mp  = p->maxMp;
+        p->xpNext = BAL.xpBase + p->level * BAL.xpPerLevel;
+        p->maxHp  += BAL.hpPerLevel;  p->hp  = p->maxHp;
+        p->maxSta += BAL.staPerLevel; p->sta = p->maxSta;
+        p->maxMp  += BAL.mpPerLevel;  p->mp  = p->maxMp;
         p->skillMelee++;
         p->skillMagic++;
     }
@@ -331,26 +332,26 @@ void PlayerUpdate(Player *p, World *w, float dt, bool controlsEnabled)
      * (vedi PlayerTakeDamage). Non si para a mezz'aria. */
     p->blocking = controlsEnabled && IsKeyDown(KEY_LEFT_CONTROL) &&
                   p->onGround && p->sta > 2.0f;
-    if (p->blocking) p->sta -= BLOCK_STA_DRAIN * dt;
+    if (p->blocking) p->sta -= BAL.blockStaminaDrain * dt;
 
     p->sprinting = controlsEnabled && IsKeyDown(KEY_LEFT_SHIFT) && !p->blocking &&
                    p->sta > 1.0f && Vector3Length(wish) > 0.1f;
 
-    float speed = p->sprinting ? PLAYER_RUN : PLAYER_WALK;
+    float speed = p->sprinting ? BAL.run : BAL.walk;
     if (p->inWater) speed *= 0.6f;
-    if (p->blocking) speed *= BLOCK_SPEED_MUL;
+    if (p->blocking) speed *= BAL.blockSpeedMul;
 
     p->moveSpeed = Vector3Length(wish) * speed;
 
     /* Stamina: si consuma correndo, si rigenera fermi. */
-    if (p->sprinting) p->sta -= 16.0f * dt;
-    else              p->sta += 12.0f * dt;
+    if (p->sprinting) p->sta -= BAL.staminaSprint * dt;
+    else              p->sta += BAL.staminaRegen * dt;
     p->sta = Clamp(p->sta, 0.0f, p->maxSta);
 
     /* Magicka e vita rigenerano lentamente - ma non da morti, altrimenti hp
      * risale sopra zero e l'animazione di morte non parte mai. */
-    p->mp = fminf(p->maxMp, p->mp + 3.5f * dt);
-    if (p->hp > 0.0f) p->hp = fminf(p->maxHp, p->hp + 0.6f * dt);
+    p->mp = fminf(p->maxMp, p->mp + BAL.manaRegen * dt);
+    if (p->hp > 0.0f) p->hp = fminf(p->maxHp, p->hp + BAL.healthRegen * dt);
 
     /* ---- Integrazione del movimento ----------------------------------- */
     Vector3 next = p->pos;
@@ -372,26 +373,26 @@ void PlayerUpdate(Player *p, World *w, float dt, bool controlsEnabled)
     p->pos.x = Clamp(p->pos.x, 2.0f, WORLD_SIZE - 2.0f);
     p->pos.z = Clamp(p->pos.z, 2.0f, WORLD_SIZE - 2.0f);
 
-    WorldResolveCollision(w, &p->pos, PLAYER_RADIUS);
+    WorldResolveCollision(w, &p->pos, BAL.radius);
 
     /* ---- Gravita' e salto --------------------------------------------- */
     float ground = WorldHeight(w, p->pos.x, p->pos.z);
     p->inWater = (ground < SEA_LEVEL - 0.2f) && (p->pos.y < SEA_LEVEL);
 
     if (controlsEnabled && IsKeyPressed(KEY_SPACE) && p->onGround && p->sta > 10.0f) {
-        p->vel.y = PLAYER_JUMP;
-        p->sta  -= 10.0f;
+        p->vel.y = BAL.jump;
+        p->sta  -= BAL.staminaJump;
         p->onGround = false;
     }
 
-    p->vel.y -= GRAVITY * dt * (p->inWater ? 0.25f : 1.0f);
+    p->vel.y -= BAL.gravity * dt * (p->inWater ? 0.25f : 1.0f);
     p->pos.y += p->vel.y * dt;
 
     float floorY = fmaxf(ground, p->inWater ? SEA_LEVEL - 1.2f : ground);
     if (p->pos.y <= floorY) {
         /* Danno da caduta. */
-        if (!p->onGround && p->vel.y < -18.0f && !p->inWater)
-            PlayerTakeDamage(p, (-p->vel.y - 18.0f) * 3.0f);
+        if (!p->onGround && p->vel.y < -BAL.fallThreshold && !p->inWater)
+            PlayerTakeDamage(p, (-p->vel.y - BAL.fallThreshold) * BAL.fallFactor);
         p->pos.y = floorY;
         p->vel.y = 0.0f;
         p->onGround = true;

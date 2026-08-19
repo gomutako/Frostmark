@@ -51,17 +51,13 @@
 #define MAX_INVENTORY     40
 #define MAX_ITEMS         64          /* capienza del catalogo caricato da file */
 #define MAX_SHOP_STOCK    32
+#define MAX_ENTITY_TYPES  32          /* tipi caricati da entities.txt */
 #define MAX_RUMORS        32
-#define MAX_QUESTS         3
+#define MAX_QUESTS        16          /* caricate da quests.txt */
 
-/* --- Giocatore ---------------------------------------------------------- */
-#define PLAYER_EYE     1.72f
-#define PLAYER_RADIUS  0.45f
-#define PLAYER_WALK    5.0f
-#define PLAYER_RUN     9.0f
-#define PLAYER_JUMP    7.5f
-#define PLAYER_HEIGHT  1.85f            /* altezza del corpo in terza persona */
-#define GRAVITY       22.0f
+/* --- Giocatore ---------------------------------------------------------
+ * Velocita', gravita', altezze e parata sono dati: stanno in
+ * assets/data/balance.txt e si leggono da BAL (balance.h). */
 
 /* --- Camera -------------------------------------------------------------
  * In terza persona la camera orbita dietro la testa. Sotto CAM_DIST_MIN si
@@ -89,16 +85,15 @@
  * (~0.06 ms), e a 140 m un passo non si distingue piu'. */
 #define NPC_MODEL_DIST     140.0f
 
-/* --- Parata ------------------------------------------------------------- */
-#define BLOCK_SPEED_MUL 0.45f           /* quanto rallenta */
-#define BLOCK_DMG_MUL   0.45f           /* danno che passa comunque */
-#define BLOCK_STA_DRAIN 5.0f            /* vigore al secondo tenendo la guardia */
 
 /* --- Dati esterni -------------------------------------------------------
  * Nessun dato di gioco vive nel codice: se questi file mancano o contengono
  * errori il gioco non parte. Vedi docs/05-piano-dati-esterni-e-motore.md. */
 #define DATA_DIR        "assets/data"
 #define DATA_ITEMS      DATA_DIR "/items.txt"
+#define DATA_ENTITIES   DATA_DIR "/entities.txt"
+#define DATA_QUESTS     DATA_DIR "/quests.txt"
+#define DATA_BALANCE    DATA_DIR "/balance.txt"
 #define DATA_SHOP       DATA_DIR "/shop.txt"
 #define DATA_RUMORS     DATA_DIR "/rumors.txt"
 
@@ -111,7 +106,7 @@
 #define SIM_MAX_FRAME  0.25          /* frame piu' lunghi vengono troncati */
 #define SIM_MAX_STEPS  6             /* al massimo 6 passi per fotogramma  */
 
-/* --- Tempo -------------------------------------------------------------- */
-#define DAY_LENGTH_SECONDS 720.0f  /* un giorno di gioco = 12 minuti reali   */
+/* --- Tempo -------------------------------------------------------------
+ * La durata del giorno e' un dato: BAL.daySeconds. */
 
 #endif /* CONFIG_H */

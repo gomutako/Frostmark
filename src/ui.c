@@ -138,7 +138,8 @@ static void DrawCompass(Game *g)
     }
 
     /* Indicatore della cripta se la quest principale e' attiva. */
-    if (g->quests[QUEST_BOSS].state == Q_ACTIVE) {
+    int bossQuest = QuestFind("boss");
+    if (bossQuest >= 0 && g->quests[bossQuest].state == Q_ACTIVE) {
         Vector3 d = Vector3Subtract(g->world.cryptPos, g->player.pos);
         float ang = atan2f(d.x, d.z);
         float rel = ang - g->player.yaw;
@@ -200,7 +201,7 @@ void UIDrawHUD(Game *g)
     DrawMiniMap(g);
 
     /* Quest attiva tracciata in alto a sinistra. */
-    for (int i = 0; i < MAX_QUESTS; i++) {
+    for (int i = 0; i < QuestCount(); i++) {
         if (g->quests[i].state == Q_ACTIVE || g->quests[i].state == Q_READY) {
             DrawText(QUESTS[i].title, 20, 20, 18, UI_GOLD);
             DrawText(TextFormat("%s  %d/%d", QUESTS[i].objective,
@@ -385,7 +386,7 @@ void UIDrawJournal(Game *g)
     Panel(px, py, 680, 500, "DIARIO DELLE MISSIONI");
 
     int y = py + 50;
-    for (int i = 0; i < MAX_QUESTS; i++) {
+    for (int i = 0; i < QuestCount(); i++) {
         if (g->quests[i].state == Q_LOCKED) continue;
         Color c = (g->quests[i].state == Q_DONE) ? UI_DIM : UI_GOLD;
         DrawText(TextFormat("%s  (%s)", QUESTS[i].title,

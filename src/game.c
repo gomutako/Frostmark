@@ -1,4 +1,5 @@
 #include "game.h"
+#include "balance.h"
 #include "ui.h"
 #include "save.h"
 #include "noise.h"
@@ -76,26 +77,29 @@ static void SpawnTownNPCs(Game *g)
     for (int t = 0; t < w->townCount; t++) {
         Vector3 c = w->towns[t].pos;
 
-        struct { EntityType type; float ang; float rad; } roster[] = {
-            { ENT_ELDER,    0.4f, 14.0f },
-            { ENT_MERCHANT, 1.9f, 16.0f },
-            { ENT_GUARD,    3.2f, 20.0f },
-            { ENT_GUARD,    5.0f, 20.0f },
-            { ENT_VILLAGER, 2.6f, 26.0f },
-            { ENT_VILLAGER, 4.4f, 24.0f },
-            { ENT_VILLAGER, 0.9f, 30.0f },
+        /* Organico del villaggio. I tipi si cercano per identificatore; le
+         * posizioni restano qui e diventeranno dati cotti con il mondo fisso
+         * (fase 3 del piano in docs/05). */
+        struct { const char *type; float ang; float rad; } roster[] = {
+            { "elder",    0.4f, 14.0f },
+            { "merchant", 1.9f, 16.0f },
+            { "guard",    3.2f, 20.0f },
+            { "guard",    5.0f, 20.0f },
+            { "villager", 2.6f, 26.0f },
+            { "villager", 4.4f, 24.0f },
+            { "villager", 0.9f, 30.0f },
         };
         int n = (int)(sizeof(roster) / sizeof(roster[0]));
 
         for (int i = 0; i < n; i++) {
             Vector3 p = { c.x + cosf(roster[i].ang) * roster[i].rad, 0.0f,
                           c.z + sinf(roster[i].ang) * roster[i].rad };
-            Entity *e = EntitySpawn(g->ents, roster[i].type, p, w);
+            Entity *e = EntitySpawn(g->ents, EntityFind(roster[i].type), p, w);
             if (e) {
                 e->townIndex = t;
                 /* Un nome piu' "vivo" per gli abitanti. */
                 snprintf(e->name, sizeof(e->name), "%s di %s",
-                         EntityTypeName(roster[i].type), w->towns[t].name);
+                         EntityTypeName(EntityFind(roster[i].type)), w->towns[t].name);
             }
         }
     }
@@ -163,14 +167,14 @@ static void GiveLoot(Game *g, Entity *e)
 
     if (e->dropItem != ITEM_NONE) InvAdd(p->inv, e->dropItem, 1);
 
-    if (e->type == ENT_WOLF) {
-        p->wolvesKilled++;
-        QuestProgress(g, QUEST_WOLVES, 1);
-    }
-    if (e->type == ENT_BOSS) {
+    /* Le quest interessate reagiscono da se': nessun collegamento fra un
+     * nemico e un incarico vive qui. */
+    QuestOnKill(g, e->type);
+
+    if (e->type == EntityFind("wolf")) p->wolvesKilled++;
+    if (e->type == EntityFind("boss")) {
         p->bossKilled = true;
-        QuestProgress(g, QUEST_BOSS, 1);
-        GameSubtitle(g, "Vald il Sepolto torna al silenzio.");
+        GameSubtitle(g, TextFormat("%s torna al silenzio.", e->name));
     }
     GameToast(g, "%s sconfitto  (+%d PE, +%d oro)", e->name, e->xpReward, e->goldReward);
 }
@@ -243,11 +247,11 @@ static void DoInteract(Game *g)
     Prop *herb = WorldNearestProp(&g->world, g->player.pos, 3.0f, PROP_HERB);
     if (herb) {
         herb->taken = true;
-        InvAdd(g->player.inv, ItemFind("herb"), 1);
+        int herbItem = ItemFind("herb");
+        InvAdd(g->player.inv, herbItem, 1);
         g->player.herbsPicked++;
-        QuestProgress(g, QUEST_HERBS, 1);
-        if (g->quests[QUEST_HERBS].state != Q_ACTIVE)
-            GameToast(g, "Hai raccolto: %s", ITEMS[ItemFind("herb")].name);
+        QuestOnCollect(g, herbItem);
+        GameToast(g, "Hai raccolto: %s", ITEMS[herbItem].name);
         return;
     }
 
@@ -262,13 +266,13 @@ static void UpdateCrypt(Game *g)
 
     float d = Vector3Distance(g->player.pos, g->world.cryptPos);
     if (!spawned && d < 55.0f) {
-        Entity *boss = EntitySpawn(g->ents, ENT_BOSS, g->world.cryptPos, &g->world);
+        Entity *boss = EntitySpawn(g->ents, EntityFind("boss"), g->world.cryptPos, &g->world);
         if (boss) {
             for (int k = 0; k < 3; k++) {
                 float a = (float)k * 2.1f;
                 Vector3 p = { g->world.cryptPos.x + cosf(a) * 12.0f, 0.0f,
                               g->world.cryptPos.z + sinf(a) * 12.0f };
-                Entity *m = EntitySpawn(g->ents, ENT_REVENANT, p, &g->world);
+                Entity *m = EntitySpawn(g->ents, EntityFind("revenant"), p, &g->world);
                 if (m) m->persistent = true;
             }
             spawned = true;
@@ -287,7 +291,7 @@ static void UpdatePlaying(Game *g, float dt)
     Player *p = &g->player;
 
     g->playTime  += dt;
-    g->timeOfDay += dt / DAY_LENGTH_SECONDS;
+    g->timeOfDay += dt / BAL.daySeconds;
     if (g->timeOfDay >= 1.0f) g->timeOfDay -= 1.0f;
 
     PlayerUpdate(p, &g->world, dt, true);

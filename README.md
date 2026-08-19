@@ -102,9 +102,19 @@ Font e audio richiedono invece qualche riga di codice: vedi
 
 ### Dati di gioco
 
-I dati non stanno nel codice: oggetti, assortimento del negozio e dicerie sono in
-`assets/data/`, versionati nel repository. **Non hanno valori di ripiego**: se un
-file manca o contiene un errore il gioco non parte e dice cosa non torna.
+I dati non stanno nel codice. In `assets/data/`, versionati nel repository:
+
+| File | Contenuto |
+|---|---|
+| `balance.txt` | velocità, gravità, parata, curva di esperienza, durata del giorno |
+| `items.txt` | oggetti: nome, tipo, prezzo, potenza |
+| `entities.txt` | tipi di personaggio: statistiche, colore, modello, comportamento |
+| `quests.txt` | incarichi: obiettivo, committente, come avanzano, ricompense |
+| `shop.txt` | assortimento del mercante |
+| `rumors.txt` | dicerie |
+
+**Non hanno valori di ripiego**: se un file manca o contiene un errore il gioco
+non parte e dice cosa non torna.
 
 ```bash
 ./frostmark --valida     # controlla i dati ed esce; 0 se sono a posto
@@ -117,9 +127,9 @@ ERROR: assets/data/items.txt:42: tipo: "corazza" non ammesso;
        valori possibili: nessuno, arma, armatura, pozione, cibo, varie
 ```
 
-Aggiungere un oggetto o cambiare un prezzo non richiede di ricompilare. Il resto
-dei dati — entità, quest, dialoghi — è in migrazione: vedi
-`docs/05-piano-dati-esterni-e-motore.md`.
+Aggiungere un nemico, ribilanciare la gravità o scrivere una quest non richiede
+di ricompilare. Restano nel codice i soli dialoghi, i villaggi e i testi
+dell'interfaccia: vedi `docs/05-piano-dati-esterni-e-motore.md`.
 
 ### Avvio con un seme specifico
 
@@ -189,6 +199,7 @@ Nei menu: `↑ ↓` per scorrere, `Invio` per confermare, `ESC` per uscire.
 src/
   config.h    costanti di compilazione (scala del mondo, limiti degli array)
   dataid.h    identificatori stabili per i dati (hash FNV-1a)
+  balance.c/h    numeri di bilanciamento caricati da file
   dataparse.c/h  lettore dei file di dati, con diagnostica per riga
   gamedata.c/h   caricamento di tutti i dati all'avvio
   noise.c/h   value noise, fBm, ridged noise deterministici

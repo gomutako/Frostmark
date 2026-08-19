@@ -1,0 +1,54 @@
+# ============================================================================
+#  quests.txt - incarichi.
+#
+#  assegnata_da   = identificatore del tipo di entita' che la offre e la riceve
+#  avanza_con     = uccisione:<entita>  |  raccolta:<oggetto>
+#  bersaglio      = quante volte deve avvenire l'evento
+#  consuma        = si  -> alla consegna sottrae "bersaglio" oggetti raccolti
+#  sblocca        = quest che diventa disponibile alla consegna di questa
+#  stato_iniziale = offerta | bloccata
+#
+#  L'avanzamento non e' cablato nel codice: il gioco emette gli eventi
+#  "uccisione" e "raccolta", e le quest interessate reagiscono.
+# ============================================================================
+
+[quest wolves]
+titolo         = La minaccia dei lupi
+committente    = Guardia del villaggio
+descrizione    = I branchi sono scesi a valle e le greggi non sono piu' al sicuro. La guardia ti chiede di ridurne il numero.
+obiettivo      = Uccidi i lupi
+bersaglio      = 5
+assegnata_da   = guard
+avanza_con     = uccisione:wolf
+oro            = 120
+esperienza     = 150
+ricompensa     = iron_sword
+sblocca        = boss
+stato_iniziale = offerta
+
+[quest herbs]
+titolo         = Erbe per l'infermeria
+committente    = Anziano del villaggio
+descrizione    = L'infermeria e' a corto di scorte. Raccogli erbe curative nei prati e nei boschi (premi E vicino alle piante luminose).
+obiettivo      = Raccogli erbe curative
+bersaglio      = 5
+assegnata_da   = elder
+avanza_con     = raccolta:herb
+consuma        = si
+oro            = 90
+esperienza     = 110
+ricompensa     = leather_armor
+stato_iniziale = offerta
+
+[quest boss]
+titolo         = Il Sepolto
+committente    = Anziano del villaggio
+descrizione    = Sotto la cripta a nord-est dorme Vald, un antico signore della guerra. Qualcosa lo ha risvegliato. Raggiungi la cripta e mettilo a tacere.
+obiettivo      = Metti a tacere Vald
+bersaglio      = 1
+assegnata_da   = elder
+avanza_con     = uccisione:boss
+oro            = 600
+esperienza     = 500
+ricompensa     = ancient_blade
+stato_iniziale = bloccata

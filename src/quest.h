@@ -16,24 +16,40 @@
 struct Game;
 struct Entity;
 
-enum { QUEST_WOLVES = 0, QUEST_HERBS = 1, QUEST_BOSS = 2 };
-
 typedef enum { Q_LOCKED, Q_OFFERED, Q_ACTIVE, Q_READY, Q_DONE } QuestState;
 
+/* Come avanza una quest. Il gioco emette gli eventi, le quest reagiscono:
+ * nessun collegamento cablato fra un nemico e un incarico. */
+typedef enum { QEV_NONE, QEV_KILL, QEV_COLLECT } QuestEvent;
+
 typedef struct {
-    const char *id;         /* identificatore stabile, es. "wolves" */
-    const char *title;
-    const char *giver;      /* etichetta descrittiva del committente */
-    const char *desc;
-    const char *objective;
-    int         target;
-    int         rewardGold, rewardXp;
-    const char *rewardItem;   /* identificatore, "" per nessuna ricompensa */
+    char       id[32];        /* identificatore stabile, es. "wolves" */
+    char       title[64];
+    char       giver[48];     /* etichetta descrittiva del committente */
+    char       desc[320];
+    char       objective[64];
+    int        target;
+    char       giverType[32]; /* tipo di entita' che assegna e riceve */
+    QuestEvent event;
+    char       eventTarget[32];  /* entita' da uccidere od oggetto da raccogliere */
+    bool       consumesItems;    /* alla consegna sottrae "target" oggetti */
+    char       unlocks[32];      /* quest sbloccata alla consegna, "" se nessuna */
+    QuestState initialState;
+    int        rewardGold, rewardXp;
+    char       rewardItem[32];   /* identificatore, "" per nessuna ricompensa */
 } QuestDef;
 
 typedef struct { QuestState state; int progress; } QuestInst;
 
-extern const QuestDef QUESTS[MAX_QUESTS];
+extern QuestDef QUESTS[MAX_QUESTS];
+int  QuestCount(void);
+bool QuestsLoad(const char *path);
+
+/* Eventi: il gioco li emette senza sapere quali quest ne dipendono. */
+void QuestOnKill(struct Game *g, int entityType);
+void QuestOnCollect(struct Game *g, int itemId);
+/* Quest che questo tipo di entita' sta offrendo o attende, -1 se nessuna. */
+int  QuestForGiver(struct Game *g, int entityType);
 
 /* Indice della quest dato il suo identificatore, -1 se non esiste. */
 int QuestFind(const char *id);

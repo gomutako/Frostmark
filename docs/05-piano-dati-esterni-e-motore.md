@@ -16,14 +16,66 @@ sono ordinate in modo che nessuna vada rifatta a causa di quella successiva.
 |---|---|
 | 0 — Fondazioni | **fatta**: identificatori stabili (`dataid.h`), salvataggio v2, passo fisso con input e simulazione separati |
 | 1 — Formato e caricatore | **fatta**: `dataparse.c` con diagnostica per riga, `gamedata.c`, `./frostmark --valida` |
-| 2 — Migrazione dei dati | **in corso**: oggetti, negozio e dicerie sono su file; restano entità, quest, dialoghi, villaggi, bilanciamento e testi dell'interfaccia |
-| 3 — Mondo fisso | da fare |
+| 2 — Migrazione dei dati | **quasi**: su file bilanciamento, oggetti, entità, quest, negozio, dicerie. Restano dialoghi, villaggi e testi dell'interfaccia (sotto il perché) |
+| 3 — Mondo fisso | **prossima** |
 | 4 — Fisica | da fare |
 | 5 — Motore grafico | da fare |
 | 6 — Editor | da fare |
 
-I dati già esternalizzati non hanno alcun valore di ripiego: senza
-`assets/data/` il gioco non parte.
+In `src/` non resta nessun valore di gioco: statistiche dei nemici, ricompense,
+prezzi, curva di esperienza, gravità e velocità stanno in `assets/data/`. Niente
+ha un valore di ripiego: senza quei file il gioco non parte e dice cosa manca.
+
+### Prossimo passo: fase 3, il mondo fisso
+
+È il collo di bottiglia: la geometria di collisione statica si può precalcolare
+solo su un mondo che non si rigenera, quindi **la fisica (fase 4) dipende da
+questa**. Ed è misurata come la più economica fra quelle rimaste — cuocere il
+mondo intero costa 1,1 s e produce 14,3 MB.
+
+C'è anche una ragione per farla **prima** di completare la fase 2: villaggi e
+organico degli NPC sono posizioni, e le posizioni diventano dati cotti qui.
+Metterli su file adesso significherebbe riscriverli dopo.
+
+Ordine di lavoro:
+
+1. Formato: `manifest.txt` leggibile più `height.bin`, `biome.bin`, `props.bin` a
+   chunk — progettato **per la scrittura**, così l'editor modifica un chunk senza
+   riscrivere 14 MB.
+2. `tools/baker`: riusa `noise.c`, `PlaceTowns()` e la generazione dei prop per
+   emettere i quattro file, `spawns.txt` compreso (leggibile e correggibile).
+3. `worldio.c`: carica altezze e biomi interi in memoria (12,6 MB), indicizza i
+   prop per chunk, mantiene lo streaming attuale per le mesh.
+4. `WorldHeight()` diventa un'interpolazione bilineare sulla griglia caricata:
+   il codice esiste già, è quello del percorso `assets/heightmap.png`.
+5. `noise.c` esce dall'eseguibile del gioco e resta solo negli strumenti.
+
+Risoluzione: **2 metri**, la stessa della mesh (`CHUNK_SIZE / CHUNK_QUADS`). A 1
+metro il file passerebbe a 33 MB e servirebbe infittire anche la mesh.
+
+**Fatto quando**: il gioco si avvia solo da `assets/world/`, `noise.c` non è più
+compilato nell'eseguibile, il mondo caricato coincide con quello generato
+(altezze entro l'errore di quantizzazione, stessi biomi, stesso numero di prop) e
+una modifica scritta a mano in `spawns.txt` si vede in gioco.
+
+### Cosa resta della fase 2, e perché è rimasto
+
+- **Dialoghi**: richiedono la grammatica di condizioni descritta più sotto
+  (400-600 righe). Sono indipendenti da tutto: si possono fare in qualsiasi
+  momento. Oggi `DialogueBuild()` confronta i tipi per identificatore, quindi la
+  migrazione non toccherà altri file.
+- **Villaggi e organico degli NPC**: da fare **dopo** la fase 3, per non
+  progettare due volte il formato delle posizioni. L'organico è già scritto con
+  identificatori (`"elder"`, `"guard"`) in `SpawnTownNPCs()`.
+- **Testi dell'interfaccia**: 48 stringhe in `ui.c`. È localizzazione, un asse
+  diverso: serve una convenzione di chiavi e, per validarla davvero, una seconda
+  lingua. Estrarne una parte sarebbe peggio che non estrarne nessuna.
+
+### Da fare comunque, e costa venti righe
+
+Il validatore in integrazione continua. Senza valori di ripiego un dato rotto è
+un gioco che non parte, quindi `./frostmark --valida` dovrebbe girare a ogni
+push. Nel repository non c'è ancora nessuna CI.
 
 ---
 

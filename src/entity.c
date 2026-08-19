@@ -1,80 +1,191 @@
 #include "entity.h"
+#include "dataparse.h"
+#include <stdio.h>
 #include "noise.h"
 #include "raymath.h"
 #include <math.h>
 #include <string.h>
 #include <stdlib.h>
 
-const char *EntityTypeName(EntityType t)
+/* ------------------------------------------------------------------------ */
+/*  CATALOGO DEI TIPI, CARICATO DA FILE                                     */
+/* ------------------------------------------------------------------------ */
+
+EntityDef ENTITY_TYPES[MAX_ENTITY_TYPES];
+static int gTypeCount = 0;
+
+int EntityTypeCount(void) { return gTypeCount; }
+
+const char *EntityTypeName(int type)
 {
-    switch (t) {
-        case ENT_VILLAGER: return "Popolano";
-        case ENT_GUARD:    return "Guardia";
-        case ENT_MERCHANT: return "Mercante";
-        case ENT_ELDER:    return "Anziano";
-        case ENT_WOLF:     return "Lupo";
-        case ENT_BANDIT:   return "Bandito";
-        case ENT_REVENANT: return "Redivivo";
-        case ENT_BOSS:     return "Vald il Sepolto";
-        default:           return "?";
-    }
+    if (type < 0 || type >= gTypeCount) return "?";
+    return ENTITY_TYPES[type].name;
 }
 
-Color EntityColor(EntityType t)
+Color EntityColor(int type)
 {
-    switch (t) {
-        case ENT_VILLAGER: return (Color){ 172, 148, 112, 255 };
-        case ENT_GUARD:    return (Color){ 108, 122, 156, 255 };
-        case ENT_MERCHANT: return (Color){ 168, 118, 160, 255 };
-        case ENT_ELDER:    return (Color){ 200, 196, 180, 255 };
-        case ENT_WOLF:     return (Color){  98,  96,  94, 255 };
-        case ENT_BANDIT:   return (Color){ 132,  84,  64, 255 };
-        case ENT_REVENANT: return (Color){  92, 130, 118, 255 };
-        case ENT_BOSS:     return (Color){ 150,  70,  70, 255 };
-        default:           return GRAY;
+    if (type < 0 || type >= gTypeCount) return GRAY;
+    return ENTITY_TYPES[type].color;
+}
+
+int EntityFind(const char *id)
+{
+    if (id == NULL) return ENT_NONE;
+    for (int i = 0; i < gTypeCount; i++)
+        if (strcmp(ENTITY_TYPES[i].id, id) == 0) return i;
+    return ENT_NONE;
+}
+
+static const char *const BEHAVIOUR_NAMES[] = { "pacifico", "bestia", "umanoide" };
+static const char *const DRAW_NAMES[]      = { "bipede", "quadrupede" };
+static const char *const BOOL_NAMES[]      = { "no", "si" };
+
+bool EntitiesLoadTypes(const char *path)
+{
+    DataReader r;
+    memset(ENTITY_TYPES, 0, sizeof(ENTITY_TYPES));
+    gTypeCount = 0;
+
+    if (!DataOpen(&r, path)) return false;
+    int before = DataProblemCount();
+
+    while (DataNextSection(&r)) {
+        if (strcmp(r.kind, "entita") != 0) {
+            DataProblem(&r, "sezione \"%s\" inattesa in questo file", r.kind);
+            DataSkipSection(&r);
+            continue;
+        }
+        if (r.id[0] == '\0') {
+            DataProblem(&r, "sezione [entita] senza identificatore");
+            DataSkipSection(&r);
+            continue;
+        }
+        if (EntityFind(r.id) != ENT_NONE) {
+            DataProblem(&r, "tipo \"%s\" definito due volte", r.id);
+            DataSkipSection(&r);
+            continue;
+        }
+        if (gTypeCount >= MAX_ENTITY_TYPES) {
+            DataProblem(&r, "troppi tipi: il massimo e' %d", MAX_ENTITY_TYPES);
+            DataSkipSection(&r);
+            continue;
+        }
+
+        EntityDef *d = &ENTITY_TYPES[gTypeCount];
+        memset(d, 0, sizeof(*d));
+        TextCopy(d->id, r.id);
+        d->behaviour   = (Behaviour)-1;
+        d->maxHp       = -1.0f;
+        d->damage      = -1.0f;
+        d->speed       = -1.0f;
+        d->attackRange = -1.0f;
+        d->aggro       = -1.0f;
+        d->radius      = -1.0f;
+        d->height      = -1.0f;
+        d->xpReward = d->goldReward = -1;
+        int at = r.kindLine;
+
+        char *key, *val;
+        int tmp;
+        while (DataNextField(&r, &key, &val)) {
+            if      (strcmp(key, "nome") == 0)     DataAsText(&r, key, val, d->name, sizeof(d->name));
+            else if (strcmp(key, "modello") == 0)  DataAsText(&r, key, val, d->model, sizeof(d->model));
+            else if (strcmp(key, "bottino") == 0)  DataAsText(&r, key, val, d->loot, sizeof(d->loot));
+            else if (strcmp(key, "vita") == 0)     DataAsFloat(&r, key, val, 1.0f, 100000.0f, &d->maxHp);
+            else if (strcmp(key, "danno") == 0)    DataAsFloat(&r, key, val, 0.0f, 10000.0f, &d->damage);
+            else if (strcmp(key, "velocita") == 0) DataAsFloat(&r, key, val, 0.0f, 100.0f, &d->speed);
+            else if (strcmp(key, "portata") == 0)  DataAsFloat(&r, key, val, 0.0f, 100.0f, &d->attackRange);
+            else if (strcmp(key, "aggro") == 0)    DataAsFloat(&r, key, val, 0.0f, 1000.0f, &d->aggro);
+            else if (strcmp(key, "raggio") == 0)   DataAsFloat(&r, key, val, 0.05f, 10.0f, &d->radius);
+            else if (strcmp(key, "altezza") == 0)  DataAsFloat(&r, key, val, 0.2f, 20.0f, &d->height);
+            else if (strcmp(key, "esperienza") == 0) DataAsInt(&r, key, val, 0, 100000, &d->xpReward);
+            else if (strcmp(key, "oro") == 0)      DataAsInt(&r, key, val, 0, 100000, &d->goldReward);
+            else if (strcmp(key, "comportamento") == 0) {
+                if (DataAsEnum(&r, key, val, BEHAVIOUR_NAMES, 3, &tmp))
+                    d->behaviour = (Behaviour)tmp;
+            }
+            else if (strcmp(key, "disegno") == 0) {
+                if (DataAsEnum(&r, key, val, DRAW_NAMES, 2, &tmp)) d->draw = (DrawKind)tmp;
+            }
+            else if (strcmp(key, "persistente") == 0) {
+                if (DataAsEnum(&r, key, val, BOOL_NAMES, 2, &tmp)) d->persistent = (tmp != 0);
+            }
+            else if (strcmp(key, "aura") == 0) {
+                if (DataAsEnum(&r, key, val, BOOL_NAMES, 2, &tmp)) d->aura = (tmp != 0);
+            }
+            else if (strcmp(key, "colore") == 0) {
+                int cr = 0, cg = 0, cb = 0;
+                if (sscanf(val, "%d,%d,%d", &cr, &cg, &cb) != 3 ||
+                    cr < 0 || cr > 255 || cg < 0 || cg > 255 || cb < 0 || cb > 255) {
+                    DataProblem(&r, "colore: atteso \"r,g,b\" con valori 0-255, trovato \"%s\"", val);
+                } else {
+                    d->color = (Color){ (unsigned char)cr, (unsigned char)cg,
+                                        (unsigned char)cb, 255 };
+                }
+            }
+            else DataProblem(&r, "chiave \"%s\" sconosciuta per un'entita'", key);
+        }
+
+        if (d->name[0] == '\0')        DataProblemAt(&r, at, "%s: manca \"nome\"", d->id);
+        if ((int)d->behaviour < 0)     DataProblemAt(&r, at, "%s: manca \"comportamento\"", d->id);
+        if (d->maxHp < 0.0f)           DataProblemAt(&r, at, "%s: manca \"vita\"", d->id);
+        if (d->damage < 0.0f)          DataProblemAt(&r, at, "%s: manca \"danno\"", d->id);
+        if (d->speed < 0.0f)           DataProblemAt(&r, at, "%s: manca \"velocita\"", d->id);
+        if (d->attackRange < 0.0f)     DataProblemAt(&r, at, "%s: manca \"portata\"", d->id);
+        if (d->aggro < 0.0f)           DataProblemAt(&r, at, "%s: manca \"aggro\"", d->id);
+        if (d->radius < 0.0f)          DataProblemAt(&r, at, "%s: manca \"raggio\"", d->id);
+        if (d->height < 0.0f)          DataProblemAt(&r, at, "%s: manca \"altezza\"", d->id);
+        if (d->xpReward < 0)           DataProblemAt(&r, at, "%s: manca \"esperienza\"", d->id);
+        if (d->goldReward < 0)         DataProblemAt(&r, at, "%s: manca \"oro\"", d->id);
+
+        /* Il bottino cita items.txt, che e' gia' caricato: si verifica subito. */
+        if (d->loot[0] != '\0' && ItemFind(d->loot) <= ITEM_NONE)
+            DataProblemAt(&r, at, "%s: bottino \"%s\" non definito in items.txt",
+                          d->id, d->loot);
+
+        d->hostile = (d->behaviour != AI_PEACEFUL);
+        gTypeCount++;
     }
+    DataClose(&r);
+    if (gTypeCount == 0) DataProblem(NULL, "%s: nessun tipo definito", path);
+
+    bool ok = (DataProblemCount() == before);
+    if (ok) TraceLog(LOG_INFO, "DATI: %d tipi di personaggio da %s", gTypeCount, path);
+    return ok;
 }
 
 /* ------------------------------------------------------------------------ */
 /*  MODELLI ANIMATI (opzionali)                                             */
 /* ------------------------------------------------------------------------ */
 
-/* Un file per tipo; piu' tipi possono condividerlo, e in quel caso viene
- * caricato una volta sola. L'altezza serve a ricavare la scala e coincide con
- * quella usata dalle collisioni in EntitySpawn().
- * Il lupo non c'e': fra i pacchetti CC0 usati non esiste un quadrupede
- * animato, quindi resta procedurale. */
-static const struct { EntityType type; const char *file; float height; } NPC_MODEL[] = {
-    { ENT_VILLAGER, "assets/models/npc_villager.glb", 1.80f },
-    { ENT_MERCHANT, "assets/models/npc_villager.glb", 1.80f },
-    { ENT_ELDER,    "assets/models/npc_villager.glb", 1.80f },
-    { ENT_GUARD,    "assets/models/npc_guard.glb",    1.80f },
-    { ENT_BANDIT,   "assets/models/npc_bandit.glb",   1.80f },
-    { ENT_REVENANT, "assets/models/npc_revenant.glb", 1.80f },
-    { ENT_BOSS,     "assets/models/npc_boss.glb",     2.50f },
-};
-#define NPC_MODEL_COUNT ((int)(sizeof(NPC_MODEL) / sizeof(NPC_MODEL[0])))
-
-/* I modelli sono risorse, non stato di gioco: vivono qui, statici, invece di
+/* I modelli animati vengono dal campo "modello" di entities.txt. Piu' tipi
+ * possono indicare lo stesso file, e in quel caso viene caricato una volta
+ * sola; l'altezza per la scala e' quella del tipo. Un tipo senza modello (il
+ * lupo: fra i pacchetti CC0 usati non c'e' un quadrupede animato) resta
+ * disegnato con le primitive.
+ *
+ * I modelli sono risorse, non stato di gioco: vivono qui, statici, invece di
  * gonfiare Game o Entity. Ogni Entity porta solo la propria posa. */
-static CharModel gModels[NPC_MODEL_COUNT];
+static CharModel gModels[MAX_ENTITY_TYPES];
 static int       gModelCount = 0;
-static int       gTypeModel[ENT_BOSS + 1];      /* tipo -> indice, -1 se assente */
+static int       gTypeModel[MAX_ENTITY_TYPES];   /* tipo -> indice, -1 se assente */
 
 void EntitiesLoadModels(void)
 {
     EntitiesUnloadModels();
-    for (int t = 0; t <= ENT_BOSS; t++) gTypeModel[t] = -1;
+    for (int t = 0; t < MAX_ENTITY_TYPES; t++) gTypeModel[t] = -1;
 
-    for (int i = 0; i < NPC_MODEL_COUNT; i++) {
+    for (int t = 0; t < EntityTypeCount(); t++) {
+        const char *file = ENTITY_TYPES[t].model;
+        if (file[0] == '\0') continue;
+
         int share = -1;
-        for (int k = 0; k < i; k++)                       /* stesso file? */
-            if (TextIsEqual(NPC_MODEL[k].file, NPC_MODEL[i].file))
-                share = gTypeModel[NPC_MODEL[k].type];
-        if (share >= 0) { gTypeModel[NPC_MODEL[i].type] = share; continue; }
+        for (int k = 0; k < t; k++)                       /* stesso file? */
+            if (TextIsEqual(ENTITY_TYPES[k].model, file)) share = gTypeModel[k];
+        if (share >= 0) { gTypeModel[t] = share; continue; }
 
-        if (CharModelLoad(&gModels[gModelCount], NPC_MODEL[i].file, NPC_MODEL[i].height))
-            gTypeModel[NPC_MODEL[i].type] = gModelCount++;
+        if (CharModelLoad(&gModels[gModelCount], file, ENTITY_TYPES[t].height))
+            gTypeModel[t] = gModelCount++;
     }
     if (gModelCount > 0)
         TraceLog(LOG_INFO, "ENTITY: %d modelli di personaggio caricati", gModelCount);
@@ -86,9 +197,9 @@ void EntitiesUnloadModels(void)
     gModelCount = 0;
 }
 
-static const CharModel *ModelFor(EntityType type)
+static const CharModel *ModelFor(int type)
 {
-    if ((int)type < 0 || (int)type > ENT_BOSS) return NULL;
+    if (type < 0 || type >= MAX_ENTITY_TYPES) return NULL;
     int i = gTypeModel[type];
     return (i >= 0 && i < gModelCount) ? &gModels[i] : NULL;
 }
@@ -124,12 +235,14 @@ static void EntityUpdateAnim(Entity *e, float dt)
     e->animFrame = CharModelAdvance(cm, want, e->animFrame, dt, speedMul, seconds);
 }
 
-Entity *EntitySpawn(Entity *ents, EntityType type, Vector3 pos, World *w)
+Entity *EntitySpawn(Entity *ents, int type, Vector3 pos, World *w)
 {
     int slot = -1;
     for (int i = 0; i < MAX_ENTITIES; i++)
         if (!ents[i].active) { slot = i; break; }
     if (slot < 0) return NULL;
+
+    if (type < 0 || type >= EntityTypeCount()) return NULL;
 
     Entity *e = &ents[slot];
     memset(e, 0, sizeof(Entity));
@@ -139,41 +252,23 @@ Entity *EntitySpawn(Entity *ents, EntityType type, Vector3 pos, World *w)
     e->home   = pos;
     e->pos.y  = WorldHeight(w, pos.x, pos.z);
     e->state  = AI_IDLE;
-    e->radius = 0.45f;
-    e->height = 1.8f;
-    e->dropItem = ITEM_NONE;
     e->townIndex = -1;
-    TextCopy(e->name, EntityTypeName(type));
 
-    switch (type) {
-        case ENT_WOLF:
-            e->maxHp = 45.0f;  e->damage = 9.0f;  e->speed = 6.2f;
-            e->attackRange = 1.9f; e->hostile = true;
-            e->xpReward = 28; e->goldReward = 0; e->dropItem = ItemFind("wolf_pelt");
-            e->radius = 0.55f; e->height = 1.0f;
-            break;
-        case ENT_BANDIT:
-            e->maxHp = 78.0f;  e->damage = 15.0f; e->speed = 4.6f;
-            e->attackRange = 2.2f; e->hostile = true;
-            e->xpReward = 46; e->goldReward = 35; e->dropItem = ItemFind("bandit_ring");
-            break;
-        case ENT_REVENANT:
-            e->maxHp = 110.0f; e->damage = 20.0f; e->speed = 3.4f;
-            e->attackRange = 2.3f; e->hostile = true;
-            e->xpReward = 65; e->goldReward = 20; e->dropItem = ItemFind("bone_dust");
-            break;
-        case ENT_BOSS:
-            e->maxHp = 420.0f; e->damage = 32.0f; e->speed = 4.2f;
-            e->attackRange = 2.8f; e->hostile = true; e->persistent = true;
-            e->xpReward = 400; e->goldReward = 600; e->dropItem = ItemFind("ancient_blade");
-            e->radius = 0.75f; e->height = 2.5f;
-            break;
-        default:  /* NPC pacifici */
-            e->maxHp = 60.0f; e->damage = 0.0f; e->speed = 1.8f;
-            e->attackRange = 0.0f; e->hostile = false; e->persistent = true;
-            break;
-    }
-    if (type == ENT_GUARD) { e->maxHp = 140.0f; e->damage = 22.0f; e->attackRange = 2.2f; }
+    /* Tutte le statistiche vengono dal catalogo caricato da entities.txt. */
+    const EntityDef *d = &ENTITY_TYPES[type];
+    TextCopy(e->name, d->name);
+    e->maxHp       = d->maxHp;
+    e->damage      = d->damage;
+    e->speed       = d->speed;
+    e->attackRange = d->attackRange;
+    e->xpReward    = d->xpReward;
+    e->goldReward  = d->goldReward;
+    e->radius      = d->radius;
+    e->height      = d->height;
+    e->hostile     = d->hostile;
+    e->persistent  = d->persistent;
+    e->dropItem    = (d->loot[0] != '\0') ? ItemFind(d->loot) : ITEM_NONE;
+
     e->hp = e->maxHp;
     return e;
 }
@@ -249,7 +344,7 @@ void EntitiesUpdate(Entity *ents, World *w, Player *p, float dt)
         }
 
         /* --- Nemici: macchina a stati IDLE -> CHASE -> ATTACK ----------- */
-        float aggro = (e->type == ENT_BOSS) ? 34.0f : 22.0f;
+        float aggro = ENTITY_TYPES[e->type].aggro;
 
         switch (e->state) {
             case AI_IDLE:
@@ -281,7 +376,9 @@ void EntitiesUpdate(Entity *ents, World *w, Player *p, float dt)
                 if (dist > e->attackRange * 1.25f) { e->state = AI_CHASE; break; }
                 if (e->attackCd <= 0.0f) {
                     PlayerTakeDamage(p, e->damage);
-                    e->attackCd = (e->type == ENT_WOLF) ? 1.1f : 1.6f;
+                    /* le bestie colpiscono piu' spesso degli umanoidi */
+                    e->attackCd = (ENTITY_TYPES[e->type].behaviour == AI_BEAST)
+                                ? 1.1f : 1.6f;
                 }
             } break;
 
@@ -341,10 +438,13 @@ void EntitiesPopulate(Entity *ents, World *w, Player *p, float dt)
 
         Biome b = WorldBiomeAt(w, x, z);
         float roll = NoiseHash01((unsigned int)GetTime() * 313u, tries, 3);
-        EntityType t;
-        if (b == BIOME_FOREST)                    t = (roll < 0.7f) ? ENT_WOLF : ENT_BANDIT;
-        else if (b == BIOME_MOUNTAIN || b == BIOME_SNOW) t = (roll < 0.5f) ? ENT_REVENANT : ENT_WOLF;
-        else                                      t = (roll < 0.55f) ? ENT_WOLF : ENT_BANDIT;
+        int wolf = EntityFind("wolf"), bandit = EntityFind("bandit");
+        int revenant = EntityFind("revenant");
+        int t;
+        if (b == BIOME_FOREST)                    t = (roll < 0.7f) ? wolf : bandit;
+        else if (b == BIOME_MOUNTAIN || b == BIOME_SNOW) t = (roll < 0.5f) ? revenant : wolf;
+        else                                      t = (roll < 0.55f) ? wolf : bandit;
+        if (t == ENT_NONE) continue;
 
         EntitySpawn(ents, t, (Vector3){ x, h, z }, w);
         return;
@@ -376,7 +476,7 @@ void EntitiesDraw(Entity *ents, World *w, Camera3D cam, Color tint)
         if (cm != NULL && dist < NPC_MODEL_DIST) {
             CharModelDraw(cm, e->pos, e->yaw + PLAYER_MODEL_YAW * DEG2RAD,
                           e->anim, e->animFrame, tint);
-            if (e->type == ENT_BOSS)
+            if (ENTITY_TYPES[e->type].aura)
                 DrawSphereWires((Vector3){ e->pos.x, e->pos.y + 1.2f, e->pos.z },
                                 1.8f, 6, 8, Fade((Color){ 200, 60, 60, 255 }, 0.35f));
             continue;
@@ -390,7 +490,7 @@ void EntitiesDraw(Entity *ents, World *w, Camera3D cam, Color tint)
             continue;
         }
 
-        if (e->type == ENT_WOLF) {
+        if (ENTITY_TYPES[e->type].draw == DRAW_QUADRUPED) {
             /* Quadrupede: corpo orizzontale + testa + 4 zampe stilizzate. */
             Vector3 f = { sinf(e->yaw), 0.0f, cosf(e->yaw) };
             Vector3 a = { e->pos.x - f.x * 0.55f, e->pos.y + 0.62f, e->pos.z - f.z * 0.55f };
@@ -418,8 +518,8 @@ void EntitiesDraw(Entity *ents, World *w, Camera3D cam, Color tint)
             }
         }
 
-        /* Aura del boss. */
-        if (e->type == ENT_BOSS) {
+        /* Aura, per i tipi che la dichiarano. */
+        if (ENTITY_TYPES[e->type].aura) {
             DrawSphereWires((Vector3){ e->pos.x, e->pos.y + 1.2f, e->pos.z },
                             1.8f, 6, 8, Fade((Color){ 200, 60, 60, 255 }, 0.35f));
         }
