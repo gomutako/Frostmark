@@ -1,37 +1,24 @@
 /* ============================================================================
  * world.h - Mondo aperto: altimetria, biomi, streaming dei chunk, oggetti.
  *
- * IDEA CHIAVE: l'altezza del terreno e' una FUNZIONE PURA di (seed, x, z).
- * Non serve tenere in memoria una mappa: la collisione, la mesh e la minimappa
- * chiamano tutte WorldHeight(). Questo rende il mondo infinitamente
- * riproducibile e il codice molto piu' semplice da capire.
+ * IDEA CHIAVE: il mondo e' un DATO, non una funzione. Viene cotto una volta da
+ * un seme (tools/baker) e da quel momento assets/world/ e' la sorgente di
+ * verita': si carica, si interroga e si potra' modificare. Prima della fase 3
+ * del piano (docs/05) l'altezza era una funzione pura di (seme, x, z) e il mondo
+ * si rigenerava a ogni avvio; adesso spostare un albero o spianare una radura e'
+ * una modifica che resta, ed e' il presupposto della fisica.
+ *
+ * Cio' che resta qui: mesh dei chunk, streaming, disegno, collisioni. La
+ * generazione e' in tools/worldgen.c, il caricamento in worldio.c.
  * ========================================================================== */
 #ifndef WORLD_H
 #define WORLD_H
 
 #include "raylib.h"
 #include "config.h"
+#include "worldtypes.h"
+#include "worldio.h"
 #include <stdbool.h>
-
-typedef enum {
-    BIOME_OCEAN, BIOME_BEACH, BIOME_PLAINS, BIOME_FOREST,
-    BIOME_HILL,  BIOME_MOUNTAIN, BIOME_SNOW, BIOME_COUNT
-} Biome;
-
-typedef enum {
-    PROP_TREE, PROP_PINE, PROP_ROCK, PROP_BUSH,
-    PROP_HERB, PROP_HOUSE, PROP_TOWER, PROP_CRYPT, PROP_COUNT
-} PropType;
-
-/* Un oggetto sparso sul terreno (albero, sasso, casa...). */
-typedef struct {
-    Vector3  pos;
-    float    scale;
-    float    rot;      /* gradi attorno all'asse Y                */
-    float    radius;   /* raggio di collisione, 0 = attraversabile */
-    PropType type;
-    bool     taken;    /* per gli oggetti raccoglibili (erbe)      */
-} Prop;
 
 /* Un pezzo di mondo caricato in memoria. */
 typedef struct {
@@ -44,27 +31,18 @@ typedef struct {
 } Chunk;
 
 typedef struct {
-    Vector3     pos;
-    float       radius;
-    float       baseHeight;
-    /* Copia, non un puntatore alla tabella dei nomi: lo stato non deve
-     * contenere puntatori dentro le definizioni, altrimenti ricaricare i dati
-     * a caldo (fase 1 del piano) lascerebbe puntatori pendenti. */
-    char    name[24];
-} Town;
+    /* Il mondo cotto: quote, biomi, prop, villaggi. Tutto cio' che segue e'
+     * derivato da qui o serve a disegnarlo. */
+    WorldIo io;
 
-typedef struct {
-    unsigned int seed;
+    unsigned int seed;             /* seme d'origine, dal manifest: identita' */
 
+    /* Copie da 'io', perche' mezzo gioco le legge come w->towns[i]. */
     Town  towns[MAX_TOWNS];
     int   townCount;
     Vector3 cryptPos;              /* obiettivo della quest principale */
 
     Chunk chunks[MAX_LOADED_CHUNKS];
-
-    /* Heightmap opzionale (assets/heightmap.png) che sostituisce il rumore. */
-    Image heightmap;
-    bool  useHeightmap;
 
     /* Risorse grafiche condivise. */
     Material terrainMat;
@@ -79,8 +57,17 @@ typedef struct {
     bool   hasExtProp[PROP_COUNT];
 } World;
 
-void    WorldInit(World *w, unsigned int seed);
+/* Carica il mondo cotto da 'dir' e prepara le risorse grafiche. false se il
+ * mondo manca o e' incoerente: non esiste un mondo di ripiego, e i problemi si
+ * contano con DataProblemCount(). Richiede una finestra aperta (crea texture).
+ * Vedi WorldValidate() per il controllo che si fa prima di aprirla. */
+bool    WorldInit(World *w, const char *dir);
 void    WorldUnload(World *w);
+
+/* Carica e butta via: dice se il mondo cotto e' leggibile e coerente senza
+ * bisogno di un contesto grafico. La usano ./frostmark --valida e l'avvio, che
+ * preferisce non aprire una finestra su un mondo rotto. */
+bool    WorldValidate(const char *dir);
 
 float   WorldHeight(const World *w, float x, float z);
 Vector3 WorldNormalAt(const World *w, float x, float z);

@@ -1,11 +1,16 @@
 /* ============================================================================
  * main.c - Punto di ingresso: finestra, ciclo principale, chiusura pulita.
  *
- *   ./frostmark              -> mondo con il seme predefinito
- *   ./frostmark 12345        -> mondo generato dal seme 12345
+ *   ./frostmark              -> gioca il mondo cotto in assets/world/
+ *   ./frostmark --valida     -> controlla dati e mondo, elenca i problemi, esce
+ *
+ * Il seme non e' piu' un argomento: si passa a tools/baker, una volta, per
+ * cuocere il mondo (make mondo). Vedi docs/05, fase 3.
  * ========================================================================== */
 #include "raylib.h"
 #include "game.h"
+#include "world.h"
+#include "worldfmt.h"
 #include "dataparse.h"
 #include "gamedata.h"
 #include <stdlib.h>
@@ -14,18 +19,26 @@
 
 int main(int argc, char **argv)
 {
-    /* --valida carica i dati, elenca i problemi ed esce: si usa dall'editor e
-     * in integrazione continua, e non ha bisogno di aprire una finestra. */
+    /* --valida carica dati e mondo, elenca i problemi ed esce: si usa
+     * dall'editor e in integrazione continua, e non apre una finestra. */
     if (argc > 1 && strcmp(argv[1], "--valida") == 0) {
         bool ok = GameDataLoad();
-        if (ok) printf("dati validi.\n");
-        else    printf("%d problemi nei dati.\n", DataProblemCount());
+        if (!WorldValidate(WORLD_DIR)) ok = false;
+        if (ok) printf("dati e mondo validi.\n");
+        else    printf("%d problemi.\n", DataProblemCount());
         return ok ? 0 : 1;
     }
+    if (argc > 1) {
+        fprintf(stderr, "uso: %s [--valida]\n"
+                        "Il seme non e' piu' un argomento del gioco: il mondo si\n"
+                        "cuoce una volta con 'make mondo'.\n", argv[0]);
+        return 2;
+    }
 
-    unsigned int seed = 20260819u;
-    if (argc > 1) seed = (unsigned int)strtoul(argv[1], NULL, 10);
-
+    /* Dati e mondo si controllano PRIMA di aprire la finestra: un mondo rotto
+     * non deve far comparire una finestra per poi chiuderla. Costa il doppio
+     * caricamento dei 12,6 MB di quote e biomi, cioe' qualche millisecondo di
+     * cache del sistema. */
     if (!GameDataLoad()) {
         fprintf(stderr,
                 "\nAvvio interrotto: %d problemi nei dati in %s.\n"
@@ -35,6 +48,14 @@ int main(int argc, char **argv)
                 DataProblemCount(), DATA_DIR);
         return 1;
     }
+    if (!WorldValidate(WORLD_DIR)) {
+        fprintf(stderr,
+                "\nAvvio interrotto: %d problemi nel mondo in %s.\n"
+                "Il mondo non ha un ripiego procedurale: va cotto una volta con\n"
+                "  make mondo\n",
+                DataProblemCount(), WORLD_DIR);
+        return 1;
+    }
 
     SetConfigFlags(FLAG_MSAA_4X_HINT | FLAG_WINDOW_RESIZABLE | FLAG_VSYNC_HINT);
     InitWindow(SCREEN_W, SCREEN_H, GAME_NAME " " GAME_VERSION);
@@ -42,7 +63,12 @@ int main(int argc, char **argv)
     SetTargetFPS(60);
 
     static Game game;              /* statico: la struttura e' grande        */
-    GameInit(&game, seed);
+    if (!GameInit(&game)) {
+        fprintf(stderr, "Avvio interrotto: %d problemi nel mondo.\n",
+                DataProblemCount());
+        CloseWindow();
+        return 1;
+    }
 
     /* Passo fisso: la simulazione avanza sempre di SIM_STEP, indipendentemente
      * dal frame rate. Serve alla fisica, che con un dt variabile cambia

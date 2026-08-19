@@ -1,2 +1,6 @@
 * text=auto eol=lf
 *.png binary
+# Il mondo cotto e' versionato: senza queste righe 'text=auto' potrebbe
+# normalizzare le fine-riga dentro 12 MB di quote e biomi e rovinarli.
+*.bin binary
+*.glb binary

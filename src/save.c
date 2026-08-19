@@ -112,8 +112,18 @@ bool LoadGameFromFile(Game *g, const char *path)
     CamMode camMode = g->player.camMode;
     float   camDist = g->player.camDist;
 
-    /* Rigenera il mondo dal seme salvato, poi ripristina il giocatore. */
-    GameNewWorld(g, s.seed);
+    /* Il mondo non si rigenera piu' dal seme: e' un dato, e ce n'e' uno solo.
+     * Il seme salvato serve a riconoscerlo: una partita fatta in un altro mondo
+     * ha coordinate che qui cadono altrove - in mezzo al mare o dentro una
+     * montagna - e caricarla sarebbe peggio che rifiutarla. */
+    if (s.seed != g->world.seed) {
+        TraceLog(LOG_WARNING, "SAVE: la partita viene dal mondo %u, questo e' il "
+                              "%u. Caricamento rifiutato.", s.seed, g->world.seed);
+        return false;
+    }
+
+    /* Ricarica il mondo e ripristina il giocatore. */
+    if (!GameNewWorld(g)) return false;
 
     Player *p = &g->player;
     p->camMode = camMode;

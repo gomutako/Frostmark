@@ -304,16 +304,17 @@ void UIDrawMenu(Game *g)
     const char *sub = "un piccolo RPG open world in C + raylib";
     DrawText(sub, W / 2 - MeasureText(sub, 20) / 2, H / 4 + 96, 20, UI_DIM);
 
+    /* Il tasto "nuovo mondo con seme casuale" non c'e' piu': il mondo e' fisso,
+     * si cuoce una volta con tools/baker e da allora si modifica. */
     const char *lines[] = {
         "[INVIO]  Nuova partita",
         "[C]      Carica partita",
-        "[S]      Nuovo mondo (seme casuale)",
         "[ESC]    Esci",
     };
-    for (int i = 0; i < 4; i++)
+    for (int i = 0; i < 3; i++)
         DrawText(lines[i], W / 2 - 150, H / 2 + 40 + i * 34, 22, UI_TEXT);
 
-    DrawText(TextFormat("seme del mondo: %u   -   v%s", g->world.seed, GAME_VERSION),
+    DrawText(TextFormat("mondo %u   -   v%s", g->world.seed, GAME_VERSION),
              W / 2 - 150, H - 60, 14, UI_DIM);
 }
 

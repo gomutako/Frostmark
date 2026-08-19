@@ -87,13 +87,23 @@ Vincoli applicati: niente vegetazione sott'acqua, niente su pendenze con
 
 ## Usare tool open source al posto del rumore
 
-Il gioco carica automaticamente `assets/heightmap.png` se presente: un PNG in
-scala di grigi viene campionato bilinearmente e sostituisce completamente la
-formula procedurale (la scala verticale è 110 m, si cambia in `RawHeight()`).
+Una heightmap si passa al **baker**, non al gioco: dalla fase 3 del piano
+(`docs/05`) il terreno si cuoce una volta e il gioco lo carica già fatto.
 
-```c
-if (FileExists("assets/heightmap.png")) { ... w->useHeightmap = true; }
+```bash
+./baker --heightmap assets/heightmap.png --forza
 ```
+
+Il PNG in scala di grigi viene campionato bilinearmente e sostituisce
+completamente la formula procedurale (la scala verticale è 110 m, si cambia in
+`RawHeight()` in `tools/worldgen.c`). Il seme continua a servire: decide umidità,
+villaggi e prop, che la heightmap non contiene.
+
+Attenzione alla risoluzione: 8 bit di grigio su 110 m sono **43 cm per livello**,
+molto più grossolani dei 1 cm con cui il mondo cotto conserva le quote. Il
+gradino si vede sui pendii dolci. Un PNG a 16 bit risolverebbe il problema, e
+`GetImageColor()` di raylib lo legge già a 8 bit per canale: servirebbe leggere il
+file a 16 bit, che oggi non facciamo.
 
 Ecco tre pipeline realistiche, tutte con strumenti liberi.
 
@@ -127,10 +137,14 @@ mappa di un livello a mano.
 
 ### Cosa cambia con una heightmap
 
-Con `useHeightmap = true` il mondo smette di essere infinitamente riproducibile
-da un seme: il salvataggio continua a funzionare, ma il file PNG diventa parte
-dei dati di gioco. I villaggi vengono comunque posizionati con la ricerca
-automatica di terreno pianeggiante, quindi la mappa resta giocabile.
+Niente, per il gioco: dopo il bake `assets/world/` è identico nella forma, e il
+PNG non serve più — il mondo cotto lo contiene. Cambia una cosa per gli
+strumenti: `./baker --verifica` confronta sempre col rumore, quindi su un mondo
+cotto da heightmap segnalerà differenze nelle quote. È corretto che le segnali:
+quel mondo non viene dal seme.
+
+I villaggi vengono comunque posizionati con la ricerca automatica di terreno
+pianeggiante, quindi la mappa resta giocabile.
 
 ### Altri strumenti utili
 

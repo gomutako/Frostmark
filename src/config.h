@@ -53,6 +53,7 @@
 #define MAX_SHOP_STOCK    32
 #define MAX_ENTITY_TYPES  32          /* tipi caricati da entities.txt */
 #define MAX_RUMORS        32
+#define MAX_WORLD_NPCS   128          /* NPC previsti da assets/world/spawns.txt */
 #define MAX_QUESTS        16          /* caricate da quests.txt */
 
 /* --- Giocatore ---------------------------------------------------------

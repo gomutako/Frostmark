@@ -15,7 +15,7 @@ Stato degli innesti nel codice:
 
 | Asset | Come si attiva |
 |---|---|
-| `assets/heightmap.png` | rilevato in automatico (`WorldInit`) |
+| `assets/heightmap.png` | si passa al baker: `./baker --heightmap ... --forza` (vedi `docs/02`) |
 | `assets/textures/grass.png` | rilevato in automatico (`LoadTerrainTexture`) |
 | `assets/models/*.glb` | rilevati in automatico (`LoadExtProps`) |
 | `assets/models/player.glb` | rilevato in automatico (`PlayerLoadModel`), con animazioni |

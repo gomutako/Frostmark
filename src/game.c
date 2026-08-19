@@ -2,7 +2,7 @@
 #include "balance.h"
 #include "ui.h"
 #include "save.h"
-#include "noise.h"
+#include "fmath.h"
 #include "raymath.h"
 #include <math.h>
 #include <stdio.h>
@@ -57,12 +57,12 @@ Color GameSkyColor(const Game *g)
     float warm = powf(1.0f - fabsf(l - 0.5f) * 2.0f, 2.5f);
 
     Color c;
-    c.r = (unsigned char)NoiseLerp(night.r, day.r, l);
-    c.g = (unsigned char)NoiseLerp(night.g, day.g, l);
-    c.b = (unsigned char)NoiseLerp(night.b, day.b, l);
-    c.r = (unsigned char)NoiseLerp(c.r, dusk.r, warm * 0.7f);
-    c.g = (unsigned char)NoiseLerp(c.g, dusk.g, warm * 0.7f);
-    c.b = (unsigned char)NoiseLerp(c.b, dusk.b, warm * 0.5f);
+    c.r = (unsigned char)FmLerp(night.r, day.r, l);
+    c.g = (unsigned char)FmLerp(night.g, day.g, l);
+    c.b = (unsigned char)FmLerp(night.b, day.b, l);
+    c.r = (unsigned char)FmLerp(c.r, dusk.r, warm * 0.7f);
+    c.g = (unsigned char)FmLerp(c.g, dusk.g, warm * 0.7f);
+    c.b = (unsigned char)FmLerp(c.b, dusk.b, warm * 0.5f);
     c.a = 255;
     return c;
 }
@@ -71,41 +71,37 @@ Color GameSkyColor(const Game *g)
 /*  Creazione del mondo                                                     */
 /* ------------------------------------------------------------------------ */
 
-static void SpawnTownNPCs(Game *g)
+/* L'organico dei villaggi non sta piu' nel codice: e' un elenco di punti in
+ * assets/world/spawns.txt, che il baker ha scritto e una persona puo' correggere.
+ * Aggiungere una guardia a Nordhavn e' una riga in un file di testo. */
+static void SpawnWorldNPCs(Game *g)
 {
     World *w = &g->world;
-    for (int t = 0; t < w->townCount; t++) {
-        Vector3 c = w->towns[t].pos;
-
-        /* Organico del villaggio. I tipi si cercano per identificatore; le
-         * posizioni restano qui e diventeranno dati cotti con il mondo fisso
-         * (fase 3 del piano in docs/05). */
-        struct { const char *type; float ang; float rad; } roster[] = {
-            { "elder",    0.4f, 14.0f },
-            { "merchant", 1.9f, 16.0f },
-            { "guard",    3.2f, 20.0f },
-            { "guard",    5.0f, 20.0f },
-            { "villager", 2.6f, 26.0f },
-            { "villager", 4.4f, 24.0f },
-            { "villager", 0.9f, 30.0f },
-        };
-        int n = (int)(sizeof(roster) / sizeof(roster[0]));
-
-        for (int i = 0; i < n; i++) {
-            Vector3 p = { c.x + cosf(roster[i].ang) * roster[i].rad, 0.0f,
-                          c.z + sinf(roster[i].ang) * roster[i].rad };
-            Entity *e = EntitySpawn(g->ents, EntityFind(roster[i].type), p, w);
-            if (e) {
-                e->townIndex = t;
-                /* Un nome piu' "vivo" per gli abitanti. */
-                snprintf(e->name, sizeof(e->name), "%s di %s",
-                         EntityTypeName(EntityFind(roster[i].type)), w->towns[t].name);
-            }
+    for (int i = 0; i < w->io.npcCount; i++) {
+        const NpcSpawn *sp = &w->io.npcs[i];
+        int type = EntityFind(sp->type);
+        if (type < 0) {
+            /* Un tipo inesistente e' un errore nei dati, non un NPC in meno da
+             * ignorare in silenzio: senza il messaggio si cercherebbe per ore
+             * perche' un villaggio e' vuoto. */
+            TraceLog(LOG_ERROR, "SPAWNS: tipo di NPC sconosciuto '%s' "
+                                "(assets/world/spawns.txt)", sp->type);
+            continue;
         }
+
+        Vector3 p = { sp->x, 0.0f, sp->z };
+        Entity *e = EntitySpawn(g->ents, type, p, w);
+        if (e == NULL) continue;
+
+        e->townIndex = sp->townIndex;
+        /* Un nome piu' "vivo" per gli abitanti di un villaggio. */
+        if (sp->townIndex >= 0 && sp->townIndex < w->townCount)
+            snprintf(e->name, sizeof(e->name), "%s di %s",
+                     EntityTypeName(type), w->towns[sp->townIndex].name);
     }
 }
 
-void GameNewWorld(Game *g, unsigned int seed)
+bool GameNewWorld(Game *g)
 {
     /* Ripulisce eventuali risorse precedenti. */
     WorldUnload(&g->world);
@@ -113,14 +109,17 @@ void GameNewWorld(Game *g, unsigned int seed)
     memset(g->ents,  0, sizeof(g->ents));
     memset(g->projs, 0, sizeof(g->projs));
 
-    WorldInit(&g->world, seed);
+    if (!WorldInit(&g->world, WORLD_DIR)) {
+        g->running = false;
+        return false;
+    }
     QuestInitAll(g->quests);
 
-    Vector3 spawn = g->world.towns[0].pos;
-    spawn = WorldSafeSpawn(&g->world, spawn.x + 26.0f, spawn.z + 26.0f);
-    PlayerInit(&g->player, spawn);
+    /* Il punto di partenza e' un dato del mondo, non il centro del primo
+     * villaggio piu' un offset: sta in spawns.txt e si sposta scrivendolo. */
+    PlayerInit(&g->player, g->world.io.playerStart);
 
-    SpawnTownNPCs(g);
+    SpawnWorldNPCs(g);
 
     g->timeOfDay = 0.32f;     /* si comincia poco dopo l'alba */
     g->playTime  = 0.0f;
@@ -133,9 +132,10 @@ void GameNewWorld(Game *g, unsigned int seed)
         WorldUpdateStreaming(&g->world, g->player.pos);
 
     GameSubtitle(g, TextFormat("%s - le terre di Frostmark", g->world.towns[0].name));
+    return true;
 }
 
-void GameInit(Game *g, unsigned int seed)
+bool GameInit(Game *g)
 {
     memset(g, 0, sizeof(Game));
     g->state   = GS_MENU;
@@ -143,9 +143,10 @@ void GameInit(Game *g, unsigned int seed)
     g->cam.up  = (Vector3){ 0.0f, 1.0f, 0.0f };
     g->cam.fovy = 70.0f;
     g->cam.projection = CAMERA_PERSPECTIVE;
-    EntitiesLoadModels();          /* risorse: non dipendono dal seme */
-    GameNewWorld(g, seed);
+    EntitiesLoadModels();          /* risorse: non dipendono dal mondo */
+    if (!GameNewWorld(g)) return false;
     g->state = GS_MENU;   /* GameNewWorld non cambia stato, ma restiamo espliciti */
+    return true;
 }
 
 void GameShutdown(Game *g)
@@ -368,13 +369,11 @@ void GameInput(Game *g)
 
     case GS_MENU:
         if (IsKeyPressed(KEY_ENTER)) {
-            GameNewWorld(g, g->world.seed);
+            /* Ricarica il mondo cotto e rimette il giocatore all'inizio: non
+             * genera niente. Un mondo nuovo si cuoce con tools/baker. */
+            if (!GameNewWorld(g)) break;
             g->state = GS_PLAY;
             DisableCursor();
-        } else if (IsKeyPressed(KEY_S)) {
-            unsigned int s = (unsigned int)(GetTime() * 100000.0) ^ 0xA53Fu;
-            GameNewWorld(g, s);
-            GameToast(g, "Nuovo mondo generato (seme %u)", s);
         } else if (IsKeyPressed(KEY_C)) {
             if (LoadGameFromFile(g, SAVE_FILE)) {
                 g->state = GS_PLAY;

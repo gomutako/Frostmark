@@ -5,15 +5,27 @@
 Un gioco di questo tipo può facilmente diventare un groviglio. Frostmark segue
 tre regole, e tutto il resto discende da lì.
 
-**Regola 1 — Il mondo è una funzione, non un dato.**
-`WorldHeight(world, x, z)` restituisce l'altezza del terreno in qualunque punto,
-senza consultare alcuna struttura dati. Conseguenze pratiche:
+**Regola 1 — Il mondo si interroga da un solo posto.**
+`WorldHeight(world, x, z)` restituisce l'altezza del terreno in qualunque punto.
+Chi la chiama non sa da dove viene, e questo è il punto: collisioni, mesh,
+minimappa e villaggi passano tutti da lì.
 
 - la collisione con il terreno è una riga: `if (pos.y <= WorldHeight(...))`;
 - la mesh di un chunk si costruisce campionando la stessa funzione;
 - la mappa del mondo si disegna campionando la stessa funzione su una griglia;
-- il salvataggio contiene un `unsigned int` invece di 16 MB di altimetria;
 - non esistono desincronizzazioni tra "quello che vedo" e "dove sbatto".
+
+Fino alla fase 3 del piano (`docs/05`) quella funzione *calcolava* l'altezza dal
+seme: il mondo era una funzione, non un dato. Ora legge una griglia cotta una
+volta da `tools/baker` e caricata da `assets/world/` — 2048 × 2048 quote a 2 m di
+passo, 8,4 MB. La firma è la stessa, i chiamanti non sono cambiati, ma il mondo è
+diventato **autoriale**: si può spostare un albero o spianare una radura, e la
+modifica resta. Era il presupposto della fisica.
+
+Il prezzo pagato, dichiarato: il salvataggio non è più un `unsigned int` che
+rigenera tutto — il seme che contiene serve solo a riconoscere il mondo e a
+rifiutare una partita fatta in un altro — e senza `assets/world/` il gioco non
+parte.
 
 **Regola 2 — Lo stato del gioco sta in una sola struttura.**
 `Game` (in `game.h`) contiene mondo, giocatore, entità, proiettili, quest e stato
@@ -63,9 +75,15 @@ Il mondo è una griglia di 64 × 64 chunk da 64 m. Ne restano caricati al massim
 2. carica i mancanti **al massimo 3 per frame** (`CHUNK_BUILDS_PER_FRAME`),
    procedendo per anelli concentrici dal giocatore verso l'esterno.
 
-Costruire una mesh richiede 33 × 33 = 1.089 campionamenti di `WorldHeight` più
-altrettanti di `WorldNormalAt` (che ne fa altri 4): è la parte più costosa del
-gioco, e per questo è distribuita su più frame.
+Costruire una mesh richiede 33 × 33 = 1.089 letture di `WorldHeight` più
+altrettante di `WorldNormalAt` (che ne fa altre 4). Erano 5.445 valutazioni di
+rumore, la parte più costosa del gioco; da quando il mondo è cotto sono 5.445
+interpolazioni bilineari su una griglia in memoria. Restano distribuite su più
+frame perché il caricamento sulla GPU non è gratis, non più perché il calcolo lo
+sia.
+
+I prop non si spargono più a ogni caricamento di chunk: si leggono da
+`props.bin`, dove sono indicizzati per chunk, dieci byte per istanza.
 
 ## Le due visuali
 
@@ -90,8 +108,8 @@ resta un puro fatto di presentazione.
 salendo una collina finirebbe sotto la superficie. `PlayerCamera()` campiona
 `WorldHeight()` in otto punti lungo l'arretramento e accorcia la distanza al
 primo che sfonda, poi alza comunque la camera di `CAM_CLEARANCE` sul terreno.
-Costa una manciata di `WorldHeight()` per frame, cioè niente, perché l'altezza è
-una funzione pura. I prop non sono considerati: un albero fra camera e
+Costa una manciata di `WorldHeight()` per frame, cioè niente: sono letture di una
+griglia in memoria. I prop non sono considerati: un albero fra camera e
 giocatore lo si attraversa, come in molti giochi veri.
 
 `charmodel.c` contiene il modello di personaggio animato, condiviso fra

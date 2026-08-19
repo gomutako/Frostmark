@@ -16,47 +16,96 @@ sono ordinate in modo che nessuna vada rifatta a causa di quella successiva.
 |---|---|
 | 0 — Fondazioni | **fatta**: identificatori stabili (`dataid.h`), salvataggio v2, passo fisso con input e simulazione separati |
 | 1 — Formato e caricatore | **fatta**: `dataparse.c` con diagnostica per riga, `gamedata.c`, `./frostmark --valida` |
-| 2 — Migrazione dei dati | **quasi**: su file bilanciamento, oggetti, entità, quest, negozio, dicerie. Restano dialoghi, villaggi e testi dell'interfaccia (sotto il perché) |
-| 3 — Mondo fisso | **prossima** |
-| 4 — Fisica | da fare |
+| 2 — Migrazione dei dati | **quasi**: su file bilanciamento, oggetti, entità, quest, negozio, dicerie, villaggi e organico degli NPC. Restano dialoghi e testi dell'interfaccia (sotto il perché) |
+| 3 — Mondo fisso | **fatta**: `tools/baker` cuoce `assets/world/`, `worldio.c` lo carica, `noise.c` è uscito dall'eseguibile |
+| 4 — Fisica | **prossima** |
 | 5 — Motore grafico | da fare |
 | 6 — Editor | da fare |
 
 In `src/` non resta nessun valore di gioco: statistiche dei nemici, ricompense,
-prezzi, curva di esperienza, gravità e velocità stanno in `assets/data/`. Niente
-ha un valore di ripiego: senza quei file il gioco non parte e dice cosa manca.
+prezzi, curva di esperienza, gravità e velocità stanno in `assets/data/`; quote,
+biomi, prop, villaggi e abitanti stanno in `assets/world/`. Niente ha un valore
+di ripiego: senza quei file il gioco non parte e dice cosa manca.
 
-### Prossimo passo: fase 3, il mondo fisso
+### Com'è andata la fase 3
 
-È il collo di bottiglia: la geometria di collisione statica si può precalcolare
-solo su un mondo che non si rigenera, quindi **la fisica (fase 4) dipende da
-questa**. Ed è misurata come la più economica fra quelle rimaste — cuocere il
-mondo intero costa 1,1 s e produce 14,3 MB.
+Fatta come previsto, e i numeri stimati hanno tenuto:
 
-C'è anche una ragione per farla **prima** di completare la fase 2: villaggi e
-organico degli NPC sono posizioni, e le posizioni diventano dati cotti qui.
-Metterli su file adesso significherebbe riscriverli dopo.
+| Grandezza | Stimata | Misurata |
+|---|---|---|
+| Bake del mondo intero | 1,1 s | **2,1 s** (quote e biomi 1,5 s, prop 0,6 s) |
+| Mondo cotto | ~14,3 MB | **14,5 MB** (+ 68 KB di `grain.png`) |
+| Prop nel mondo | 172.851 | **168.733** (2,4 % in meno) |
+| Righe: baker e generazione | 600-900 | **979** in `tools/` (`baker.c` 528, `worldgen.c` 342, `worldgen.h` 59, `noise.c` 50) |
+| Righe: runtime | 800-1.200 | **786** nuove (`worldio.c` 500, `worldfmt.h` 167, `worldio.h` 67, `worldtypes.h` 52), meno 206 uscite da `world.c` (810 → 604) |
+| Tempo | 2-3 settimane | una sessione |
 
-Ordine di lavoro:
+Il conto delle righe è centrato, ma va letto sapendo che 342 delle 979 righe del
+baker non sono state scritte: sono la generazione **spostata** da `world.c` a
+`tools/worldgen.c`, invariata cifra per cifra. È anche il motivo per cui la
+verifica ha senso: i due lati del confronto non sono due implementazioni della
+stessa idea, sono lo stesso codice.
 
-1. Formato: `manifest.txt` leggibile più `height.bin`, `biome.bin`, `props.bin` a
-   chunk — progettato **per la scrittura**, così l'editor modifica un chunk senza
-   riscrivere 14 MB.
-2. `tools/baker`: riusa `noise.c`, `PlaceTowns()` e la generazione dei prop per
-   emettere i quattro file, `spawns.txt` compreso (leggibile e correggibile).
-3. `worldio.c`: carica altezze e biomi interi in memoria (12,6 MB), indicizza i
-   prop per chunk, mantiene lo streaming attuale per le mesh.
-4. `WorldHeight()` diventa un'interpolazione bilineare sulla griglia caricata:
-   il codice esiste già, è quello del percorso `assets/heightmap.png`.
-5. `noise.c` esce dall'eseguibile del gioco e resta solo negli strumenti.
+`src/` passa da 4.354 a 6.103 righe. La stima del piano — 20-30.000 a fine
+percorso — resta plausibile.
 
-Risoluzione: **2 metri**, la stessa della mesh (`CHUNK_SIZE / CHUNK_QUADS`). A 1
-metro il file passerebbe a 33 MB e servirebbe infittire anche la mesh.
+Il guadagno non previsto è nelle prestazioni, misurato con gli stessi 262.144
+campionamenti della tabella di partenza:
 
-**Fatto quando**: il gioco si avvia solo da `assets/world/`, `noise.c` non è più
-compilato nell'eseguibile, il mondo caricato coincide con quello generato
-(altezze entro l'errore di quantizzazione, stessi biomi, stesso numero di prop) e
-una modifica scritta a mano in `spawns.txt` si vede in gioco.
+| Grandezza | Prima (funzione) | Adesso (griglia) |
+|---|---|---|
+| `WorldHeight()` | 0,26 µs per chiamata | **0,008 µs** — 32 volte più veloce |
+| Costruire un chunk (mesh + prop) | 5.445 valutazioni di rumore + 600 per i prop | **0,08 ms** di CPU, prop letti da file |
+
+Il tempo per chunk è tempo di CPU (`clock()`), quindi non conta ciò che la GPU fa
+dopo `UploadMesh`; ed è per quello che `CHUNK_BUILDS_PER_FRAME` resta a 3. Ma la
+parte che era il collo di bottiglia del gioco adesso non si misura più.
+
+La distribuzione dei biomi misurata sul mondo cotto coincide con quella stimata
+al decimo di punto (oceano 22,6 %, pianura 29,4 %, foresta 28,3 %…), il che
+conferma che il campionamento a 2 m non perde nulla di ciò che decide un bioma.
+
+**Fatto quando** — tutti verificati:
+
+- il gioco si avvia **solo** da `assets/world/`: senza quella cartella
+  `./frostmark` esce con l'elenco di ciò che manca, prima di aprire la finestra;
+- `noise.c` non è più compilato nell'eseguibile: sta in `tools/`, e
+  `nm frostmark | grep Noise` non trova simboli nostri;
+- il mondo caricato coincide con quello generato — `make verifica-mondo` ricarica
+  con il codice del gioco e confronta con il generatore: **0** campioni di quota
+  oltre tolleranza (errore massimo 5,0 mm, cioè l'arrotondamento di uint16), **0**
+  biomi diversi, **0** chunk con conteggio di prop diverso, **0** prop diversi da
+  vedere (scala, rotazione e raggio compresi);
+- una modifica scritta a mano in `spawns.txt` si vede in gioco: spostato
+  `[inizio]` a Nordhavn e aggiunte due guardie, il gioco parte là con 37 NPC
+  invece di 35.
+
+Cosa è cambiato oltre al previsto:
+
+- **`spawns.txt` include il punto di partenza.** Era `towns[0] + (26,26)` nel
+  codice. Diventato un dato costa una riga e rende giocabile un mondo dove il
+  primo villaggio non è quello in cui si vuole cominciare.
+- **La heightmap esterna è passata al baker.** Era una possibilità del runtime
+  (`assets/heightmap.png`, `docs/03`); toglierla e non rimetterla da nessuna parte
+  avrebbe eliminato in silenzio una funzione documentata. Ora è
+  `./baker --heightmap file.png`, che è anche il posto giusto: le quote si
+  decidono una volta.
+- **La grana del terreno si cuoce.** Nasceva da `NoiseFBM` a ogni avvio. È
+  l'unico caso in cui il mondo cotto contiene una texture, ed è dichiarato: se
+  `grain.png` manca il terreno perde il dettaglio e il gioco parte comunque,
+  perché è aspetto, non un dato di gioco.
+- **Il salvataggio rifiuta un altro mondo.** Il seme non rigenera più niente, ma
+  resta nel file: una partita fatta in un altro mondo ha coordinate che qui
+  cadono in mezzo al mare, e caricarla sarebbe peggio che rifiutarla.
+- **Il tasto "nuovo mondo con seme casuale" è sparito dal menu.** Non ha più
+  senso: un mondo nuovo si cuoce.
+
+### Prossimo passo: fase 4, la fisica
+
+Ora è sbloccata: la geometria di collisione statica si può precalcolare, perché
+il mondo non si rigenera più. Il punto di partenza è la tabella
+dell'accoppiamento più sotto — 3 chiamanti di `WorldResolveCollision`, 3 punti che
+incollano `pos.y` al terreno.
 
 ### Cosa resta della fase 2, e perché è rimasto
 
@@ -64,9 +113,9 @@ una modifica scritta a mano in `spawns.txt` si vede in gioco.
   (400-600 righe). Sono indipendenti da tutto: si possono fare in qualsiasi
   momento. Oggi `DialogueBuild()` confronta i tipi per identificatore, quindi la
   migrazione non toccherà altri file.
-- **Villaggi e organico degli NPC**: da fare **dopo** la fase 3, per non
-  progettare due volte il formato delle posizioni. L'organico è già scritto con
-  identificatori (`"elder"`, `"guard"`) in `SpawnTownNPCs()`.
+- **Villaggi e organico degli NPC**: **fatti** con la fase 3. Stanno in
+  `assets/world/spawns.txt` come posizioni assolute, e i tipi si risolvono per
+  identificatore (`"elder"`, `"guard"`) contro `entities.txt`.
 - **Testi dell'interfaccia**: 48 stringhe in `ui.c`. È localizzazione, un asse
   diverso: serve una convenzione di chiavi e, per validarla davvero, una seconda
   lingua. Estrarne una parte sarebbe peggio che non estrarne nessuna.
@@ -74,8 +123,9 @@ una modifica scritta a mano in `spawns.txt` si vede in gioco.
 ### Da fare comunque, e costa venti righe
 
 Il validatore in integrazione continua. Senza valori di ripiego un dato rotto è
-un gioco che non parte, quindi `./frostmark --valida` dovrebbe girare a ogni
-push. Nel repository non c'è ancora nessuna CI.
+un gioco che non parte, quindi `./frostmark --valida` (che dalla fase 3 controlla
+anche il mondo cotto) e `./baker --verifica` dovrebbero girare a ogni push. Nel
+repository non c'è ancora nessuna CI.
 
 ---
 
@@ -167,8 +217,8 @@ Cosa succede ai moduli attuali:
 
 | Oggi | Domani |
 |---|---|
-| `noise.c` | esce dal runtime, diventa il cuore di `tools/baker` |
-| `world.c` (807 righe) | si divide: `worldio.c` (carica e indicizza il mondo cotto), `worldmesh.c` (costruisce le mesh dei chunk), `worldedit.c` (scrittura per l'editor) |
+| `noise.c` | ✅ uscito dal runtime, è il cuore di `tools/baker` (con `tools/worldgen.c`) |
+| `world.c` (810 righe) | ✅ in parte: `worldio.c` carica e indicizza il mondo cotto, `world.c` (604) tiene mesh, streaming e disegno. `worldedit.c` (scrittura per l'editor) arriva con la fase 6 |
 | `items.c`, `quest.c` tabelle | scompaiono: restano i soli algoritmi, i dati vengono da `data/` |
 | `player.c`, `entity.c` | il movimento passa al controller fisico; le statistiche arrivano da `data/` |
 | `save.c` (108 righe) | riscritto: versionato, identificatori testuali, stato degli oggetti dinamici |

@@ -1,15 +1,16 @@
 /* ============================================================================
  * noise.h - Rumore procedurale deterministico (value noise + fBm + ridged).
  *
- * Nessuna dipendenza esterna: tutto e' costruito su una funzione di hash
- * intera, quindi lo stesso seed produce sempre lo stesso mondo su qualunque
- * macchina. E' il cuore della generazione del mondo aperto.
+ * NON fa parte del gioco: sta negli strumenti. Il mondo si cuoce una volta con
+ * tools/baker e da quel momento la sorgente di verita' e' assets/world/, non
+ * questa funzione (fase 3 del piano in docs/05). Le utilita' numeriche e l'hash
+ * intero, che al gioco servono ancora, vivono in src/fmath.h.
+ *
+ * Nessuna dipendenza esterna: tutto e' costruito sull'hash di src/fmath.c,
+ * quindi lo stesso seme produce sempre lo stesso mondo su qualunque macchina.
  * ========================================================================== */
 #ifndef NOISE_H
 #define NOISE_H
-
-/* Valore pseudo-casuale in [0,1] associato alla cella intera (x,z). */
-float NoiseHash01(unsigned int seed, int x, int z);
 
 /* Value noise interpolato, output in [0,1]. */
 float Noise2D(unsigned int seed, float x, float z);
@@ -20,10 +21,5 @@ float NoiseFBM(unsigned int seed, float x, float z, int octaves,
 
 /* Rumore "a creste": ottimo per catene montuose, output ~[0,1]. */
 float NoiseRidged(unsigned int seed, float x, float z, int octaves);
-
-/* Utility numeriche condivise. */
-float NoiseSmoothstep(float edge0, float edge1, float x);
-float NoiseLerp(float a, float b, float t);
-float NoiseClamp(float v, float lo, float hi);
 
 #endif /* NOISE_H */

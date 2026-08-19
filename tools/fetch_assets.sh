@@ -310,6 +310,7 @@ PY
         echo "python3 non trovato: impossibile generare la heightmap di prova."
     fi
     echo
-    echo "Avvia il gioco: il file assets/heightmap.png viene rilevato in automatico."
-    echo "Per tornare al terreno procedurale, rimuovilo o rinominalo."
+    echo "Cuoci il mondo con quelle quote:"
+    echo "    ./baker --heightmap assets/heightmap.png --forza"
+    echo "Per tornare al terreno procedurale:  make mondo-forza"
 fi

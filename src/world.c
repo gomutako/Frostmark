@@ -1,5 +1,6 @@
 #include "world.h"
-#include "noise.h"
+#include "worldio.h"
+#include "fmath.h"
 #include "raymath.h"
 #include <math.h>
 #include <string.h>
@@ -15,78 +16,21 @@ static const Vector3 SUN_DIR = { 0.45f, 0.80f, 0.40f };
 /*  ALTIMETRIA                                                              */
 /* ------------------------------------------------------------------------ */
 
-/* Altezza "grezza", senza lo spianamento dei villaggi (evita ricorsione). */
-static float RawHeight(const World *w, float x, float z)
-{
-    if (w->useHeightmap && w->heightmap.data != NULL) {
-        /* Campionamento bilineare di una heightmap esterna (PNG in scala di
-         * grigi prodotta con QGIS/GDAL, Blender A.N.T. Landscape, ecc.). */
-        float u = (x / WORLD_SIZE) * (float)(w->heightmap.width  - 1);
-        float v = (z / WORLD_SIZE) * (float)(w->heightmap.height - 1);
-        u = NoiseClamp(u, 0.0f, (float)(w->heightmap.width  - 1));
-        v = NoiseClamp(v, 0.0f, (float)(w->heightmap.height - 1));
-        int x0 = (int)u, z0 = (int)v;
-        int x1 = (x0 + 1 < w->heightmap.width)  ? x0 + 1 : x0;
-        int z1 = (z0 + 1 < w->heightmap.height) ? z0 + 1 : z0;
-        float fx = u - (float)x0, fz = v - (float)z0;
-
-        float h00 = GetImageColor(w->heightmap, x0, z0).r / 255.0f;
-        float h10 = GetImageColor(w->heightmap, x1, z0).r / 255.0f;
-        float h01 = GetImageColor(w->heightmap, x0, z1).r / 255.0f;
-        float h11 = GetImageColor(w->heightmap, x1, z1).r / 255.0f;
-        float h = NoiseLerp(NoiseLerp(h00, h10, fx), NoiseLerp(h01, h11, fx), fz);
-        return h * 110.0f;
-    }
-
-    unsigned int s = w->seed;
-
-    /* 1) Continenti: fBm a bassa frequenza, elevato a potenza per creare
-     *    grandi pianure e coste nette. */
-    float cont = NoiseFBM(s, x * 0.00085f, z * 0.00085f, 5, 2.0f, 0.5f);
-    cont = powf(cont, 1.55f);
-
-    /* 2) Catene montuose: rumore "ridged" mascherato dalle zone alte. */
-    float mtn  = NoiseRidged(s + 77u, x * 0.0026f, z * 0.0026f, 5);
-    float mask = NoiseSmoothstep(0.42f, 0.78f, cont);
-
-    /* 3) Colline medie + dettaglio fine. */
-    float hills  = NoiseFBM(s + 131u, x * 0.006f, z * 0.006f, 3, 2.0f, 0.5f);
-    float detail = NoiseFBM(s + 211u, x * 0.035f, z * 0.035f, 3, 2.0f, 0.5f);
-
-    float h = cont * 62.0f
-            + mask * mtn * 90.0f
-            + hills * 10.0f
-            + (detail - 0.5f) * 3.5f
-            - 8.0f;
-
-    /* 4) Spiagge: appiattisce dolcemente la fascia intorno al livello del mare */
-    float band = NoiseSmoothstep(SEA_LEVEL - 3.0f, SEA_LEVEL + 4.0f, h);
-    h = NoiseLerp(h, NoiseLerp(SEA_LEVEL - 1.0f, h, band), 0.45f);
-
-    return h;
-}
-
+/* Le quote e i biomi vengono dal mondo cotto: qui non si genera piu' niente.
+ * WorldHeight() sopravvive come firma - la chiamano mesh, collisioni, minimappa
+ * e villaggi - ma dentro e' un'interpolazione bilineare sulla griglia caricata.
+ * Sui vertici della mesh, che cadono esattamente sui campioni, restituisce il
+ * valore cotto: il terreno disegnato e' quello generato. */
 float WorldHeight(const World *w, float x, float z)
 {
-    float h = RawHeight(w, x, z);
-
-    /* I villaggi spianano il terreno: interpoliamo verso la quota del centro. */
-    for (int i = 0; i < w->townCount; i++) {
-        float dx = x - w->towns[i].pos.x;
-        float dz = z - w->towns[i].pos.z;
-        float d  = sqrtf(dx * dx + dz * dz);
-        if (d < w->towns[i].radius) {
-            float t = NoiseSmoothstep(w->towns[i].radius * 0.45f,
-                                      w->towns[i].radius, d);
-            h = NoiseLerp(w->towns[i].baseHeight, h, t);
-        }
-    }
-    return h;
+    return WorldIoHeight(&w->io, x, z);
 }
 
 Vector3 WorldNormalAt(const World *w, float x, float z)
 {
-    const float e = 1.0f;
+    /* Il passo e' quello della griglia: campionare piu' fitto non aggiunge
+     * informazione, la griglia non ce l'ha, e produce normali a scalini. */
+    const float e = WORLD_GRID_STEP;
     float hl = WorldHeight(w, x - e, z);
     float hr = WorldHeight(w, x + e, z);
     float hd = WorldHeight(w, x, z - e);
@@ -97,16 +41,7 @@ Vector3 WorldNormalAt(const World *w, float x, float z)
 
 Biome WorldBiomeAt(const World *w, float x, float z)
 {
-    float h = WorldHeight(w, x, z);
-    if (h < SEA_LEVEL)          return BIOME_OCEAN;
-    if (h < SEA_LEVEL + 2.2f)   return BIOME_BEACH;
-    if (h > SNOW_LEVEL)         return BIOME_SNOW;
-    if (h > MOUNTAIN_LEVEL)     return BIOME_MOUNTAIN;
-
-    float moist = NoiseFBM(w->seed + 999u, x * 0.0018f, z * 0.0018f, 3, 2.0f, 0.5f);
-    if (moist > 0.52f && h < 46.0f) return BIOME_FOREST;
-    if (h > 34.0f)                  return BIOME_HILL;
-    return BIOME_PLAINS;
+    return WorldIoBiome(&w->io, x, z);
 }
 
 Color WorldBiomeColor(Biome b)
@@ -151,18 +86,24 @@ Vector3 WorldSafeSpawn(const World *w, float x, float z)
 /*  TEXTURE PROCEDURALI                                                     */
 /* ------------------------------------------------------------------------ */
 
-/* Texture di dettaglio in scala di grigi: moltiplica i colori dei vertici e
- * rompe l'effetto "plastica" delle superfici piatte. */
-static Texture2D MakeGrainTexture(unsigned int seed, int size)
+/* Grana di dettaglio: moltiplica i colori dei vertici e rompe l'effetto
+ * "plastica" delle superfici piatte. Nasceva dal rumore a ogni avvio; ora che il
+ * rumore vive negli strumenti, la cuoce il baker in assets/world/grain.png.
+ * Se manca si va avanti con una texture bianca: e' dettaglio visivo, non un dato
+ * di gioco, e un mondo senza grana e' brutto, non incoerente. */
+static Texture2D LoadGrainTexture(const char *worldDir)
 {
-    Image img = GenImageColor(size, size, WHITE);
-    for (int y = 0; y < size; y++) {
-        for (int x = 0; x < size; x++) {
-            float n = NoiseFBM(seed, (float)x * 0.09f, (float)y * 0.09f, 4, 2.0f, 0.5f);
-            unsigned char v = (unsigned char)(190 + n * 65.0f);
-            ImageDrawPixel(&img, x, y, (Color){ v, v, v, 255 });
-        }
+    char path[256];
+    snprintf(path, sizeof(path), "%s/%s", worldDir, WORLD_GRAIN);
+
+    Image img;
+    if (FileExists(path)) {
+        img = LoadImage(path);
+    } else {
+        TraceLog(LOG_WARNING, "WORLD: %s manca, terreno senza grana", path);
+        img = GenImageColor(4, 4, WHITE);
     }
+
     Texture2D t = LoadTextureFromImage(img);
     GenTextureMipmaps(&t);
     SetTextureFilter(t, TEXTURE_FILTER_TRILINEAR);
@@ -172,9 +113,9 @@ static Texture2D MakeGrainTexture(unsigned int seed, int size)
 }
 
 /* Texture del terreno: se esiste assets/textures/grass.png la usa, altrimenti
- * ricade sulla grana procedurale. Nota: i colori dei vertici (bioma + luce)
+ * ricade sulla grana cotta. Nota: i colori dei vertici (bioma + luce)
  * MOLTIPLICANO questa texture, quindi una texture satura scurisce il terreno. */
-static Texture2D LoadTerrainTexture(unsigned int seed)
+static Texture2D LoadTerrainTexture(const char *worldDir)
 {
     const char *file = "assets/textures/grass.png";
     if (FileExists(file)) {
@@ -186,9 +127,9 @@ static Texture2D LoadTerrainTexture(unsigned int seed)
             TraceLog(LOG_INFO, "WORLD: texture del terreno esterna (%s)", file);
             return t;
         }
-        TraceLog(LOG_WARNING, "WORLD: %s illeggibile, uso la grana procedurale", file);
+        TraceLog(LOG_WARNING, "WORLD: %s illeggibile, uso la grana cotta", file);
     }
-    return MakeGrainTexture(seed + 55u, 256);
+    return LoadGrainTexture(worldDir);
 }
 
 /* ------------------------------------------------------------------------ */
@@ -238,7 +179,7 @@ static Texture2D MakeWorldMap(const World *w, int size)
             float h  = WorldHeight(w, wx, wz);
             Color c;
             if (h < SEA_LEVEL) {
-                float d = NoiseClamp((SEA_LEVEL - h) / 30.0f, 0.0f, 1.0f);
+                float d = FmClamp((SEA_LEVEL - h) / 30.0f, 0.0f, 1.0f);
                 c = (Color){ (unsigned char)(52 - 30 * d),
                              (unsigned char)(92 - 45 * d),
                              (unsigned char)(140 - 55 * d), 255 };
@@ -246,10 +187,10 @@ static Texture2D MakeWorldMap(const World *w, int size)
                 c = WorldBiomeColor(WorldBiomeAt(w, wx, wz));
                 /* ombreggiatura per rilievo */
                 float hx = WorldHeight(w, wx + 12.0f, wz);
-                float sh = NoiseClamp(0.75f + (h - hx) * 0.05f, 0.45f, 1.25f);
-                c.r = (unsigned char)NoiseClamp(c.r * sh, 0, 255);
-                c.g = (unsigned char)NoiseClamp(c.g * sh, 0, 255);
-                c.b = (unsigned char)NoiseClamp(c.b * sh, 0, 255);
+                float sh = FmClamp(0.75f + (h - hx) * 0.05f, 0.45f, 1.25f);
+                c.r = (unsigned char)FmClamp(c.r * sh, 0, 255);
+                c.g = (unsigned char)FmClamp(c.g * sh, 0, 255);
+                c.b = (unsigned char)FmClamp(c.b * sh, 0, 255);
             }
             ImageDrawPixel(&img, x, y, c);
         }
@@ -260,175 +201,16 @@ static Texture2D MakeWorldMap(const World *w, int size)
 }
 
 /* ------------------------------------------------------------------------ */
-/*  VILLAGGI                                                                */
-/* ------------------------------------------------------------------------ */
-
-static const char *TOWN_NAMES[MAX_TOWNS] = {
-    "Pietrariva", "Valdoro", "Nordhavn", "Ceppobianco", "Rocca Grigia"
-};
-
-static void PlaceTowns(World *w)
-{
-    w->townCount = 0;
-    unsigned int s = w->seed + 4242u;
-
-    for (int attempt = 0; attempt < 4000 && w->townCount < MAX_TOWNS; attempt++) {
-        float rx = NoiseHash01(s, attempt, 11) * (WORLD_SIZE - 800.0f) + 400.0f;
-        float rz = NoiseHash01(s, attempt, 23) * (WORLD_SIZE - 800.0f) + 400.0f;
-
-        float h = RawHeight(w, rx, rz);
-        if (h < SEA_LEVEL + 4.0f || h > 42.0f) continue;
-
-        /* Serve terreno poco ripido: campiono 4 punti attorno. */
-        float maxd = 0.0f;
-        for (int k = 0; k < 4; k++) {
-            float ang = (float)k * (PI * 0.5f);
-            float d = fabsf(RawHeight(w, rx + cosf(ang) * 45.0f,
-                                         rz + sinf(ang) * 45.0f) - h);
-            if (d > maxd) maxd = d;
-        }
-        if (maxd > 9.0f) continue;
-
-        /* Distanza minima dagli altri villaggi. */
-        bool tooClose = false;
-        for (int i = 0; i < w->townCount; i++) {
-            float dx = rx - w->towns[i].pos.x, dz = rz - w->towns[i].pos.z;
-            if (dx * dx + dz * dz < 900.0f * 900.0f) { tooClose = true; break; }
-        }
-        if (tooClose) continue;
-
-        Town *t = &w->towns[w->townCount];
-        t->pos        = (Vector3){ rx, h, rz };
-        t->radius     = TOWN_RADIUS;
-        t->baseHeight = h;
-        TextCopy(t->name, TOWN_NAMES[w->townCount]);
-        w->townCount++;
-    }
-
-    /* Fallback: se il seed e' sfortunato, forziamo un villaggio al centro. */
-    if (w->townCount == 0) {
-        Vector3 p = WorldSafeSpawn(w, WORLD_SIZE * 0.5f, WORLD_SIZE * 0.5f);
-        w->towns[0].pos        = p;
-        w->towns[0].radius     = TOWN_RADIUS;
-        w->towns[0].baseHeight = p.y;
-        TextCopy(w->towns[0].name, TOWN_NAMES[0]);
-        w->townCount = 1;
-    }
-
-    /* La cripta della quest principale: lontana dal primo villaggio. */
-    Vector3 base = w->towns[0].pos;
-    Vector3 c = WorldSafeSpawn(w, base.x + 620.0f, base.z + 540.0f);
-    w->cryptPos = c;
-}
-
-/* ------------------------------------------------------------------------ */
 /*  PROP: vegetazione, rocce, edifici                                       */
 /* ------------------------------------------------------------------------ */
 
-static bool InsideAnyTown(const World *w, float x, float z, float margin)
+/* I prop non si spargono piu' a ogni caricamento di chunk: si leggono dal mondo
+ * cotto, dove sono indicizzati per chunk. Quello che prima costava 600
+ * valutazioni di rumore per chunk ora e' una decodifica di 10 byte per prop. */
+static void LoadChunkProps(World *w, Chunk *c)
 {
-    for (int i = 0; i < w->townCount; i++) {
-        float dx = x - w->towns[i].pos.x, dz = z - w->towns[i].pos.z;
-        if (dx * dx + dz * dz < (w->towns[i].radius + margin) *
-                                (w->towns[i].radius + margin)) return true;
-    }
-    return false;
-}
-
-static void AddProp(Chunk *c, Prop p)
-{
-    if (c->propCount < MAX_PROPS_PER_CHUNK) c->props[c->propCount++] = p;
-}
-
-static void ScatterProps(World *w, Chunk *c)
-{
-    c->propCount = 0;
-    float ox = (float)c->cx * CHUNK_SIZE;
-    float oz = (float)c->cz * CHUNK_SIZE;
-
-    /* --- Vegetazione: griglia 10x10 con jitter (Poisson "povero") -------- */
-    const int CELLS = 10;
-    for (int gz = 0; gz < CELLS; gz++) {
-        for (int gx = 0; gx < CELLS; gx++) {
-            int id = c->cx * 100003 + c->cz * 7919 + gz * CELLS + gx;
-            float r1 = NoiseHash01(w->seed + 1u, id, 1);
-            float r2 = NoiseHash01(w->seed + 2u, id, 2);
-            float r3 = NoiseHash01(w->seed + 3u, id, 3);
-            float r4 = NoiseHash01(w->seed + 4u, id, 4);
-
-            float x = ox + ((float)gx + r1) * (CHUNK_SIZE / CELLS);
-            float z = oz + ((float)gz + r2) * (CHUNK_SIZE / CELLS);
-            float h = WorldHeight(w, x, z);
-            if (h < SEA_LEVEL + 1.0f) continue;
-            if (InsideAnyTown(w, x, z, -10.0f)) continue;
-
-            Vector3 n = WorldNormalAt(w, x, z);
-            if (n.y < 0.72f) {                       /* troppo ripido: rocce */
-                if (r3 < 0.25f)
-                    AddProp(c, (Prop){ (Vector3){x, h, z}, 0.8f + r4 * 1.8f,
-                                       r3 * 360.0f, 1.0f, PROP_ROCK, false });
-                continue;
-            }
-
-            Biome b = WorldBiomeAt(w, x, z);
-            float density = 0.0f;
-            PropType tree = PROP_TREE;
-            switch (b) {
-                case BIOME_FOREST:   density = 0.80f; tree = (r4 < 0.45f) ? PROP_PINE : PROP_TREE; break;
-                case BIOME_PLAINS:   density = 0.16f; tree = PROP_TREE; break;
-                case BIOME_HILL:     density = 0.30f; tree = PROP_PINE; break;
-                case BIOME_MOUNTAIN: density = 0.10f; tree = PROP_PINE; break;
-                case BIOME_BEACH:    density = 0.05f; tree = PROP_BUSH; break;
-                default: break;
-            }
-
-            if (r3 < density) {
-                AddProp(c, (Prop){ (Vector3){x, h, z}, 0.75f + r4 * 0.7f,
-                                   r1 * 360.0f, 0.7f, tree, false });
-            } else if (r3 < density + 0.10f) {
-                AddProp(c, (Prop){ (Vector3){x, h, z}, 0.6f + r4 * 0.6f,
-                                   r2 * 360.0f, 0.0f, PROP_BUSH, false });
-            } else if (r3 < density + 0.125f && b != BIOME_SNOW && b != BIOME_OCEAN) {
-                /* Erbe curative: raccoglibili (quest secondaria). */
-                AddProp(c, (Prop){ (Vector3){x, h, z}, 1.0f,
-                                   0.0f, 0.0f, PROP_HERB, false });
-            } else if (r3 < density + 0.155f) {
-                AddProp(c, (Prop){ (Vector3){x, h, z}, 0.6f + r4 * 1.4f,
-                                   r1 * 360.0f, 0.9f, PROP_ROCK, false });
-            }
-        }
-    }
-
-    /* --- Edifici dei villaggi -------------------------------------------- */
-    for (int i = 0; i < w->townCount; i++) {
-        Town *t = &w->towns[i];
-        int houses = 9;
-        for (int k = 0; k < houses; k++) {
-            float ang = (float)k * (2.0f * PI / (float)houses)
-                      + NoiseHash01(w->seed + 31u, i, k) * 0.5f;
-            float rad = 22.0f + NoiseHash01(w->seed + 32u, i, k) * 26.0f;
-            float x = t->pos.x + cosf(ang) * rad;
-            float z = t->pos.z + sinf(ang) * rad;
-            if (x < ox || x >= ox + CHUNK_SIZE || z < oz || z >= oz + CHUNK_SIZE)
-                continue;
-            float h = WorldHeight(w, x, z);
-            float rotDeg = -ang * RAD2DEG + 90.0f;
-            AddProp(c, (Prop){ (Vector3){x, h, z}, 1.0f, rotDeg, 3.6f,
-                               PROP_HOUSE, false });
-        }
-        /* Torre di guardia al centro. */
-        if (t->pos.x >= ox && t->pos.x < ox + CHUNK_SIZE &&
-            t->pos.z >= oz && t->pos.z < oz + CHUNK_SIZE) {
-            AddProp(c, (Prop){ (Vector3){t->pos.x, t->baseHeight, t->pos.z},
-                               1.0f, 0.0f, 3.0f, PROP_TOWER, false });
-        }
-    }
-
-    /* --- Cripta (obiettivo della quest principale) ----------------------- */
-    if (w->cryptPos.x >= ox && w->cryptPos.x < ox + CHUNK_SIZE &&
-        w->cryptPos.z >= oz && w->cryptPos.z < oz + CHUNK_SIZE) {
-        AddProp(c, (Prop){ w->cryptPos, 1.0f, 25.0f, 5.0f, PROP_CRYPT, false });
-    }
+    c->propCount = WorldIoChunkProps(&w->io, c->cx, c->cz,
+                                     c->props, MAX_PROPS_PER_CHUNK);
 }
 
 /* ------------------------------------------------------------------------ */
@@ -475,18 +257,18 @@ static void BuildChunkMesh(World *w, Chunk *c)
             /* Colore del bioma + illuminazione diffusa pre-calcolata. */
             Color bc = WorldBiomeColor(WorldBiomeAt(w, wx, wz));
             /* le pareti ripide diventano roccia nuda */
-            float rock = NoiseSmoothstep(0.86f, 0.62f, nrm.y);
-            bc.r = (unsigned char)NoiseLerp(bc.r, 105.0f, rock);
-            bc.g = (unsigned char)NoiseLerp(bc.g, 100.0f, rock);
-            bc.b = (unsigned char)NoiseLerp(bc.b,  95.0f, rock);
+            float rock = FmSmoothstep(0.86f, 0.62f, nrm.y);
+            bc.r = (unsigned char)FmLerp(bc.r, 105.0f, rock);
+            bc.g = (unsigned char)FmLerp(bc.g, 100.0f, rock);
+            bc.b = (unsigned char)FmLerp(bc.b,  95.0f, rock);
 
             float diff = Vector3DotProduct(nrm, sun);
             if (diff < 0.0f) diff = 0.0f;
             float lit = 0.42f + 0.58f * diff;
 
-            m.colors[idx * 4 + 0] = (unsigned char)NoiseClamp(bc.r * lit, 0, 255);
-            m.colors[idx * 4 + 1] = (unsigned char)NoiseClamp(bc.g * lit, 0, 255);
-            m.colors[idx * 4 + 2] = (unsigned char)NoiseClamp(bc.b * lit, 0, 255);
+            m.colors[idx * 4 + 0] = (unsigned char)FmClamp(bc.r * lit, 0, 255);
+            m.colors[idx * 4 + 1] = (unsigned char)FmClamp(bc.g * lit, 0, 255);
+            m.colors[idx * 4 + 2] = (unsigned char)FmClamp(bc.b * lit, 0, 255);
             m.colors[idx * 4 + 3] = 255;
         }
     }
@@ -512,25 +294,19 @@ static void BuildChunkMesh(World *w, Chunk *c)
 /*  CICLO DI VITA DEL MONDO                                                 */
 /* ------------------------------------------------------------------------ */
 
-void WorldInit(World *w, unsigned int seed)
+bool WorldInit(World *w, const char *dir)
 {
     memset(w, 0, sizeof(World));
-    w->seed = seed;
 
-    /* Heightmap esterna opzionale: se il file esiste, sostituisce il rumore. */
-    if (FileExists("assets/heightmap.png")) {
-        w->heightmap = LoadImage("assets/heightmap.png");
-        if (w->heightmap.data != NULL) {
-            ImageFormat(&w->heightmap, PIXELFORMAT_UNCOMPRESSED_R8G8B8A8);
-            w->useHeightmap = true;
-            TraceLog(LOG_INFO, "WORLD: heightmap esterna caricata (%dx%d)",
-                     w->heightmap.width, w->heightmap.height);
-        }
-    }
+    if (!WorldIoLoad(&w->io, dir)) return false;
 
-    PlaceTowns(w);
+    /* Il mondo cotto decide: seme, villaggi e cripta si copiano da la'. */
+    w->seed      = w->io.seed;
+    w->townCount = w->io.townCount;
+    for (int i = 0; i < w->townCount; i++) w->towns[i] = w->io.towns[i];
+    w->cryptPos  = w->io.cryptPos;
 
-    w->terrainTex = LoadTerrainTexture(seed);
+    w->terrainTex = LoadTerrainTexture(dir);
     w->terrainMat = LoadMaterialDefault();
     w->terrainMat.maps[MATERIAL_MAP_DIFFUSE].texture = w->terrainTex;
 
@@ -546,6 +322,15 @@ void WorldInit(World *w, unsigned int seed)
     LoadExtProps(w);
 
     for (int i = 0; i < MAX_LOADED_CHUNKS; i++) w->chunks[i].active = false;
+    return true;
+}
+
+bool WorldValidate(const char *dir)
+{
+    WorldIo io;
+    if (!WorldIoLoad(&io, dir)) return false;
+    WorldIoFree(&io);
+    return true;
 }
 
 void WorldUnload(World *w)
@@ -553,15 +338,24 @@ void WorldUnload(World *w)
     for (int i = 0; i < MAX_LOADED_CHUNKS; i++)
         if (w->chunks[i].active) { UnloadMesh(w->chunks[i].mesh); w->chunks[i].active = false; }
 
-    UnloadTexture(w->terrainTex);
-    UnloadTexture(w->mapTex);
-    UnloadModel(w->mCyl);
-    UnloadModel(w->mCone);
-    UnloadModel(w->mSphere);
-    UnloadModel(w->mCube);
+    /* WorldUnload() si chiama anche su un mondo mai caricato (GameNewWorld
+     * ripulisce prima di ricaricare): senza texture da scaricare non c'e' nulla
+     * da fare, e passare uno zero a UnloadTexture stampa un errore. */
+    if (w->terrainTex.id != 0) UnloadTexture(w->terrainTex);
+    if (w->mapTex.id != 0)     UnloadTexture(w->mapTex);
+    if (w->mCyl.meshCount > 0) {
+        UnloadModel(w->mCyl);
+        UnloadModel(w->mCone);
+        UnloadModel(w->mSphere);
+        UnloadModel(w->mCube);
+    }
     for (int t = 0; t < PROP_COUNT; t++)
         if (w->hasExtProp[t]) { UnloadModel(w->extProp[t]); w->hasExtProp[t] = false; }
-    if (w->useHeightmap) UnloadImage(w->heightmap);
+
+    WorldIoFree(&w->io);
+    w->terrainTex.id = 0;
+    w->mapTex.id     = 0;
+    w->mCyl.meshCount = 0;
     /* Nota: terrainMat deriva da LoadMaterialDefault() e condivide lo shader
      * di default: non va scaricato con UnloadMaterial(). */
 }
@@ -604,7 +398,7 @@ void WorldUpdateStreaming(World *w, Vector3 center)
                         Chunk *c = &w->chunks[i];
                         c->cx = cx; c->cz = cz; c->active = true;
                         BuildChunkMesh(w, c);
-                        ScatterProps(w, c);
+                        LoadChunkProps(w, c);
                         built++;
                         break;
                     }

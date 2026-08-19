@@ -4,6 +4,10 @@
 #   make            build ottimizzata      -> ./frostmark
 #   make debug      con simboli e -O0
 #   make run        compila ed esegue
+#   make baker      lo strumento che cuoce il mondo -> ./baker
+#   make mondo      cuoce assets/world/ se non c'e' gia'
+#   make mondo-forza  ricuoce cancellando le modifiche fatte a mano
+#   make verifica-mondo  confronta il mondo cotto con quello generato
 #   make raylib     compila raylib dal submodule vendor/raylib (una volta sola)
 #   make clean
 #
@@ -17,14 +21,27 @@
 CC       ?= cc
 TARGET   := frostmark
 SRC_DIR  := src
+TOOL_DIR := tools
 BUILD_DIR:= build
 SRCS     := $(wildcard $(SRC_DIR)/*.c)
 OBJS     := $(patsubst $(SRC_DIR)/%.c,$(BUILD_DIR)/%.o,$(SRCS))
 
+# ---- baker -----------------------------------------------------------------
+# Cuoce assets/world/ dal seme. Compila il rumore procedurale (tools/noise.c) e
+# la generazione (tools/worldgen.c), che il GIOCO non contiene piu': dopo la
+# fase 3 del piano (docs/05) il mondo e' un dato, non una funzione del seme.
+# Del gioco riusa il caricatore, cosi' '--verifica' confronta il mondo cotto con
+# quello generato usando esattamente il codice che poi ci gioca.
+BAKER      := baker
+BAKER_SRCS := $(TOOL_DIR)/baker.c $(TOOL_DIR)/worldgen.c $(TOOL_DIR)/noise.c \
+              $(SRC_DIR)/worldio.c $(SRC_DIR)/dataparse.c $(SRC_DIR)/fmath.c
+BAKER_OBJS := $(patsubst %.c,$(BUILD_DIR)/baker-%.o,$(notdir $(BAKER_SRCS)))
+
 # -MMD -MP: genera i file .d con le dipendenze dagli header, cosi' modificare
 # config.h o player.h ricompila quello che serve invece di lasciare oggetti
 # vecchi in build/.
-CFLAGS_COMMON := -std=c99 -Wall -Wextra -Wno-unused-result -I$(SRC_DIR) -MMD -MP
+CFLAGS_COMMON := -std=c99 -Wall -Wextra -Wno-unused-result \
+                 -I$(SRC_DIR) -I$(TOOL_DIR) -MMD -MP
 CFLAGS  ?= -O2
 LDFLAGS :=
 LDLIBS  := -lm
@@ -69,7 +86,8 @@ ifeq ($(OS),Windows_NT)
   TARGET := frostmark.exe
 endif
 
-.PHONY: all debug run clean dirs raylib raylib-clean
+.PHONY: all debug run clean dirs raylib raylib-clean mondo mondo-forza \
+        verifica-mondo valida
 
 all: dirs $(TARGET)
 
@@ -84,12 +102,39 @@ $(BUILD_DIR)/%.o: $(SRC_DIR)/%.c
 
 $(TARGET): $(OBJS) $(RAYLIB_DEP)
 	$(CC) $(OBJS) -o $@ $(LDFLAGS) $(LDLIBS)
-	@echo "==> $(TARGET) pronto. Avvia con: ./$(TARGET) [seme]"
+	@echo "==> $(TARGET) pronto. Avvia con: ./$(TARGET)"
 
 run: all
 	./$(TARGET)
 
+valida: all
+	./$(TARGET) --valida
+
+# ---- baker e mondo cotto ---------------------------------------------------
+# 'baker' e' il file, non un target finto: 'make baker' lo costruisce.
+$(BUILD_DIR)/baker-%.o: $(TOOL_DIR)/%.c | dirs
+	$(CC) $(CFLAGS_COMMON) $(CFLAGS) -c $< -o $@
+
+$(BUILD_DIR)/baker-%.o: $(SRC_DIR)/%.c | dirs
+	$(CC) $(CFLAGS_COMMON) $(CFLAGS) -c $< -o $@
+
+$(BAKER): $(BAKER_OBJS) $(RAYLIB_DEP) | dirs
+	$(CC) $(BAKER_OBJS) -o $@ $(LDFLAGS) $(LDLIBS)
+	@echo "==> $(BAKER) pronto. Cuoci il mondo con: make mondo"
+
+# Cuoce solo se non c'e': il mondo cotto e' versionato nel repository, e
+# ricuocerlo cancella le modifiche fatte a mano.
+mondo: $(BAKER)
+	./$(BAKER)
+
+mondo-forza: $(BAKER)
+	./$(BAKER) --forza
+
+verifica-mondo: $(BAKER)
+	./$(BAKER) --verifica
+
 -include $(OBJS:.o=.d)
+-include $(BAKER_OBJS:.o=.d)
 
 # ---- raylib dal submodule --------------------------------------------------
 # Serve una volta sola (~1 minuto). Su Linux richiede gli header di sviluppo di
@@ -107,4 +152,4 @@ raylib-clean:
 	-$(MAKE) -C $(RAYLIB_SRC) clean
 
 clean:
-	rm -rf $(BUILD_DIR) $(TARGET) $(TARGET).exe
+	rm -rf $(BUILD_DIR) $(TARGET) $(TARGET).exe $(BAKER) $(BAKER).exe

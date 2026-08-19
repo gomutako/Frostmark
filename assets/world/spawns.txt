@@ -1,0 +1,87 @@
+# ============================================================================
+#  spawns.txt - villaggi, abitanti, cripta e punto di partenza.
+#
+#  Questo file e' fatto per essere modificato a mano: e' il mondo autoriale.
+#  Spostare un villaggio, aggiungere una guardia o cambiare il punto di
+#  partenza si fa qui, e si vede al riavvio senza ricuocere niente.
+#
+#  'posizione' accetta due coordinate (x z) o tre (x y z): con due, la quota
+#  la prende dal terreno cotto, che e' quasi sempre cio' che si vuole.
+#  'npc = <tipo> <x> <z>': il tipo e' un identificatore di
+#  assets/data/entities.txt, non un numero.
+#
+#  ATTENZIONE: le quote del terreno dentro il raggio di un villaggio sono
+#  spianate in height.bin. Spostare un villaggio qui NON rispiana il terreno:
+#  per quello serve ricuocere (make mondo-forza).
+# ============================================================================
+
+[villaggio 0]
+nome            = Pietrariva
+posizione       = 1339.96 27.48 448.31
+raggio          = 70.0
+quota_base      = 27.48
+npc             = elder     1352.85 453.76
+npc             = merchant  1334.78 463.45
+npc             = guard     1319.99 447.14
+npc             = guard     1345.63 429.13
+npc             = villager  1317.68 461.71
+npc             = villager  1332.58 425.47
+npc             = villager  1358.60 471.81
+
+[villaggio 1]
+nome            = Valdoro
+posizione       = 2860.97 31.80 2736.16
+raggio          = 70.0
+quota_base      = 31.80
+npc             = elder     2873.87 2741.61
+npc             = merchant  2855.80 2751.30
+npc             = guard     2841.01 2734.99
+npc             = guard     2866.65 2716.98
+npc             = villager  2838.69 2749.56
+npc             = villager  2853.60 2713.32
+npc             = villager  2879.62 2759.66
+
+[villaggio 2]
+nome            = Nordhavn
+posizione       = 411.69 22.02 1406.94
+raggio          = 70.0
+quota_base      = 22.02
+npc             = elder     424.59 1412.40
+npc             = merchant  406.52 1422.08
+npc             = guard     391.73 1405.78
+npc             = guard     417.36 1387.77
+npc             = villager  389.41 1420.35
+npc             = villager  404.32 1384.11
+npc             = villager  430.34 1430.44
+
+[villaggio 3]
+nome            = Ceppobianco
+posizione       = 1935.83 25.91 2093.03
+raggio          = 70.0
+quota_base      = 25.91
+npc             = elder     1948.72 2098.48
+npc             = merchant  1930.66 2108.17
+npc             = guard     1915.86 2091.86
+npc             = guard     1941.50 2073.85
+npc             = villager  1913.55 2106.43
+npc             = villager  1928.45 2070.19
+npc             = villager  1954.48 2116.53
+
+[villaggio 4]
+nome            = Rocca Grigia
+posizione       = 2740.71 20.13 429.40
+raggio          = 70.0
+quota_base      = 20.13
+npc             = elder     2753.61 434.85
+npc             = merchant  2735.54 444.54
+npc             = guard     2720.75 428.23
+npc             = guard     2746.38 410.22
+npc             = villager  2718.43 442.80
+npc             = villager  2733.33 406.56
+npc             = villager  2759.36 452.90
+
+[cripta]
+posizione       = 1959.96 43.44 988.31
+
+[inizio]
+posizione       = 1365.96 27.41 474.31

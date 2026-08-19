@@ -1,7 +1,7 @@
 #include "entity.h"
 #include "dataparse.h"
 #include <stdio.h>
-#include "noise.h"
+#include "fmath.h"
 #include "raymath.h"
 #include <math.h>
 #include <string.h>
@@ -327,9 +327,9 @@ void EntitiesUpdate(Entity *ents, World *w, Player *p, float dt)
                 e->state = AI_IDLE;
             } else if (e->stateTimer <= 0.0f) {
                 e->state = (e->state == AI_WANDER) ? AI_IDLE : AI_WANDER;
-                e->stateTimer = 2.0f + NoiseHash01((unsigned int)i, (int)(e->pos.x), 7) * 3.0f;
+                e->stateTimer = 2.0f + FmHash01((unsigned int)i, (int)(e->pos.x), 7) * 3.0f;
                 if (e->state == AI_WANDER) {
-                    float a = NoiseHash01((unsigned int)i * 13u, (int)GetTime(), 3) * 2.0f * PI;
+                    float a = FmHash01((unsigned int)i * 13u, (int)GetTime(), 3) * 2.0f * PI;
                     e->home.x = e->home.x;   /* la "casa" resta il centro */
                     e->vel.x = cosf(a); e->vel.z = sinf(a);
                 }
@@ -351,8 +351,8 @@ void EntitiesUpdate(Entity *ents, World *w, Player *p, float dt)
             case AI_WANDER:
                 if (dist < aggro) { e->state = AI_CHASE; break; }
                 if (e->stateTimer <= 0.0f) {
-                    e->stateTimer = 2.5f + NoiseHash01((unsigned)i, (int)GetTime(), 5) * 3.0f;
-                    float a = NoiseHash01((unsigned)i * 7u, (int)GetTime(), 9) * 2.0f * PI;
+                    e->stateTimer = 2.5f + FmHash01((unsigned)i, (int)GetTime(), 5) * 3.0f;
+                    float a = FmHash01((unsigned)i * 7u, (int)GetTime(), 9) * 2.0f * PI;
                     e->vel.x = cosf(a); e->vel.z = sinf(a);
                     e->state = AI_WANDER;
                 }
@@ -421,8 +421,8 @@ void EntitiesPopulate(Entity *ents, World *w, Player *p, float dt)
 
     /* Cerca un punto valido: terra emersa, lontano dal giocatore e dai paesi */
     for (int tries = 0; tries < 24; tries++) {
-        float a = NoiseHash01((unsigned int)GetTime() * 977u, tries, 1) * 2.0f * PI;
-        float r = 90.0f + NoiseHash01((unsigned int)GetTime() * 131u, tries, 2) * 140.0f;
+        float a = FmHash01((unsigned int)GetTime() * 977u, tries, 1) * 2.0f * PI;
+        float r = 90.0f + FmHash01((unsigned int)GetTime() * 131u, tries, 2) * 140.0f;
         float x = p->pos.x + cosf(a) * r;
         float z = p->pos.z + sinf(a) * r;
         if (x < 8.0f || z < 8.0f || x > WORLD_SIZE - 8.0f || z > WORLD_SIZE - 8.0f) continue;
@@ -437,7 +437,7 @@ void EntitiesPopulate(Entity *ents, World *w, Player *p, float dt)
         if (inTown) continue;
 
         Biome b = WorldBiomeAt(w, x, z);
-        float roll = NoiseHash01((unsigned int)GetTime() * 313u, tries, 3);
+        float roll = FmHash01((unsigned int)GetTime() * 313u, tries, 3);
         int wolf = EntityFind("wolf"), bandit = EntityFind("bandit");
         int revenant = EntityFind("revenant");
         int t;

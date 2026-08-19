@@ -20,10 +20,15 @@ montagne e nel tempo di costruzione di un chunk?
 `unsigned int` e a `UploadMesh` con indici a 32 bit.
 
 ### 2. Aggiungere un nuovo bioma
-**File**: `world.c` (`WorldBiomeAt`, `WorldBiomeColor`, `WorldBiomeName`, `ScatterProps`)
+**File**: `worldtypes.h` (`Biome`), `tools/worldgen.c` (`GenBiomeAtHeight`,
+`GenChunkProps`), `world.c` (`WorldBiomeColor`, `WorldBiomeName`)
 
 Aggiungere `BIOME_SWAMP`: quota bassa, umidità molto alta, colore verde-bruno,
 vegetazione fitta di cespugli e nessun pino.
+
+*Punto delicato*: il bioma è un dato cotto, quindi va ricotto il mondo
+(`make mondo-forza`) — e il colore, che invece è codice, sta nel gioco. È la
+divisione da capire prima di toccare qualsiasi altra cosa nel mondo.
 
 ### 3. Un nuovo oggetto e una nuova arma
 **File**: `items.c/h`
@@ -62,7 +67,8 @@ frame di `EntitiesUpdate` — decidere cosa deve succedere ai nemici nel frattem
 ### 7. Salvataggio delle entità
 **File**: `save.c`
 
-Oggi il salvataggio contiene solo seme e giocatore, e i nemici respawnano.
+Oggi il salvataggio contiene l'identità del mondo e il giocatore, e i nemici
+respawnano.
 Estendere `SaveData` con l'array delle entità persistenti (boss e NPC di
 villaggio), incrementando `SAVE_VERSION` e gestendo il caricamento delle versioni
 precedenti.
@@ -141,5 +147,7 @@ piuttosto che infilare condizioni ovunque.
 
 Prima di ogni esercizio, compilare con `make debug` e tenere aperta la finestra
 del terminale: `TraceLog(LOG_INFO, ...)` è lo strumento di indagine più efficace
-del progetto. E dopo ogni modifica al mondo, riavviare con lo **stesso seme**
-(`./frostmark 12345`) per confrontare mele con mele.
+del progetto. E dopo ogni modifica alla generazione del mondo, ricuocere con lo
+**stesso seme** (`make mondo-forza`) e controllare con `make verifica-mondo`: se
+il confronto col generatore non è a zero, il mondo cotto e il codice non
+raccontano più la stessa cosa.

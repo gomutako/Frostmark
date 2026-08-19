@@ -11,6 +11,7 @@
 #include "entity.h"
 #include "quest.h"
 #include "items.h"
+#include <stdbool.h>
 
 typedef enum {
     GS_MENU, GS_PLAY, GS_PAUSE, GS_INVENTORY,
@@ -43,8 +44,11 @@ typedef struct Game {
     float      subtitleTimer;
 } Game;
 
-void GameInit(Game *g, unsigned int seed);
-void GameNewWorld(Game *g, unsigned int seed);
+/* false se il mondo cotto in assets/world/ manca o e' incoerente: non esiste un
+ * mondo di ripiego. Il seme non e' piu' un ingresso - lo si passa a tools/baker,
+ * una volta, per cuocere il mondo. */
+bool GameInit(Game *g);
+bool GameNewWorld(Game *g);
 void GameShutdown(Game *g);
 /* Input una volta per fotogramma, simulazione a passo fisso: vedi main.c. */
 void GameInput(Game *g);

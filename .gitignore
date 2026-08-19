@@ -1,6 +1,8 @@
 build/
 frostmark
 frostmark.exe
+baker
+baker.exe
 frostmark.html
 frostmark.js
 frostmark.wasm

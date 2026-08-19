@@ -1,0 +1,24 @@
+# ============================================================================
+#  manifest.txt - carta d'identita' del mondo cotto.
+#
+#  Lo ha scritto tools/baker in 2.11 s. Il seme non serve piu' al gioco: e'
+#  qui perche' si sappia da dove viene questo mondo e perche' un salvataggio
+#  fatto in un altro mondo si possa riconoscere e rifiutare.
+#
+#  Le prime cinque chiavi devono combaciare con config.h: se non combaciano il
+#  gioco non parte, invece di disegnare un terreno spostato di metri.
+# ============================================================================
+
+[mondo]
+versione        = 1
+seme            = 20260819
+lato_metri      = 4096.0
+chunk           = 64
+passo_griglia   = 2.0
+campioni        = 2049
+
+# Informativi: il gioco li legge ma non li usa per decidere.
+quota_minima    = 6.35
+quota_massima   = 132.52
+prop            = 168733
+generato        = Frostmark 1.0.0 baker
