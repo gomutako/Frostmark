@@ -1,0 +1,14 @@
+build/
+frostmark
+frostmark.exe
+frostmark.html
+frostmark.js
+frostmark.wasm
+frostmark.data
+*.sav
+vendor/
+assets/textures/
+assets/models/
+assets/fonts/
+assets/audio/
+assets/heightmap.png
