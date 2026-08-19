@@ -1,0 +1,101 @@
+# ============================================================================
+#  items.txt - catalogo degli oggetti.
+#
+#  tipo: arma | armatura | pozione | cibo | varie
+#  potenza: danno per le armi, riduzione del danno per le armature,
+#           punti ripristinati per pozioni e cibo, 0 per il resto.
+#
+#  L'identificatore fra parentesi quadre e' cio' che finisce nei salvataggi:
+#  cambiarlo invalida le partite salvate, riordinare le sezioni no.
+# ============================================================================
+
+[oggetto rusty_sword]
+nome        = Spada arrugginita
+tipo        = arma
+valore      = 10
+potenza     = 10
+descrizione = Vecchia ma affilata quanto basta.
+
+[oggetto iron_sword]
+nome        = Spada di ferro
+tipo        = arma
+valore      = 90
+potenza     = 18
+descrizione = Arma affidabile dei mercenari.
+
+[oggetto steel_axe]
+nome        = Ascia d'acciaio
+tipo        = arma
+valore      = 210
+potenza     = 27
+descrizione = Lenta da brandire, devastante.
+
+[oggetto ancient_blade]
+nome        = Lama Antica
+tipo        = arma
+valore      = 900
+potenza     = 42
+descrizione = Pulsa di una luce fredda.
+
+[oggetto leather_armor]
+nome        = Giubba di cuoio
+tipo        = armatura
+valore      = 60
+potenza     = 4
+descrizione = Protezione leggera.
+
+[oggetto iron_armor]
+nome        = Corazza di ferro
+tipo        = armatura
+valore      = 260
+potenza     = 10
+descrizione = Pesante ma robusta.
+
+[oggetto potion_health]
+nome        = Pozione di cura
+tipo        = pozione
+valore      = 45
+potenza     = 45
+descrizione = Ripristina 45 punti vita.
+
+[oggetto potion_mana]
+nome        = Pozione di mana
+tipo        = pozione
+valore      = 40
+potenza     = 40
+descrizione = Ripristina 40 punti magia.
+
+[oggetto bread]
+nome        = Pagnotta
+tipo        = cibo
+valore      = 6
+potenza     = 12
+descrizione = Ripristina un po' di vita.
+
+[oggetto herb]
+nome        = Erba curativa
+tipo        = varie
+valore      = 12
+potenza     = 0
+descrizione = Ingrediente alchemico.
+
+[oggetto wolf_pelt]
+nome        = Pelliccia di lupo
+tipo        = varie
+valore      = 25
+potenza     = 0
+descrizione = Calda e richiesta dai mercanti.
+
+[oggetto bandit_ring]
+nome        = Anello del bandito
+tipo        = varie
+valore      = 55
+potenza     = 0
+descrizione = Bottino di dubbia provenienza.
+
+[oggetto bone_dust]
+nome        = Polvere d'ossa
+tipo        = varie
+valore      = 35
+potenza     = 0
+descrizione = Resti di un non-morto.

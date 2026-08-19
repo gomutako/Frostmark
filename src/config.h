@@ -49,6 +49,9 @@
 #define MAX_ENTITIES     192
 #define MAX_PROJECTILES   64
 #define MAX_INVENTORY     40
+#define MAX_ITEMS         64          /* capienza del catalogo caricato da file */
+#define MAX_SHOP_STOCK    32
+#define MAX_RUMORS        32
 #define MAX_QUESTS         3
 
 /* --- Giocatore ---------------------------------------------------------- */
@@ -90,6 +93,14 @@
 #define BLOCK_SPEED_MUL 0.45f           /* quanto rallenta */
 #define BLOCK_DMG_MUL   0.45f           /* danno che passa comunque */
 #define BLOCK_STA_DRAIN 5.0f            /* vigore al secondo tenendo la guardia */
+
+/* --- Dati esterni -------------------------------------------------------
+ * Nessun dato di gioco vive nel codice: se questi file mancano o contengono
+ * errori il gioco non parte. Vedi docs/05-piano-dati-esterni-e-motore.md. */
+#define DATA_DIR        "assets/data"
+#define DATA_ITEMS      DATA_DIR "/items.txt"
+#define DATA_SHOP       DATA_DIR "/shop.txt"
+#define DATA_RUMORS     DATA_DIR "/rumors.txt"
 
 /* --- Simulazione a passo fisso ------------------------------------------
  * La simulazione avanza a scatti di SIM_STEP: la fisica (fase 4 del piano in

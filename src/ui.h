@@ -6,8 +6,11 @@
 
 #include "game.h"
 
-extern const int SHOP_STOCK[];
-extern const int SHOP_STOCK_COUNT;
+/* Assortimento del negozio, caricato da assets/data/shop.txt: indici nel
+ * catalogo degli oggetti. */
+extern int SHOP_STOCK[MAX_SHOP_STOCK];
+extern int SHOP_STOCK_COUNT;
+bool ShopLoad(const char *path);
 
 void UIDrawHUD(Game *g);
 void UIDrawCrosshair(Game *g);

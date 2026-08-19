@@ -10,6 +10,21 @@ Piano di implementazione per tre cambiamenti richiesti insieme:
 Il documento è pensato per essere seguito nell'ordine in cui è scritto: le fasi
 sono ordinate in modo che nessuna vada rifatta a causa di quella successiva.
 
+## Avanzamento
+
+| Fase | Stato |
+|---|---|
+| 0 — Fondazioni | **fatta**: identificatori stabili (`dataid.h`), salvataggio v2, passo fisso con input e simulazione separati |
+| 1 — Formato e caricatore | **fatta**: `dataparse.c` con diagnostica per riga, `gamedata.c`, `./frostmark --valida` |
+| 2 — Migrazione dei dati | **in corso**: oggetti, negozio e dicerie sono su file; restano entità, quest, dialoghi, villaggi, bilanciamento e testi dell'interfaccia |
+| 3 — Mondo fisso | da fare |
+| 4 — Fisica | da fare |
+| 5 — Motore grafico | da fare |
+| 6 — Editor | da fare |
+
+I dati già esternalizzati non hanno alcun valore di ripiego: senza
+`assets/data/` il gioco non parte.
+
 ---
 
 ## Premessa: tre promesse che cadono

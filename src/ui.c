@@ -1,4 +1,5 @@
 #include "ui.h"
+#include "dataparse.h"
 #include "raymath.h"
 #include <math.h>
 #include <string.h>
@@ -15,11 +16,49 @@ static const Color UI_HP     = (Color){ 176,  58,  58, 255 };
 static const Color UI_STA    = (Color){  88, 150,  78, 255 };
 static const Color UI_MP     = (Color){  70, 118, 180, 255 };
 
-const int SHOP_STOCK[] = {
-    ITEM_POTION_HEALTH, ITEM_POTION_MANA, ITEM_BREAD,
-    ITEM_IRON_SWORD, ITEM_STEEL_AXE, ITEM_LEATHER_ARMOR, ITEM_IRON_ARMOR
-};
-const int SHOP_STOCK_COUNT = (int)(sizeof(SHOP_STOCK) / sizeof(SHOP_STOCK[0]));
+int SHOP_STOCK[MAX_SHOP_STOCK];
+int SHOP_STOCK_COUNT = 0;
+
+/* Il negozio e' un elenco di identificatori risolti in indici al caricamento:
+ * un oggetto inesistente e' un errore, non una voce vuota nel listino. */
+bool ShopLoad(const char *path)
+{
+    DataReader r;
+    SHOP_STOCK_COUNT = 0;
+    if (!DataOpen(&r, path)) return false;
+
+    int before = DataProblemCount();
+    while (DataNextSection(&r)) {
+        if (strcmp(r.kind, "negozio") != 0) {
+            DataProblem(&r, "sezione \"%s\" inattesa in questo file", r.kind);
+            DataSkipSection(&r);
+            continue;
+        }
+        char *key, *val;
+        while (DataNextField(&r, &key, &val)) {
+            if (strcmp(key, "oggetto") != 0) {
+                DataProblem(&r, "chiave \"%s\" sconosciuta per il negozio", key);
+                continue;
+            }
+            int id = ItemFind(val);
+            if (id <= ITEM_NONE) {
+                DataProblem(&r, "oggetto \"%s\" non definito in items.txt", val);
+                continue;
+            }
+            if (SHOP_STOCK_COUNT >= MAX_SHOP_STOCK) {
+                DataProblem(&r, "troppe voci: il massimo e' %d", MAX_SHOP_STOCK);
+                continue;
+            }
+            SHOP_STOCK[SHOP_STOCK_COUNT++] = id;
+        }
+    }
+    DataClose(&r);
+    if (SHOP_STOCK_COUNT == 0) DataProblem(NULL, "%s: negozio vuoto", path);
+
+    bool ok = (DataProblemCount() == before);
+    if (ok) TraceLog(LOG_INFO, "DATI: %d voci di negozio da %s", SHOP_STOCK_COUNT, path);
+    return ok;
+}
 
 /* ------------------------------------------------------------------------ */
 /*  Helper di disegno                                                       */

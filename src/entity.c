@@ -149,23 +149,23 @@ Entity *EntitySpawn(Entity *ents, EntityType type, Vector3 pos, World *w)
         case ENT_WOLF:
             e->maxHp = 45.0f;  e->damage = 9.0f;  e->speed = 6.2f;
             e->attackRange = 1.9f; e->hostile = true;
-            e->xpReward = 28; e->goldReward = 0; e->dropItem = ITEM_WOLF_PELT;
+            e->xpReward = 28; e->goldReward = 0; e->dropItem = ItemFind("wolf_pelt");
             e->radius = 0.55f; e->height = 1.0f;
             break;
         case ENT_BANDIT:
             e->maxHp = 78.0f;  e->damage = 15.0f; e->speed = 4.6f;
             e->attackRange = 2.2f; e->hostile = true;
-            e->xpReward = 46; e->goldReward = 35; e->dropItem = ITEM_BANDIT_RING;
+            e->xpReward = 46; e->goldReward = 35; e->dropItem = ItemFind("bandit_ring");
             break;
         case ENT_REVENANT:
             e->maxHp = 110.0f; e->damage = 20.0f; e->speed = 3.4f;
             e->attackRange = 2.3f; e->hostile = true;
-            e->xpReward = 65; e->goldReward = 20; e->dropItem = ITEM_BONE_DUST;
+            e->xpReward = 65; e->goldReward = 20; e->dropItem = ItemFind("bone_dust");
             break;
         case ENT_BOSS:
             e->maxHp = 420.0f; e->damage = 32.0f; e->speed = 4.2f;
             e->attackRange = 2.8f; e->hostile = true; e->persistent = true;
-            e->xpReward = 400; e->goldReward = 600; e->dropItem = ITEM_ANCIENT_BLADE;
+            e->xpReward = 400; e->goldReward = 600; e->dropItem = ItemFind("ancient_blade");
             e->radius = 0.75f; e->height = 2.5f;
             break;
         default:  /* NPC pacifici */

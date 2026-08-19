@@ -80,12 +80,15 @@ void PlayerInit(Player *p, Vector3 spawn)
     p->level = 1; p->xp = 0; p->xpNext = 120; p->gold = 25;
     p->skillMelee = 5; p->skillMagic = 5;
 
-    p->weapon = ITEM_RUSTY_SWORD;
+    /* Dotazione iniziale. Gli oggetti si cercano per identificatore: la
+      * tabella e' in assets/data/items.txt. Quali oggetti dare all'inizio
+      * diventera' un dato con la fase 2 del piano (docs/05). */
+    p->weapon = ItemFind("rusty_sword");
     p->armor  = ITEM_NONE;
 
-    InvAdd(p->inv, ITEM_RUSTY_SWORD, 1);
-    InvAdd(p->inv, ITEM_POTION_HEALTH, 2);
-    InvAdd(p->inv, ITEM_BREAD, 3);
+    InvAdd(p->inv, ItemFind("rusty_sword"), 1);
+    InvAdd(p->inv, ItemFind("potion_health"), 2);
+    InvAdd(p->inv, ItemFind("bread"), 3);
 
     /* Modello animato opzionale: la scala viene ricavata dall'altezza voluta.
      * Va dopo il memset, che azzera la struttura. */
@@ -267,7 +270,7 @@ bool PlayerUseItem(Player *p, int slotIndex)
         case IK_WEAPON: p->weapon = id; return true;
         case IK_ARMOR:  p->armor  = id; return true;
         case IK_POTION:
-            if (id == ITEM_POTION_HEALTH) {
+            if (id == ItemFind("potion_health")) {
                 p->hp = fminf(p->maxHp, p->hp + ITEMS[id].power);
             } else {
                 p->mp = fminf(p->maxMp, p->mp + ITEMS[id].power);

@@ -1,0 +1,11 @@
+# ============================================================================
+#  rumors.txt - dicerie che gli NPC raccontano alla voce "Che si dice in giro?".
+#  Una riga "testo" per diceria. Vengono scelte a caso.
+# ============================================================================
+
+[dicerie]
+testo = Dicono che la cripta a nord-est abbia ripreso a respirare di notte.
+testo = Un mercante ha perso un carico di pozioni sulla strada alta. Nessuno l'ha piu' visto.
+testo = I lupi non attaccavano cosi' in branco da vent'anni.
+testo = Chi sale oltre le nevi torna con storie che non regge nessuna taverna.
+testo = Le erbe migliori crescono dove il bosco tocca il prato.

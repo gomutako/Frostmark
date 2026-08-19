@@ -100,6 +100,27 @@ Font e audio richiedono invece qualche riga di codice: vedi
 
 ![Mondo da heightmap esterna](docs/img/03-heightmap-esterna.png)
 
+### Dati di gioco
+
+I dati non stanno nel codice: oggetti, assortimento del negozio e dicerie sono in
+`assets/data/`, versionati nel repository. **Non hanno valori di ripiego**: se un
+file manca o contiene un errore il gioco non parte e dice cosa non torna.
+
+```bash
+./frostmark --valida     # controlla i dati ed esce; 0 se sono a posto
+```
+
+La diagnostica indica file e riga:
+
+```
+ERROR: assets/data/items.txt:42: tipo: "corazza" non ammesso;
+       valori possibili: nessuno, arma, armatura, pozione, cibo, varie
+```
+
+Aggiungere un oggetto o cambiare un prezzo non richiede di ricompilare. Il resto
+dei dati — entità, quest, dialoghi — è in migrazione: vedi
+`docs/05-piano-dati-esterni-e-motore.md`.
+
 ### Avvio con un seme specifico
 
 ```bash
@@ -166,7 +187,10 @@ Nei menu: `↑ ↓` per scorrere, `Invio` per confermare, `ESC` per uscire.
 
 ```
 src/
-  config.h    tutte le costanti di gioco (scala del mondo, bilanciamento)
+  config.h    costanti di compilazione (scala del mondo, limiti degli array)
+  dataid.h    identificatori stabili per i dati (hash FNV-1a)
+  dataparse.c/h  lettore dei file di dati, con diagnostica per riga
+  gamedata.c/h   caricamento di tutti i dati all'avvio
   noise.c/h   value noise, fBm, ridged noise deterministici
   world.c/h   altimetria, biomi, mesh dei chunk, prop, villaggi, collisioni
   player.c/h  movimento, statistiche, camera in prima/terza persona
@@ -178,6 +202,7 @@ src/
   save.c/h    salvataggio binario
   game.c/h    stato globale, ciclo di gioco, combattimento, disegno
   main.c      finestra e loop principale
+assets/data/  dati di gioco: oggetti, negozio, dicerie (obbligatori)
 docs/         approfondimenti didattici
 tools/        script per generare o scaricare asset opzionali
 vendor/

@@ -243,11 +243,11 @@ static void DoInteract(Game *g)
     Prop *herb = WorldNearestProp(&g->world, g->player.pos, 3.0f, PROP_HERB);
     if (herb) {
         herb->taken = true;
-        InvAdd(g->player.inv, ITEM_HERB, 1);
+        InvAdd(g->player.inv, ItemFind("herb"), 1);
         g->player.herbsPicked++;
         QuestProgress(g, QUEST_HERBS, 1);
         if (g->quests[QUEST_HERBS].state != Q_ACTIVE)
-            GameToast(g, "Hai raccolto: %s", ITEMS[ITEM_HERB].name);
+            GameToast(g, "Hai raccolto: %s", ITEMS[ItemFind("herb")].name);
         return;
     }
 
@@ -394,9 +394,10 @@ void GameInput(Game *g)
         if (IsKeyPressed(KEY_E)) DoInteract(g);
         if (IsKeyPressed(KEY_R)) {   /* bere rapidamente una pozione */
             Player *p = &g->player;
-            if (InvCount(p->inv, ITEM_POTION_HEALTH) > 0) {
-                p->hp = fminf(p->maxHp, p->hp + ITEMS[ITEM_POTION_HEALTH].power);
-                InvRemove(p->inv, ITEM_POTION_HEALTH, 1);
+            int potion = ItemFind("potion_health");
+            if (InvCount(p->inv, potion) > 0) {
+                p->hp = fminf(p->maxHp, p->hp + ITEMS[potion].power);
+                InvRemove(p->inv, potion, 1);
                 GameToast(g, "Hai bevuto una pozione di cura.");
             } else GameToast(g, "Non hai pozioni di cura.");
         }

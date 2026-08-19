@@ -12,26 +12,27 @@ typedef enum {
     IK_NONE, IK_WEAPON, IK_ARMOR, IK_POTION, IK_FOOD, IK_MISC
 } ItemKind;
 
-/* Gli ID sono indici nell'array ITEMS[]: 0 = "nessun oggetto". */
-enum {
-    ITEM_NONE = 0,
-    ITEM_RUSTY_SWORD, ITEM_IRON_SWORD, ITEM_STEEL_AXE, ITEM_ANCIENT_BLADE,
-    ITEM_LEATHER_ARMOR, ITEM_IRON_ARMOR,
-    ITEM_POTION_HEALTH, ITEM_POTION_MANA, ITEM_BREAD,
-    ITEM_HERB, ITEM_WOLF_PELT, ITEM_BANDIT_RING, ITEM_BONE_DUST,
-    ITEM_COUNT
-};
+/* "Nessun oggetto" e' una sentinella, non un dato: e' sempre l'indice 0.
+ * Tutti gli altri oggetti arrivano da assets/data/items.txt e si cercano per
+ * identificatore con ItemFind(). */
+#define ITEM_NONE 0
 
 typedef struct {
-    const char *id;      /* identificatore stabile, es. "iron_sword" */
-    const char *name;
-    ItemKind    kind;
-    int         value;   /* prezzo base in monete d'oro */
-    float       power;   /* danno (armi), riduzione danno (armature), cura... */
-    const char *desc;
+    char     id[32];     /* identificatore stabile, es. "iron_sword" */
+    char     name[40];
+    ItemKind kind;
+    int      value;      /* prezzo base in monete d'oro */
+    float    power;      /* danno (armi), riduzione (armature), cura... */
+    char     desc[140];
 } ItemDef;
 
-extern const ItemDef ITEMS[ITEM_COUNT];
+/* Catalogo caricato: ITEMS[0] e' sempre l'oggetto nullo. */
+extern ItemDef ITEMS[MAX_ITEMS];
+int  ItemCount(void);
+
+/* Carica il catalogo. false se il file manca o contiene errori: i problemi
+ * vengono elencati con file e riga, e il gioco non deve avviarsi. */
+bool ItemsLoad(const char *path);
 
 /* Indice dell'oggetto dato il suo identificatore, -1 se non esiste. */
 int ItemFind(const char *id);

@@ -6,13 +6,35 @@
  * ========================================================================== */
 #include "raylib.h"
 #include "game.h"
+#include "dataparse.h"
+#include "gamedata.h"
 #include <stdlib.h>
 #include <stdio.h>
+#include <string.h>
 
 int main(int argc, char **argv)
 {
+    /* --valida carica i dati, elenca i problemi ed esce: si usa dall'editor e
+     * in integrazione continua, e non ha bisogno di aprire una finestra. */
+    if (argc > 1 && strcmp(argv[1], "--valida") == 0) {
+        bool ok = GameDataLoad();
+        if (ok) printf("dati validi.\n");
+        else    printf("%d problemi nei dati.\n", DataProblemCount());
+        return ok ? 0 : 1;
+    }
+
     unsigned int seed = 20260819u;
     if (argc > 1) seed = (unsigned int)strtoul(argv[1], NULL, 10);
+
+    if (!GameDataLoad()) {
+        fprintf(stderr,
+                "\nAvvio interrotto: %d problemi nei dati in %s.\n"
+                "I dati di gioco non hanno valori di ripiego nel codice.\n"
+                "Correggi i file segnalati qui sopra, oppure controllali con:\n"
+                "  ./frostmark --valida\n",
+                DataProblemCount(), DATA_DIR);
+        return 1;
+    }
 
     SetConfigFlags(FLAG_MSAA_4X_HINT | FLAG_WINDOW_RESIZABLE | FLAG_VSYNC_HINT);
     InitWindow(SCREEN_W, SCREEN_H, GAME_NAME " " GAME_VERSION);

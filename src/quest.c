@@ -1,4 +1,5 @@
 #include "quest.h"
+#include "dataparse.h"
 #include "game.h"
 #include <stdio.h>
 #include <string.h>
@@ -11,7 +12,7 @@ const QuestDef QUESTS[MAX_QUESTS] = {
         "I branchi sono scesi a valle e le greggi non sono piu' al sicuro. "
         "La guardia ti chiede di ridurne il numero.",
         "Uccidi i lupi", 5,
-        120, 150, ITEM_IRON_SWORD
+        120, 150, "iron_sword"
     },
     {
         "herbs",
@@ -20,7 +21,7 @@ const QuestDef QUESTS[MAX_QUESTS] = {
         "L'infermeria e' a corto di scorte. Raccogli erbe curative nei prati "
         "e nei boschi (premi E vicino alle piante luminose).",
         "Raccogli erbe curative", 5,
-        90, 110, ITEM_LEATHER_ARMOR
+        90, 110, "leather_armor"
     },
     {
         "boss",
@@ -29,7 +30,7 @@ const QuestDef QUESTS[MAX_QUESTS] = {
         "Sotto la cripta a nord-est dorme Vald, un antico signore della guerra. "
         "Qualcosa lo ha risvegliato. Raggiungi la cripta e mettilo a tacere.",
         "Sconfiggi Vald il Sepolto", 1,
-        600, 500, ITEM_ANCIENT_BLADE
+        600, 500, "ancient_blade"
     },
 };
 
@@ -108,12 +109,12 @@ void QuestTurnIn(Game *g, int questId)
     q->state = Q_DONE;
     g->player.gold += QUESTS[questId].rewardGold;
     PlayerAddXP(&g->player, QUESTS[questId].rewardXp);
-    if (QUESTS[questId].rewardItem != ITEM_NONE)
-        InvAdd(g->player.inv, QUESTS[questId].rewardItem, 1);
+    int reward = ItemFind(QUESTS[questId].rewardItem);
+    if (reward > ITEM_NONE) InvAdd(g->player.inv, reward, 1);
 
     /* La quest delle erbe consuma il materiale raccolto. */
     if (questId == QUEST_HERBS)
-        InvRemove(g->player.inv, ITEM_HERB, QUESTS[QUEST_HERBS].target);
+        InvRemove(g->player.inv, ItemFind("herb"), QUESTS[QUEST_HERBS].target);
 
     /* Sblocco della quest principale. */
     if (questId == QUEST_WOLVES && g->quests[QUEST_BOSS].state == Q_LOCKED)
@@ -121,7 +122,7 @@ void QuestTurnIn(Game *g, int questId)
 
     GameToast(g, "Ricompensa: %d oro, %d PE, %s",
               QUESTS[questId].rewardGold, QUESTS[questId].rewardXp,
-              ITEMS[QUESTS[questId].rewardItem].name);
+              ITEMS[reward > ITEM_NONE ? reward : ITEM_NONE].name);
 }
 
 /* ------------------------------------------------------------------------ */
@@ -219,13 +220,52 @@ void DialogueBuild(Game *g, Entity *e, Dialogue *out)
     }
 }
 
-static const char *RUMORS[] = {
-    "Dicono che la cripta a nord-est abbia ripreso a respirare di notte.",
-    "Un mercante ha perso un carico di pozioni sulla strada alta. Nessuno l'ha piu' visto.",
-    "I lupi non attaccavano cosi' in branco da vent'anni.",
-    "Chi sale oltre le nevi torna con storie che non regge nessuna taverna.",
-    "Le erbe migliori crescono dove il bosco tocca il prato.",
-};
+/* Dicerie caricate da file: array di testi, con la lunghezza dichiarata. */
+static char gRumors[MAX_RUMORS][160];
+static int  gRumorCount = 0;
+
+int RumorCount(void) { return gRumorCount; }
+
+const char *RumorText(int index)
+{
+    if (index < 0 || index >= gRumorCount) return "";
+    return gRumors[index];
+}
+
+bool RumorsLoad(const char *path)
+{
+    DataReader r;
+    gRumorCount = 0;
+    if (!DataOpen(&r, path)) return false;
+
+    int before = DataProblemCount();
+    while (DataNextSection(&r)) {
+        if (strcmp(r.kind, "dicerie") != 0) {
+            DataProblem(&r, "sezione \"%s\" inattesa in questo file", r.kind);
+            DataSkipSection(&r);
+            continue;
+        }
+        char *key, *val;
+        while (DataNextField(&r, &key, &val)) {
+            if (strcmp(key, "testo") != 0) {
+                DataProblem(&r, "chiave \"%s\" sconosciuta per le dicerie", key);
+                continue;
+            }
+            if (gRumorCount >= MAX_RUMORS) {
+                DataProblem(&r, "troppe dicerie: il massimo e' %d", MAX_RUMORS);
+                continue;
+            }
+            if (DataAsText(&r, key, val, gRumors[gRumorCount], 160)) gRumorCount++;
+        }
+    }
+    DataClose(&r);
+    if (gRumorCount == 0) DataProblem(NULL, "%s: nessuna diceria definita", path);
+
+    bool ok = (DataProblemCount() == before);
+    if (ok) TraceLog(LOG_INFO, "DATI: %d dicerie da %s", gRumorCount, path);
+    return ok;
+}
+
 
 void DialogueChoose(Game *g, Entity *e, int optionIndex)
 {
@@ -260,9 +300,9 @@ void DialogueChoose(Game *g, Entity *e, int optionIndex)
             break;
 
         case DACT_RUMOR: {
-            int n = (int)(sizeof(RUMORS) / sizeof(RUMORS[0]));
+            int n = RumorCount();
             int idx = (int)(g->playTime * 3.0f) % n;
-            snprintf(g->dlg.text, sizeof(g->dlg.text), "%s", RUMORS[idx]);
+            snprintf(g->dlg.text, sizeof(g->dlg.text), "%s", RumorText(idx));
             g->dlg.optCount = 0;
             AddOpt(&g->dlg, "Interessante. Addio.", DACT_CLOSE, 0);
             g->dialogueOpt = 0;

@@ -1,0 +1,14 @@
+# ============================================================================
+#  shop.txt - assortimento del mercante di villaggio.
+#  Una riga "oggetto" per voce, nell'ordine in cui compaiono a schermo.
+#  I prezzi non stanno qui: vengono dal campo "valore" in items.txt.
+# ============================================================================
+
+[negozio]
+oggetto = potion_health
+oggetto = potion_mana
+oggetto = bread
+oggetto = iron_sword
+oggetto = steel_axe
+oggetto = leather_armor
+oggetto = iron_armor

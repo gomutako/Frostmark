@@ -27,7 +27,8 @@ typedef struct {
     const char *desc;
     const char *objective;
     int         target;
-    int         rewardGold, rewardXp, rewardItem;
+    int         rewardGold, rewardXp;
+    const char *rewardItem;   /* identificatore, "" per nessuna ricompensa */
 } QuestDef;
 
 typedef struct { QuestState state; int progress; } QuestInst;
@@ -38,6 +39,11 @@ extern const QuestDef QUESTS[MAX_QUESTS];
 int QuestFind(const char *id);
 unsigned int QuestStableId(int quest);
 int QuestFromStableId(unsigned int stable);   /* -1 se sconosciuta */
+
+/* Dicerie, caricate da assets/data/rumors.txt. */
+bool RumorsLoad(const char *path);
+int  RumorCount(void);
+const char *RumorText(int index);
 
 void QuestInitAll(QuestInst *q);
 void QuestProgress(struct Game *g, int questId, int amount);
