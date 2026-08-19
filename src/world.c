@@ -301,14 +301,17 @@ static void PlaceTowns(World *w)
         t->pos        = (Vector3){ rx, h, rz };
         t->radius     = TOWN_RADIUS;
         t->baseHeight = h;
-        t->name       = TOWN_NAMES[w->townCount];
+        TextCopy(t->name, TOWN_NAMES[w->townCount]);
         w->townCount++;
     }
 
     /* Fallback: se il seed e' sfortunato, forziamo un villaggio al centro. */
     if (w->townCount == 0) {
         Vector3 p = WorldSafeSpawn(w, WORLD_SIZE * 0.5f, WORLD_SIZE * 0.5f);
-        w->towns[0] = (Town){ p, TOWN_RADIUS, p.y, TOWN_NAMES[0] };
+        w->towns[0].pos        = p;
+        w->towns[0].radius     = TOWN_RADIUS;
+        w->towns[0].baseHeight = p.y;
+        TextCopy(w->towns[0].name, TOWN_NAMES[0]);
         w->townCount = 1;
     }
 

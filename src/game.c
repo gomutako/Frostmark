@@ -308,18 +308,6 @@ static void UpdatePlaying(Game *g, float dt)
         }
     }
 
-    /* Input di combattimento e interazione. */
-    if (IsMouseButtonPressed(MOUSE_BUTTON_LEFT))  DoMeleeAttack(g);
-    if (IsMouseButtonPressed(MOUSE_BUTTON_RIGHT)) DoCastSpell(g);
-    if (IsKeyPressed(KEY_E)) DoInteract(g);
-    if (IsKeyPressed(KEY_R)) {   /* bere rapidamente una pozione */
-        if (InvCount(p->inv, ITEM_POTION_HEALTH) > 0) {
-            p->hp = fminf(p->maxHp, p->hp + ITEMS[ITEM_POTION_HEALTH].power);
-            InvRemove(p->inv, ITEM_POTION_HEALTH, 1);
-            GameToast(g, "Hai bevuto una pozione di cura.");
-        } else GameToast(g, "Non hai pozioni di cura.");
-    }
-
     if (p->hp <= 0.0f) {
         g->state = GS_DEAD;
         EnableCursor();
@@ -348,11 +336,30 @@ static void RespawnPlayer(Game *g)
     GameToast(g, "Ti sei risvegliato a %s.", w->towns[best].name);
 }
 
-void GameUpdate(Game *g, float dt)
+/* ------------------------------------------------------------------------ */
+/*  AGGIORNAMENTO: SIMULAZIONE E INPUT SONO SEPARATI                        */
+/*                                                                          */
+/*  La simulazione gira a passo fisso (vedi main.c) e puo' essere eseguita   */
+/*  piu' volte in un fotogramma; l'input una volta sola. Tenerli insieme     */
+/*  farebbe scattare due volte lo stesso clic quando il passo recupera.      */
+/* ------------------------------------------------------------------------ */
+
+void GameSimulate(Game *g, float dt)
 {
     if (g->toastTimer    > 0.0f) g->toastTimer    -= dt;
     if (g->subtitleTimer > 0.0f) g->subtitleTimer -= dt;
 
+    if (g->state == GS_PLAY) {
+        UpdatePlaying(g, dt);
+    } else if (g->state == GS_DEAD) {
+        /* Il giocatore non si aggiorna piu', ma l'animazione di morte deve
+         * arrivare a fine corsa. */
+        PlayerUpdateAnimation(&g->player, dt);
+    }
+}
+
+void GameInput(Game *g)
+{
     switch (g->state) {
 
     case GS_MENU:
@@ -380,7 +387,19 @@ void GameUpdate(Game *g, float dt)
         if (IsKeyPressed(KEY_TAB))       { g->state = GS_INVENTORY; EnableCursor(); break; }
         if (IsKeyPressed(KEY_J))         { g->state = GS_JOURNAL;   EnableCursor(); break; }
         if (IsKeyPressed(KEY_M))         { g->state = GS_MAP;       EnableCursor(); break; }
-        UpdatePlaying(g, dt);
+
+        /* Combattimento e interazione: una volta per fotogramma. */
+        if (IsMouseButtonPressed(MOUSE_BUTTON_LEFT))  DoMeleeAttack(g);
+        if (IsMouseButtonPressed(MOUSE_BUTTON_RIGHT)) DoCastSpell(g);
+        if (IsKeyPressed(KEY_E)) DoInteract(g);
+        if (IsKeyPressed(KEY_R)) {   /* bere rapidamente una pozione */
+            Player *p = &g->player;
+            if (InvCount(p->inv, ITEM_POTION_HEALTH) > 0) {
+                p->hp = fminf(p->maxHp, p->hp + ITEMS[ITEM_POTION_HEALTH].power);
+                InvRemove(p->inv, ITEM_POTION_HEALTH, 1);
+                GameToast(g, "Hai bevuto una pozione di cura.");
+            } else GameToast(g, "Non hai pozioni di cura.");
+        }
         break;
 
     case GS_PAUSE:
@@ -471,9 +490,6 @@ void GameUpdate(Game *g, float dt)
     } break;
 
     case GS_DEAD:
-        /* Il giocatore non si aggiorna piu', ma l'animazione di morte deve
-         * arrivare a fine corsa. */
-        PlayerUpdateAnimation(&g->player, dt);
         if (IsKeyPressed(KEY_ENTER)) { RespawnPlayer(g); g->state = GS_PLAY; DisableCursor(); }
         if (IsKeyPressed(KEY_Q))     { g->state = GS_MENU; }
         break;

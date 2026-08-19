@@ -5,6 +5,7 @@
 
 const QuestDef QUESTS[MAX_QUESTS] = {
     {
+        "wolves",
         "La minaccia dei lupi",
         "Guardia del villaggio",
         "I branchi sono scesi a valle e le greggi non sono piu' al sicuro. "
@@ -13,6 +14,7 @@ const QuestDef QUESTS[MAX_QUESTS] = {
         120, 150, ITEM_IRON_SWORD
     },
     {
+        "herbs",
         "Erbe per l'infermeria",
         "Anziano del villaggio",
         "L'infermeria e' a corto di scorte. Raccogli erbe curative nei prati "
@@ -21,6 +23,7 @@ const QuestDef QUESTS[MAX_QUESTS] = {
         90, 110, ITEM_LEATHER_ARMOR
     },
     {
+        "boss",
         "Il Sepolto",
         "Anziano del villaggio",
         "Sotto la cripta a nord-est dorme Vald, un antico signore della guerra. "
@@ -40,6 +43,28 @@ const char *QuestStateLabel(QuestState s)
         case Q_DONE:    return "completata";
         default:        return "?";
     }
+}
+
+int QuestFind(const char *id)
+{
+    if (id == NULL) return -1;
+    for (int i = 0; i < MAX_QUESTS; i++)
+        if (strcmp(QUESTS[i].id, id) == 0) return i;
+    return -1;
+}
+
+unsigned int QuestStableId(int quest)
+{
+    if (quest < 0 || quest >= MAX_QUESTS) return 0u;
+    return DataId(QUESTS[quest].id);
+}
+
+int QuestFromStableId(unsigned int stable)
+{
+    if (stable == 0u) return -1;
+    for (int i = 0; i < MAX_QUESTS; i++)
+        if (DataId(QUESTS[i].id) == stable) return i;
+    return -1;
 }
 
 void QuestInitAll(QuestInst *q)

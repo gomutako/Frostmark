@@ -6,6 +6,7 @@
 
 #include <stdbool.h>
 #include "config.h"
+#include "dataid.h"
 
 typedef enum {
     IK_NONE, IK_WEAPON, IK_ARMOR, IK_POTION, IK_FOOD, IK_MISC
@@ -22,6 +23,7 @@ enum {
 };
 
 typedef struct {
+    const char *id;      /* identificatore stabile, es. "iron_sword" */
     const char *name;
     ItemKind    kind;
     int         value;   /* prezzo base in monete d'oro */
@@ -30,6 +32,12 @@ typedef struct {
 } ItemDef;
 
 extern const ItemDef ITEMS[ITEM_COUNT];
+
+/* Indice dell'oggetto dato il suo identificatore, -1 se non esiste. */
+int ItemFind(const char *id);
+/* Identificatore stabile da persistere, e ritorno. Fuori intervallo -> 0. */
+unsigned int ItemStableId(int item);
+int ItemFromStableId(unsigned int stable);   /* ITEM_NONE se sconosciuto */
 
 typedef struct { int id; int qty; } InvSlot;
 

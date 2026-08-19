@@ -47,7 +47,10 @@ typedef struct {
     Vector3     pos;
     float       radius;
     float       baseHeight;
-    const char *name;
+    /* Copia, non un puntatore alla tabella dei nomi: lo stato non deve
+     * contenere puntatori dentro le definizioni, altrimenti ricaricare i dati
+     * a caldo (fase 1 del piano) lascerebbe puntatori pendenti. */
+    char    name[24];
 } Town;
 
 typedef struct {

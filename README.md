@@ -24,7 +24,8 @@ fonti pubbliche CC0 (vedi `docs/03-asset-pubblici.md`).
 
 Serve un compilatore C99 e raylib (≥ 4.5, testato con 5.5). Il Makefile cerca
 raylib in quest'ordine: `RAYLIB_PATH=dir` → submodule `vendor/raylib` →
-`pkg-config` → `-lraylib`.
+`pkg-config` → `-lraylib`. Il target WebAssembly è stato abbandonato: vedi
+`docs/05-piano-dati-esterni-e-motore.md`.
 
 ### Con il submodule (consigliato: versione fissata, niente pacchetti di sistema)
 
@@ -71,13 +72,6 @@ make
 curl -LO https://github.com/raysan5/raylib/releases/download/5.5/raylib-5.5_linux_amd64.tar.gz
 mkdir -p vendor && tar xzf raylib-5.5_linux_amd64.tar.gz -C vendor/
 make RAYLIB_PATH=vendor/raylib-5.5_linux_amd64
-```
-
-### Browser (WebAssembly)
-
-```bash
-make raylib-web      # compila raylib per il browser dal submodule
-make web             # richiede emsdk attivo
 ```
 
 ### Asset opzionali

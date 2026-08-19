@@ -5,7 +5,6 @@
 #   make debug      con simboli e -O0
 #   make run        compila ed esegue
 #   make raylib     compila raylib dal submodule vendor/raylib (una volta sola)
-#   make web        build WebAssembly (richiede emscripten)
 #   make clean
 #
 #  raylib viene cercata in quest'ordine:
@@ -70,7 +69,7 @@ ifeq ($(OS),Windows_NT)
   TARGET := frostmark.exe
 endif
 
-.PHONY: all debug run clean web dirs raylib raylib-web raylib-clean
+.PHONY: all debug run clean dirs raylib raylib-clean
 
 all: dirs $(TARGET)
 
@@ -106,28 +105,6 @@ $(RAYLIB_STATIC):
 
 raylib-clean:
 	-$(MAKE) -C $(RAYLIB_SRC) clean
-	rm -rf $(RAYLIB_WEB)
-
-# ---- WebAssembly -----------------------------------------------------------
-# Richiede emsdk attivo e raylib compilata per web in $(RAYLIB_WEB).
-RAYLIB_WEB ?= vendor/raylib-web
-
-# Compila raylib per il browser dagli stessi sorgenti del submodule, in un
-# percorso separato per non sovrascrivere la statica desktop.
-raylib-web:
-	@mkdir -p $(RAYLIB_WEB)/include $(RAYLIB_WEB)/lib
-	$(MAKE) -C $(RAYLIB_SRC) PLATFORM=PLATFORM_WEB \
-	        RAYLIB_RELEASE_PATH=$(CURDIR)/$(RAYLIB_WEB)/lib
-	cp $(RAYLIB_SRC)/raylib.h $(RAYLIB_WEB)/include/
-
-web:
-	emcc -o $(TARGET).html $(SRCS) \
-	  -Os -Wall -std=c99 -I$(SRC_DIR) -I$(RAYLIB_WEB)/include \
-	  $(RAYLIB_WEB)/lib/libraylib.a \
-	  -s USE_GLFW=3 -s ASYNCIFY -s TOTAL_MEMORY=134217728 \
-	  -s FORCE_FILESYSTEM=1 --preload-file assets \
-	  -DPLATFORM_WEB
 
 clean:
-	rm -rf $(BUILD_DIR) $(TARGET) $(TARGET).exe $(TARGET).html \
-	       $(TARGET).js $(TARGET).wasm $(TARGET).data
+	rm -rf $(BUILD_DIR) $(TARGET) $(TARGET).exe

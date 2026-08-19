@@ -22,11 +22,28 @@ int main(int argc, char **argv)
     static Game game;              /* statico: la struttura e' grande        */
     GameInit(&game, seed);
 
-    while (!WindowShouldClose() && game.running) {
-        float dt = GetFrameTime();
-        if (dt > 0.05f) dt = 0.05f;       /* evita salti dopo un freeze */
+    /* Passo fisso: la simulazione avanza sempre di SIM_STEP, indipendentemente
+     * dal frame rate. Serve alla fisica, che con un dt variabile cambia
+     * comportamento, e rende il gioco riproducibile. L'input si legge una volta
+     * per fotogramma, la simulazione puo' girare piu' volte per recuperare. */
+    double accumulator = 0.0;
 
-        GameUpdate(&game, dt);
+    while (!WindowShouldClose() && game.running) {
+        double frame = GetFrameTime();
+        if (frame > SIM_MAX_FRAME) frame = SIM_MAX_FRAME;  /* dopo un freeze,
+                                                              non si recupera
+                                                              all'infinito */
+        accumulator += frame;
+
+        GameInput(&game);
+
+        int steps = 0;
+        while (accumulator >= SIM_STEP && steps < SIM_MAX_STEPS) {
+            GameSimulate(&game, (float)SIM_STEP);
+            accumulator -= SIM_STEP;
+            steps++;
+        }
+        if (steps == SIM_MAX_STEPS) accumulator = 0.0;      /* rinuncia al resto */
 
         BeginDrawing();
             ClearBackground(BLACK);

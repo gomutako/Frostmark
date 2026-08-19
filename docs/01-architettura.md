@@ -32,9 +32,10 @@ schermata significa: un valore nell'enum, un `case` in `GameUpdate`, un `case` i
 ```
 main()
  └─ while (!WindowShouldClose())
-     ├─ GameUpdate(g, dt)
-     │   └─ switch (g->state)
-     │       └─ GS_PLAY → UpdatePlaying()
+     ├─ GameInput(g)                    una volta per fotogramma
+     │   └─ switch (g->state)            tasti, mouse, menu, dialoghi
+     ├─ GameSimulate(g, SIM_STEP)        a passo fisso, anche piu' volte
+     │   └─ GS_PLAY → UpdatePlaying()
      │            ├─ PlayerUpdate()          movimento, gravità, stamina
      │            ├─ PlayerCamera()           camera in prima o terza persona
      │            ├─ WorldUpdateStreaming()   carica/scarica chunk

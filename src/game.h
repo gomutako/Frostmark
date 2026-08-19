@@ -46,7 +46,9 @@ typedef struct Game {
 void GameInit(Game *g, unsigned int seed);
 void GameNewWorld(Game *g, unsigned int seed);
 void GameShutdown(Game *g);
-void GameUpdate(Game *g, float dt);
+/* Input una volta per fotogramma, simulazione a passo fisso: vedi main.c. */
+void GameInput(Game *g);
+void GameSimulate(Game *g, float dt);
 void GameDraw(Game *g);
 
 void GameToast(Game *g, const char *fmt, ...);

@@ -91,6 +91,15 @@
 #define BLOCK_DMG_MUL   0.45f           /* danno che passa comunque */
 #define BLOCK_STA_DRAIN 5.0f            /* vigore al secondo tenendo la guardia */
 
+/* --- Simulazione a passo fisso ------------------------------------------
+ * La simulazione avanza a scatti di SIM_STEP: la fisica (fase 4 del piano in
+ * docs/05) con un dt variabile cambia comportamento, e a passo fisso il gioco
+ * diventa riproducibile. SIM_MAX_STEPS evita la spirale in cui recuperare il
+ * tempo perso costa piu' tempo di quello recuperato. */
+#define SIM_STEP       (1.0 / 60.0)
+#define SIM_MAX_FRAME  0.25          /* frame piu' lunghi vengono troncati */
+#define SIM_MAX_STEPS  6             /* al massimo 6 passi per fotogramma  */
+
 /* --- Tempo -------------------------------------------------------------- */
 #define DAY_LENGTH_SECONDS 720.0f  /* un giorno di gioco = 12 minuti reali   */
 

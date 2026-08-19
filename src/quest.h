@@ -11,6 +11,7 @@
 
 #include <stdbool.h>
 #include "config.h"
+#include "dataid.h"
 
 struct Game;
 struct Entity;
@@ -20,6 +21,7 @@ enum { QUEST_WOLVES = 0, QUEST_HERBS = 1, QUEST_BOSS = 2 };
 typedef enum { Q_LOCKED, Q_OFFERED, Q_ACTIVE, Q_READY, Q_DONE } QuestState;
 
 typedef struct {
+    const char *id;         /* identificatore stabile, es. "wolves" */
     const char *title;
     const char *giver;      /* etichetta descrittiva del committente */
     const char *desc;
@@ -31,6 +33,11 @@ typedef struct {
 typedef struct { QuestState state; int progress; } QuestInst;
 
 extern const QuestDef QUESTS[MAX_QUESTS];
+
+/* Indice della quest dato il suo identificatore, -1 se non esiste. */
+int QuestFind(const char *id);
+unsigned int QuestStableId(int quest);
+int QuestFromStableId(unsigned int stable);   /* -1 se sconosciuta */
 
 void QuestInitAll(QuestInst *q);
 void QuestProgress(struct Game *g, int questId, int amount);
