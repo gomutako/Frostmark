@@ -21,42 +21,62 @@ fonti pubbliche CC0 (vedi `docs/03-asset-pubblici.md`).
 
 ## Compilazione
 
-Serve un compilatore C99 e raylib (≥ 4.5, testato con 5.5).
+Serve un compilatore C99 e raylib (≥ 4.5, testato con 5.5). Il Makefile cerca
+raylib in quest'ordine: `RAYLIB_PATH=dir` → submodule `vendor/raylib` →
+`pkg-config` → `-lraylib`.
 
-### Linux (Debian/Ubuntu)
+### Con il submodule (consigliato: versione fissata, niente pacchetti di sistema)
+
+raylib 5.5 è agganciata come submodule in `vendor/raylib`.
 
 ```bash
-sudo apt install build-essential libraylib-dev   # se il pacchetto esiste
-make
-./frostmark
+git clone --recurse-submodules git@github.com:gomutako/Frostmark.git
+cd Frostmark
+make raylib          # compila libraylib.a dai sorgenti, una volta sola (~1 min)
+make && ./frostmark
 ```
 
-Se raylib non è nei repository, scaricare una release precompilata e indicarla:
+Se il repository è già clonato senza submodule:
+
+```bash
+git submodule update --init vendor/raylib
+```
+
+Su Linux la compilazione di raylib richiede gli header di sviluppo di X11 e
+OpenGL:
+
+```bash
+sudo apt install build-essential libx11-dev libxrandr-dev libxinerama-dev \
+                 libxcursor-dev libxi-dev libgl1-mesa-dev
+```
+
+`make raylib-clean` ributta via la libreria compilata; `make clean` non la
+tocca.
+
+### Con raylib installata nel sistema
+
+Se il submodule non è inizializzato, il Makefile ricade su `pkg-config`.
+
+```bash
+sudo apt install build-essential libraylib-dev   # Debian/Ubuntu, se esiste
+brew install raylib                              # macOS
+pacman -S mingw-w64-x86_64-gcc mingw-w64-x86_64-raylib make   # MSYS2/MinGW-w64
+make
+```
+
+### Con una release precompilata
 
 ```bash
 curl -LO https://github.com/raysan5/raylib/releases/download/5.5/raylib-5.5_linux_amd64.tar.gz
-tar xzf raylib-5.5_linux_amd64.tar.gz -C vendor/ && mv vendor/raylib-5.5_linux_amd64 vendor/raylib
-make RAYLIB_PATH=vendor/raylib
-```
-
-### macOS
-
-```bash
-brew install raylib
-make
-```
-
-### Windows (MSYS2 / MinGW-w64)
-
-```bash
-pacman -S mingw-w64-x86_64-gcc mingw-w64-x86_64-raylib make
-make
+mkdir -p vendor && tar xzf raylib-5.5_linux_amd64.tar.gz -C vendor/
+make RAYLIB_PATH=vendor/raylib-5.5_linux_amd64
 ```
 
 ### Browser (WebAssembly)
 
 ```bash
-make web RAYLIB_WEB=vendor/raylib-web    # richiede emscripten attivo
+make raylib-web      # compila raylib per il browser dal submodule
+make web             # richiede emsdk attivo
 ```
 
 ### Asset opzionali
@@ -66,9 +86,17 @@ make web RAYLIB_WEB=vendor/raylib-web    # richiede emscripten attivo
 ./tools/fetch_assets.sh heightmap    # genera anche una heightmap di prova
 ```
 
-Se esiste `assets/heightmap.png`, il gioco lo usa al posto del terreno
-procedurale — è il modo per innestare terreni prodotti con QGIS/GDAL, Blender o
-GIMP (vedi `docs/02-generazione-mondo.md`).
+Gli asset riconosciuti in automatico, senza toccare il codice — se mancano, il
+gioco usa la versione procedurale:
+
+| File | Effetto |
+|---|---|
+| `assets/heightmap.png` | terreno esterno al posto del rumore (QGIS/GDAL, Blender, GIMP — vedi `docs/02-generazione-mondo.md`) |
+| `assets/textures/grass.png` | texture del terreno al posto della grana procedurale |
+| `assets/models/tree.glb`, `pine.glb`, `rock.glb`, `house.glb` | modelli al posto delle primitive |
+
+Font e audio richiedono invece qualche riga di codice: vedi
+`docs/03-asset-pubblici.md`.
 
 ![Mondo da heightmap esterna](docs/img/03-heightmap-esterna.png)
 
@@ -138,6 +166,8 @@ src/
   main.c      finestra e loop principale
 docs/         approfondimenti didattici
 tools/        script per generare o scaricare asset opzionali
+vendor/
+  raylib/     submodule: sorgenti di raylib 5.5 (l'unica dipendenza)
 ```
 
 **Dipendenze**: solo raylib e la libreria standard C (`math.h`, `stdio.h`,

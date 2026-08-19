@@ -171,6 +171,59 @@ static Texture2D MakeGrainTexture(unsigned int seed, int size)
     return t;
 }
 
+/* Texture del terreno: se esiste assets/textures/grass.png la usa, altrimenti
+ * ricade sulla grana procedurale. Nota: i colori dei vertici (bioma + luce)
+ * MOLTIPLICANO questa texture, quindi una texture satura scurisce il terreno. */
+static Texture2D LoadTerrainTexture(unsigned int seed)
+{
+    const char *file = "assets/textures/grass.png";
+    if (FileExists(file)) {
+        Texture2D t = LoadTexture(file);
+        if (t.id != 0) {
+            GenTextureMipmaps(&t);
+            SetTextureFilter(t, TEXTURE_FILTER_TRILINEAR);
+            SetTextureWrap(t, TEXTURE_WRAP_REPEAT);
+            TraceLog(LOG_INFO, "WORLD: texture del terreno esterna (%s)", file);
+            return t;
+        }
+        TraceLog(LOG_WARNING, "WORLD: %s illeggibile, uso la grana procedurale", file);
+    }
+    return MakeGrainTexture(seed + 55u, 256);
+}
+
+/* ------------------------------------------------------------------------ */
+/*  MODELLI ESTERNI OPZIONALI                                               */
+/* ------------------------------------------------------------------------ */
+
+/* Un modello per tipo di prop. 'scale' converte l'unita' del file (Kenney e
+ * Quaternius esportano circa 1 unita' = 1 m, origine alla base) nelle
+ * dimensioni che DrawProp() da' alle primitive; va ritoccata a occhio secondo
+ * il pacchetto scaricato. I tipi non elencati restano procedurali. */
+static const struct { const char *file; float scale; } gExtProp[PROP_COUNT] = {
+    [PROP_TREE]  = { "assets/models/tree.glb",  2.0f },
+    [PROP_PINE]  = { "assets/models/pine.glb",  2.0f },
+    [PROP_ROCK]  = { "assets/models/rock.glb",  1.2f },
+    [PROP_HOUSE] = { "assets/models/house.glb", 3.0f },
+};
+
+static void LoadExtProps(World *w)
+{
+    for (int t = 0; t < PROP_COUNT; t++) {
+        if (gExtProp[t].file == NULL || !FileExists(gExtProp[t].file)) continue;
+
+        Model m = LoadModel(gExtProp[t].file);
+        if (m.meshCount == 0) {          /* formato non supportato o file rotto */
+            TraceLog(LOG_WARNING, "WORLD: %s non caricato", gExtProp[t].file);
+            UnloadModel(m);
+            continue;
+        }
+        w->extProp[t]    = m;
+        w->hasExtProp[t] = true;
+        TraceLog(LOG_INFO, "WORLD: modello esterno %s (%d mesh)",
+                 gExtProp[t].file, m.meshCount);
+    }
+}
+
 /* Mappa del mondo, generata una sola volta campionando WorldHeight(). */
 static Texture2D MakeWorldMap(const World *w, int size)
 {
@@ -410,8 +463,8 @@ static void BuildChunkMesh(World *w, Chunk *c)
             m.normals[idx * 3 + 1] = nrm.y;
             m.normals[idx * 3 + 2] = nrm.z;
 
-            m.texcoords[idx * 2 + 0] = wx / 8.0f;
-            m.texcoords[idx * 2 + 1] = wz / 8.0f;
+            m.texcoords[idx * 2 + 0] = wx / TERRAIN_UV_TILE;
+            m.texcoords[idx * 2 + 1] = wz / TERRAIN_UV_TILE;
 
             /* Colore del bioma + illuminazione diffusa pre-calcolata. */
             Color bc = WorldBiomeColor(WorldBiomeAt(w, wx, wz));
@@ -471,7 +524,7 @@ void WorldInit(World *w, unsigned int seed)
 
     PlaceTowns(w);
 
-    w->terrainTex = MakeGrainTexture(seed + 55u, 256);
+    w->terrainTex = LoadTerrainTexture(seed);
     w->terrainMat = LoadMaterialDefault();
     w->terrainMat.maps[MATERIAL_MAP_DIFFUSE].texture = w->terrainTex;
 
@@ -482,6 +535,9 @@ void WorldInit(World *w, unsigned int seed)
     w->mCone   = LoadModelFromMesh(GenMeshCone(1.0f, 1.0f, 4));
     w->mSphere = LoadModelFromMesh(GenMeshSphere(1.0f, 8, 10));
     w->mCube   = LoadModelFromMesh(GenMeshCube(1.0f, 1.0f, 1.0f));
+
+    /* Modelli scaricati a mano in assets/models/ (opzionali). */
+    LoadExtProps(w);
 
     for (int i = 0; i < MAX_LOADED_CHUNKS; i++) w->chunks[i].active = false;
 }
@@ -497,6 +553,8 @@ void WorldUnload(World *w)
     UnloadModel(w->mCone);
     UnloadModel(w->mSphere);
     UnloadModel(w->mCube);
+    for (int t = 0; t < PROP_COUNT; t++)
+        if (w->hasExtProp[t]) { UnloadModel(w->extProp[t]); w->hasExtProp[t] = false; }
     if (w->useHeightmap) UnloadImage(w->heightmap);
     /* Nota: terrainMat deriva da LoadMaterialDefault() e condivide lo shader
      * di default: non va scaricato con UnloadMaterial(). */
@@ -592,6 +650,17 @@ static void DrawProp(World *w, const Prop *p, Color tint)
     const Vector3 Y = { 0.0f, 1.0f, 0.0f };
     float s = p->scale;
     Vector3 pos = p->pos;
+
+    /* Modello esterno al posto delle primitive, se e' stato scaricato.
+     * Shade(WHITE, tint) lascia passare i colori del modello e ci applica solo
+     * il ciclo giorno/notte: un tint diverso da WHITE li scurirebbe due volte. */
+    if (w->hasExtProp[p->type]) {
+        if (p->taken) return;
+        float k = s * gExtProp[p->type].scale;
+        DrawModelEx(w->extProp[p->type], pos, Y, p->rot, (Vector3){ k, k, k },
+                    Shade(WHITE, tint));
+        return;
+    }
 
     switch (p->type) {
         case PROP_TREE: {

@@ -11,6 +11,19 @@ dipendere da un CDN, e che non ha problemi di licenza da nessuna parte.
 Gli asset esterni sono quindi un **innesto opzionale**. Questo documento spiega
 dove prenderli restando nel pubblico dominio e dove esattamente agganciarli.
 
+Stato degli innesti nel codice:
+
+| Asset | Come si attiva |
+|---|---|
+| `assets/heightmap.png` | rilevato in automatico (`WorldInit`) |
+| `assets/textures/grass.png` | rilevato in automatico (`LoadTerrainTexture`) |
+| `assets/models/*.glb` | rilevati in automatico (`LoadExtProps`) |
+| `assets/fonts/ui.ttf` | **richiede modifiche a `ui.c`** (sezione 3) |
+| `assets/audio/*` | **richiede modifiche a `main.c`** (sezione 4) |
+
+I primi tre bastano copiare al posto giusto: se il file manca, il gioco usa la
+versione procedurale e non cambia niente.
+
 ---
 
 ## Fonti CC0 affidabili
@@ -61,56 +74,53 @@ assets/
 
 ### 1. Texture del terreno (il più semplice, e quello che si vede di più)
 
-In `world.c`, `WorldInit()`:
-
-```c
-w->terrainTex = MakeGrainTexture(seed + 55u, 256);
-```
-
-Sostituire con:
-
-```c
-if (FileExists("assets/textures/grass.png")) {
-    w->terrainTex = LoadTexture("assets/textures/grass.png");
-    GenTextureMipmaps(&w->terrainTex);
-    SetTextureFilter(w->terrainTex, TEXTURE_FILTER_TRILINEAR);
-    SetTextureWrap(w->terrainTex, TEXTURE_WRAP_REPEAT);
-} else {
-    w->terrainTex = MakeGrainTexture(seed + 55u, 256);
-}
-```
+Basta copiare una texture tileable in `assets/textures/grass.png`: viene caricata
+da `LoadTerrainTexture()` in `world.c`, con mipmap, filtro trilineare e wrap
+ripetuto. Se il file non c'è, si usa `MakeGrainTexture()` come prima.
 
 Nota: i colori dei vertici (bioma + luce pre-calcolata) **moltiplicano** la
-texture. Se la texture è già molto colorata il risultato diventa cupo: in quel
-caso conviene schiarire i colori di bioma in `WorldBiomeColor()` oppure usare
-texture desaturate. Un passo avanti è il *texture splatting* (esercizio 8).
+texture. Se la texture è molto colorata il risultato diventa cupo: in quel caso
+conviene schiarire i colori di bioma in `WorldBiomeColor()` oppure usare texture
+desaturate. Una texture fotografica a fuoco richiede anche di abbassare
+`TERRAIN_UV_TILE` in `config.h` (metri coperti da una ripetizione, 8 di
+default). Un passo avanti è il *texture splatting* (esercizio 8): la texture
+attuale è unica per tutti i biomi.
 
 ### 2. Modelli al posto delle primitive
 
-In `world.h` la struttura `World` tiene `mCyl, mCone, mSphere, mCube`. Basta
-aggiungere modelli veri:
+Copiare i file in `assets/models/` con questi nomi:
+
+| File | Sostituisce |
+|---|---|
+| `tree.glb` | l'albero (cilindro + sfera) |
+| `pine.glb` | il pino (cilindro + cono) |
+| `rock.glb` | il sasso (sfera schiacciata) |
+| `house.glb` | la casa (cubo + tetto conico) |
+
+`LoadExtProps()` in `world.c` li cerca all'avvio; `DrawProp()` usa il modello
+quando c'è e ricade sulle primitive quando manca. raylib carica `.glb`/`.gltf`,
+`.obj`, `.iqm`, `.m3d` — **non** `.fbx`: in quel caso passare per Blender ed
+esportare glTF Binary. Con `.glb` le texture sono dentro al file e vengono
+applicate da sole; con `.obj` serve il `.mtl` a fianco.
+
+La tabella `gExtProp` in `world.c` tiene nome del file e fattore di scala:
 
 ```c
-Model mTree, mPine, mHouse;   /* in World */
-
-/* in WorldInit() */
-if (FileExists("assets/models/tree.glb")) w->mTree = LoadModel("assets/models/tree.glb");
+static const struct { const char *file; float scale; } gExtProp[PROP_COUNT] = {
+    [PROP_TREE]  = { "assets/models/tree.glb",  2.0f },
+    ...
+};
 ```
 
-e in `DrawProp()` sostituire il caso `PROP_TREE`:
+La scala converte l'unità del modello nelle dimensioni usate dalle primitive
+(un albero procedurale è alto ~4.6 m) e **va ritoccata a occhio** secondo il
+pacchetto scaricato: Kenney e Quaternius esportano a circa 1 unità = 1 m con
+l'origine alla base, che è l'assunzione del codice. Per aggiungere altri tipi
+(cespuglio, torre, cripta) basta una riga nella tabella.
 
-```c
-case PROP_TREE:
-    DrawModelEx(w->mTree, pos, (Vector3){0,1,0}, p->rot,
-                (Vector3){ s, s, s }, Shade(WHITE, tint));
-    break;
-```
-
-raylib carica `.glb`/`.gltf`, `.obj`, `.iqm`, `.m3d`. Per i modelli **animati**
-servono `LoadModelAnimations()` e `UpdateModelAnimation()` — è il salto di
-qualità più visibile per gli NPC (esercizio 10).
-
-Ricordarsi di scaricare i modelli in `WorldUnload()` con `UnloadModel()`.
+Per i modelli **animati** servono `LoadModelAnimations()` e
+`UpdateModelAnimation()` — è il salto di qualità più visibile per gli NPC
+(esercizio 10).
 
 ### 3. Font dell'interfaccia
 

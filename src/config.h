@@ -24,6 +24,11 @@
 #define CHUNK_SIZE    64.0f
 #define VERT_STEP     (CHUNK_SIZE / (float)CHUNK_QUADS)
 
+/* Metri di terreno coperti da una ripetizione della texture del terreno:
+ * abbassarlo se si innesta una texture fotografica (assets/textures/grass.png)
+ * e il risultato appare sfocato. */
+#define TERRAIN_UV_TILE 8.0f
+
 #define WORLD_CHUNKS  64                                   /* 64x64 chunk    */
 #define WORLD_SIZE    (WORLD_CHUNKS * CHUNK_SIZE)          /* 4096 x 4096 m  */
 

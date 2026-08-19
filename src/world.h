@@ -20,7 +20,7 @@ typedef enum {
 
 typedef enum {
     PROP_TREE, PROP_PINE, PROP_ROCK, PROP_BUSH,
-    PROP_HERB, PROP_HOUSE, PROP_TOWER, PROP_CRYPT
+    PROP_HERB, PROP_HOUSE, PROP_TOWER, PROP_CRYPT, PROP_COUNT
 } PropType;
 
 /* Un oggetto sparso sul terreno (albero, sasso, casa...). */
@@ -68,6 +68,12 @@ typedef struct {
     Texture2D terrainTex;
     Texture2D mapTex;              /* minimappa/mappa del mondo        */
     Model  mCyl, mCone, mSphere, mCube;   /* primitive riutilizzabili  */
+
+    /* Modelli esterni opzionali (file .glb in assets/models/), indicizzati
+     * per tipo di prop: se presenti sostituiscono le primitive.
+     * Vedi docs/03-asset-pubblici.md. */
+    Model  extProp[PROP_COUNT];
+    bool   hasExtProp[PROP_COUNT];
 } World;
 
 void    WorldInit(World *w, unsigned int seed);

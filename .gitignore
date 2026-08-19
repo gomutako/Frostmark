@@ -6,7 +6,8 @@ frostmark.js
 frostmark.wasm
 frostmark.data
 *.sav
-vendor/
+vendor/*
+!vendor/raylib
 assets/textures/
 assets/models/
 assets/fonts/
