@@ -446,6 +446,12 @@ void PlayerUpdate(Player *p, World *w, float dt, bool controlsEnabled)
 
     float floorY = fmaxf(ground, p->inWater ? SEA_LEVEL - 1.2f : ground);
 
+    /* Dentro un edificio alto si cammina sui solai e sulle scale, non sul
+     * terreno che sta sotto. Il margine e' quello di un gradino: piu' in alto
+     * di cosi' non ci si arrampica. */
+    float support = WorldSupportHeight(w, p->pos, STEP_UP_REACH);
+    if (support > floorY) floorY = support;
+
     /* Aggancio al terreno in discesa. Senza, a ogni passo il suolo scende
      * sotto i piedi, il giocatore resta in aria per un fotogramma, la gravita'
      * lo riprende e atterra: un sobbalzo ritmico di pochi centimetri, e per

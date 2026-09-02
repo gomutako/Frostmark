@@ -68,6 +68,14 @@ falso quasi sempre, quindi niente salto e niente parata. Ci si incolla solo per
 il dislivello che un passo può giustificare (`STEP_DOWN_SLOPE` in `config.h`):
 un salto nel vuoto resta una caduta, con il suo danno.
 
+Il terreno non è più l'unica superficie calpestabile: negli edifici alti
+`WorldSupportHeight()` restituisce il solaio del primo piano e la quota della
+rampa delle scale, e `PlayerUpdate()` prende la più alta che stia sotto ai piedi
+entro `STEP_UP_REACH` — un gradino. Più in alto di così non ci si arrampica,
+quindi stando al piano terra il solaio di sopra non risucchia in alto, e
+salendo la rampa ci si alza davvero. Misurato salendo: +1,37 m a metà rampa,
++2,60 in cima, che è l'altezza esatta di un piano.
+
 Il giocatore cammina sulla **superficie che vede**: `WorldIoHeight()` legge la
 quota sui due triangoli del quadrato, con lo stesso taglio che usa
 `BuildChunkMesh()`, non su una superficie bilineare. Le due differiscono di

@@ -63,6 +63,8 @@
 /* Pendenza massima a cui il giocatore resta incollato scendendo: oltre, e'
  * una caduta. Il valore e' un rapporto altezza/distanza, non un angolo. */
 #define STEP_DOWN_SLOPE 2.0f
+/* Quanto sopra i piedi puo' stare una superficie per salirci: un gradino. */
+#define STEP_UP_REACH   0.45f
 
 /* --- Camera -------------------------------------------------------------
  * In terza persona la camera orbita dietro la testa. Sotto CAM_DIST_MIN si

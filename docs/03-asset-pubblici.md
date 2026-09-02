@@ -190,8 +190,21 @@ li compone in `DrawHouse()` e `DrawTower()`:
 
 | Edificio | Ricetta | Pezzi disegnati |
 |---|---|---|
-| casa | 3×2 celle, muri sul perimetro, porta al centro della facciata, finestre altrove, tetto a due falde | 19 |
+| casa bassa | 3×2 celle, muri sul perimetro, porta al centro della facciata, finestre altrove, tetto a due falde | 19 |
+| casa alta | 4×3 celle su **due piani**, con solaio, tromba delle scale e una rampa per salire | 45 |
 | torre | base + due piani con feritoie + coronamento + tetto | 5 |
+
+Quale delle due esce da una data casa lo decide `HouseShapeOf()` in `world.c`, a
+partire dalla **posizione**: una su tre circa è alta. È una funzione, non un
+dato — il mondo cotto non cambia, e disegno, collisione e superfici calpestabili
+la ricavano allo stesso modo. Se divergessero si camminerebbe su un piano che
+non c'è, ed è successo davvero: la prima versione dava il vano della porta per
+centrato sulla facciata, ma con pianta **pari** la porta sta a mezza cella dal
+centro, e il giocatore restava fuori a sbattere contro il muro accanto.
+
+Il pezzo della scala sale esattamente **una unità in una cella**, cioè un piano:
+misurato leggendo i vertici, l'altezza cresce lungo +X con correlazione 0,97.
+Un pezzo, un piano.
 
 Il muro del kit sta sul bordo **+X** della sua cella: per portarlo sugli altri
 lati lo si ruota di 90 gradi alla volta (90 = lato -Z, 180 = -X, 270 = +Z).

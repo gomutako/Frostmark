@@ -167,6 +167,7 @@ static const char *BUILD_FILES[BUILD_PART_COUNT] = {
     [BUILD_WINDOW]      = "assets/models/town/wall-window-small.glb",
     [BUILD_ROOF]        = "assets/models/town/roof-gable.glb",
     [BUILD_FLOOR]       = "assets/models/town/planks.glb",
+    [BUILD_STAIRS]      = "assets/models/town/stairs-wide-wood.glb",
     [BUILD_TOWER_BASE]  = "assets/models/castle/tower-square-base.glb",
     [BUILD_TOWER_MID]   = "assets/models/castle/tower-square-mid-windows.glb",
     [BUILD_TOWER_TOP]   = "assets/models/castle/tower-square-top.glb",
@@ -566,43 +567,80 @@ static void PlacePart(World *w, BuildPart part, Vector3 origin, float rotDeg,
  * I pezzi del kit stanno sul bordo +X della loro cella: per portarli sugli
  * altri lati si ruota di 90 gradi alla volta. La porta e' un arco aperto, non
  * un battente: ci si passa davvero, e da fuori si vede che si puo' entrare. */
-static void DrawHouse(World *w, Vector3 pos, float rotDeg, float s, Color tint)
+/* --- Forma di una casa ---------------------------------------------------
+ * Due tagli, decisi dalla posizione: la maggior parte sono case basse 3x2, una
+ * su tre e' un edificio 4x3 con il primo piano e una scala per salirci.
+ *
+ * La forma e' una FUNZIONE della posizione, non un dato: il mondo cotto resta
+ * quello di prima, e disegno e collisione la calcolano allo stesso modo. Se
+ * divergessero si camminerebbe su un piano che non c'e'. */
+typedef struct { int nx, nz, floors, stairX, stairZ; } HouseShape;
+
+static HouseShape HouseShapeOf(const Prop *p)
 {
-    const int NX = 3, NZ = 2;
+    HouseShape s = { 3, 2, 1, 0, 0 };
+    if (FmHash01((unsigned int)(p->pos.x * 4.0f), (int)(p->pos.z * 4.0f), 77) > 0.62f) {
+        s.nx = 4; s.nz = 3; s.floors = 2;
+        s.stairX = s.nx - 2;    /* la scala sale lungo +X dentro la sua cella: */
+        s.stairZ = s.nz - 1;    /* in cima si arriva sull'ultima colonna       */
+    }
+    return s;
+}
+
+/* Semipianta in celle. I pannelli stanno a 0,45 celle dal centro della loro
+ * cella, quindi il muro cade a meta' pianta meno 0,05. */
+static float HouseHalfX(const HouseShape *s) { return s->nx * 0.5f - 0.05f; }
+static float HouseHalfZ(const HouseShape *s) { return s->nz * 0.5f - 0.05f; }
+
+static void DrawHouse(World *w, const Prop *p, Vector3 pos, float rotDeg,
+                     float s, Color tint)
+{
+    HouseShape sh = HouseShapeOf(p);
     float cell = BUILD_CELL * s;
     Vector3 sc = { cell, cell, cell };
 
-    for (int ix = 0; ix < NX; ix++) {
-        float lx = (float)ix - (NX - 1) / 2.0f;
-        for (int iz = 0; iz < NZ; iz++) {
-            float lz = (float)iz - (NZ - 1) / 2.0f;
-            PlacePart(w, BUILD_FLOOR, pos, rotDeg, lx, 0.0f, lz,   0.0f, cell, sc, tint);
-            if (ix == NX - 1)
-                PlacePart(w, BUILD_WALL, pos, rotDeg, lx, 0.0f, lz,   0.0f, cell, sc, tint);
-            if (ix == 0)
-                PlacePart(w, BUILD_WALL, pos, rotDeg, lx, 0.0f, lz, 180.0f, cell, sc, tint);
-            if (iz == 0)
-                PlacePart(w, (ix == NX / 2) ? BUILD_DOOR : BUILD_WINDOW,
-                          pos, rotDeg, lx, 0.0f, lz,  90.0f, cell, sc, tint);
-            if (iz == NZ - 1)
-                PlacePart(w, BUILD_WINDOW, pos, rotDeg, lx, 0.0f, lz, 270.0f, cell, sc, tint);
+    for (int f = 0; f < sh.floors; f++) {
+        float y = (float)f;                    /* in celle: un piano e' alto una */
+
+        for (int ix = 0; ix < sh.nx; ix++) {
+            float lx = (float)ix - (sh.nx - 1) / 2.0f;
+            for (int iz = 0; iz < sh.nz; iz++) {
+                float lz = (float)iz - (sh.nz - 1) / 2.0f;
+                bool isStair = (sh.floors > 1 && ix == sh.stairX && iz == sh.stairZ);
+
+                /* Il solaio del piano terra e' il pavimento; quello sopra e' il
+                 * piano su cui si cammina, e sopra la scala manca: e' la
+                 * tromba da cui si sale. */
+                if (!(f > 0 && isStair))
+                    PlacePart(w, BUILD_FLOOR, pos, rotDeg, lx, y, lz, 0.0f, cell, sc, tint);
+
+                if (f == 0 && isStair)
+                    PlacePart(w, BUILD_STAIRS, pos, rotDeg, lx, y, lz, 0.0f, cell, sc, tint);
+
+                if (ix == sh.nx - 1)
+                    PlacePart(w, BUILD_WALL, pos, rotDeg, lx, y, lz,   0.0f, cell, sc, tint);
+                if (ix == 0)
+                    PlacePart(w, BUILD_WALL, pos, rotDeg, lx, y, lz, 180.0f, cell, sc, tint);
+                if (iz == 0)
+                    PlacePart(w, (f == 0 && ix == sh.nx / 2) ? BUILD_DOOR : BUILD_WINDOW,
+                              pos, rotDeg, lx, y, lz,  90.0f, cell, sc, tint);
+                if (iz == sh.nz - 1)
+                    PlacePart(w, BUILD_WINDOW, pos, rotDeg, lx, y, lz, 270.0f, cell, sc, tint);
+            }
         }
     }
 
     /* Il pezzo del tetto e' un segmento a due falde largo una cella: due
      * affiancati farebbero una valle in mezzo, quindi se ne allunga uno solo
-     * sulla profondita'. */
-    /* Allungandolo in profondita' la falda si appiattisce: si alza il colmo
-     * per riportare la pendenza a quella del pezzo originale. */
-    Vector3 roofSc = { cell, cell * 1.6f, cell * NZ };
-
-    /* La falda e' un guscio sottile: da sotto se ne vedrebbe attraverso,
-     * perche' le facce interne vengono scartate. Dentro casa serve un
-     * soffitto, quindi per questi tre pezzi lo scarto si spegne. */
+     * sulla profondita' e si alza il colmo per non appiattire la pendenza.
+     * La falda e' un guscio sottile: da sotto se ne vedrebbe attraverso,
+     * quindi per questi pezzi lo scarto delle facce posteriori si spegne -
+     * dentro casa serve un soffitto. */
+    Vector3 roofSc = { cell, cell * 1.6f, cell * sh.nz };
     rlDisableBackfaceCulling();
-    for (int ix = 0; ix < NX; ix++)
-        PlacePart(w, BUILD_ROOF, pos, rotDeg,
-                  (float)ix - (NX - 1) / 2.0f, 1.0f, 0.0f, 0.0f, cell, roofSc, tint);
+    for (int ix = 0; ix < sh.nx; ix++)
+        PlacePart(w, BUILD_ROOF, pos, rotDeg, (float)ix - (sh.nx - 1) / 2.0f,
+                  (float)sh.floors, 0.0f, 0.0f, cell, roofSc, tint);
     rlEnableBackfaceCulling();
 }
 
@@ -672,7 +710,7 @@ static void DrawProp(World *w, const Prop *p, Color tint, bool lod)
                         (Color){ 230, 240, 130, 255 });
             break;
         case PROP_HOUSE: {
-            if (w->hasBuildParts) { DrawHouse(w, pos, p->rot, s, Shade(WHITE, tint)); break; }
+            if (w->hasBuildParts) { DrawHouse(w, p, pos, p->rot, s, Shade(WHITE, tint)); break; }
             Vector3 body = { pos.x, pos.y + 1.7f, pos.z };
             DrawModelEx(w->mCube, body, Y, p->rot, (Vector3){7.0f, 3.4f, 5.5f},
                         Shade((Color){ 176, 156, 126, 255 }, tint));
@@ -819,8 +857,9 @@ static void PushOutRect(float *lx, float *lz, float radius,
 
 static void ResolveHouse(const Prop *p, Vector3 *pos, float radius)
 {
+    HouseShape sh = HouseShapeOf(p);
     float cell = BUILD_CELL * p->scale;
-    float hx = HOUSE_HX * cell, hz = HOUSE_HZ * cell;
+    float hx = HouseHalfX(&sh) * cell, hz = HouseHalfZ(&sh) * cell;
     float t  = HOUSE_WALL_T * cell, dh = HOUSE_DOOR_H * cell;
 
     float lx, lz;
@@ -834,10 +873,21 @@ static void ResolveHouse(const Prop *p, Vector3 *pos, float radius)
     PushOutRect(&lx, &lz, radius,  hx, 0.0f, t, hz + t);   /* muro est   */
     PushOutRect(&lx, &lz, radius, -hx, 0.0f, t, hz + t);   /* muro ovest */
     PushOutRect(&lx, &lz, radius, 0.0f,  hz, hx, t);       /* muro nord  */
-    /* Facciata a sud, spezzata in due dal vano della porta. */
-    float side = (hx - dh) * 0.5f;
-    PushOutRect(&lx, &lz, radius,  dh + side, -hz, side, t);
-    PushOutRect(&lx, &lz, radius, -dh - side, -hz, side, t);
+
+    /* La porta e' solo al piano terra: al primo piano la facciata e' chiusa,
+     * altrimenti si uscirebbe nel vuoto dal buco della porta di sotto. */
+    if (pos->y > p->pos.y + cell * 0.6f) {
+        PushOutRect(&lx, &lz, radius, 0.0f, -hz, hx, t);
+    } else {
+        /* Il vano sta dove DrawHouse mette l'arco: al centro della cella
+         * nx/2, che con pianta pari non e' il centro della facciata. Il primo
+         * tentativo lo dava per centrato e il giocatore restava fuori,
+         * a sbattere contro il muro accanto alla porta. */
+        float doorCx = ((float)(sh.nx / 2) - (sh.nx - 1) / 2.0f) * cell;
+        float left  = doorCx - dh, right = doorCx + dh;
+        PushOutRect(&lx, &lz, radius, (right + hx) * 0.5f, -hz, (hx - right) * 0.5f, t);
+        PushOutRect(&lx, &lz, radius, (left - hx) * 0.5f, -hz, (left + hx) * 0.5f, t);
+    }
 
     if (lx == lx0 && lz == lz0) return;
 
@@ -958,31 +1008,102 @@ float WorldCameraClip(const World *w, Vector3 eye, Vector3 dir, float maxDist)
 
             if (p->type != PROP_HOUSE || !w->hasBuildParts) continue;
 
+            HouseShape sh = HouseShapeOf(p);
             float cell = BUILD_CELL * p->scale;
             float t    = HOUSE_WALL_T * cell;
             float m    = CAM_BUILD_MARGIN;
+            float hx   = HouseHalfX(&sh) * cell, hz = HouseHalfZ(&sh) * cell;
 
             float lx, lz;
             ToHouseLocal(p, eye.x, eye.z, &lx, &lz);
             Vector3 o = { lx, eye.y - p->pos.y, lz };
             Vector3 d = DirToHouseLocal(p, dir);
 
-            bool inside = fabsf(lx) < HOUSE_HX * cell - t &&
-                          fabsf(lz) < HOUSE_HZ * cell - t &&
-                          o.y > 0.0f && o.y < cell;
+            /* A quale piano si trova l'occhio: il vano in cui la camera deve
+             * restare e' quello, non tutto l'edificio. Senza questo conto, su
+             * un primo piano la camera finiva dentro il solaio. */
+            int storey = (int)floorf(o.y / cell);
+            if (storey < 0) storey = 0;
+            if (storey > sh.floors - 1) storey = sh.floors - 1;
+            float y0 = (float)storey * cell;
+
+            bool inside = fabsf(lx) < hx - t && fabsf(lz) < hz - t &&
+                          o.y > 0.0f && o.y < cell * (float)sh.floors;
 
             Vector3 bmin, bmax;
-            if (inside) {          /* resta nel vano: pareti, pavimento, soffitto */
-                bmin = (Vector3){ -(HOUSE_HX * cell - t) + m, 0.05f + m, -(HOUSE_HZ * cell - t) + m };
-                bmax = (Vector3){  (HOUSE_HX * cell - t) - m, cell - m,   (HOUSE_HZ * cell - t) - m };
+            if (inside) {          /* resta nel vano del piano: pareti e solai */
+                bmin = (Vector3){ -(hx - t) + m, y0 + 0.05f + m, -(hz - t) + m };
+                bmax = (Vector3){  (hx - t) - m, y0 + cell - m,   (hz - t) - m };
             } else {               /* non entrare nell'ingombro, tetto compreso */
-                bmin = (Vector3){ -(HOUSE_HX * cell + t) - m, 0.0f, -(HOUSE_HZ * cell + t) - m };
-                bmax = (Vector3){  (HOUSE_HX * cell + t) + m, cell * 1.95f + m,
-                                   (HOUSE_HZ * cell + t) + m };
+                bmin = (Vector3){ -(hx + t) - m, 0.0f, -(hz + t) - m };
+                bmax = (Vector3){  (hx + t) + m, cell * ((float)sh.floors + 0.95f) + m,
+                                   (hz + t) + m };
             }
 
             if (RayBox(o, d, bmin, bmax, !inside, best, &hitT) && hitT < best)
                 best = hitT > 0.0f ? hitT : 0.0f;
+        }
+    }
+    return best;
+}
+
+/* --- Su cosa si posano i piedi -------------------------------------------
+ * Il terreno non e' piu' l'unica superficie: negli edifici alti c'e' il solaio
+ * del primo piano e la rampa della scala. Qui si cerca la piu' alta che stia
+ * sotto ai piedi, con un margine per salire un gradino: cosi' salendo la scala
+ * ci si alza, e stando al piano terra il solaio di sopra non "risucchia" in
+ * alto perche' e' troppo lontano.
+ *
+ * Le misure vengono dalla stessa HouseShape che disegna l'edificio: se il
+ * conto qui e il conto la' divergessero, si camminerebbe sul vuoto. */
+/* Quanti piani ha questa casa: serve al gioco per raccontarlo e alle prove. */
+int WorldHouseFloors(const Prop *p)
+{
+    HouseShape s = HouseShapeOf(p);
+    return s.floors;
+}
+
+float WorldSupportHeight(const World *w, Vector3 pos, float reach)
+{
+    if (!w->hasBuildParts) return -1e9f;
+
+    float best = -1e9f;
+    for (int i = 0; i < MAX_LOADED_CHUNKS; i++) {
+        const Chunk *c = &w->chunks[i];
+        if (!c->active) continue;
+        float cxm = (c->cx + 0.5f) * CHUNK_SIZE, czm = (c->cz + 0.5f) * CHUNK_SIZE;
+        if (fabsf(pos.x - cxm) > CHUNK_SIZE || fabsf(pos.z - czm) > CHUNK_SIZE) continue;
+
+        for (int k = 0; k < c->propCount; k++) {
+            const Prop *p = &c->props[k];
+            if (p->type != PROP_HOUSE) continue;
+
+            HouseShape sh = HouseShapeOf(p);
+            if (sh.floors < 2) continue;          /* le case basse non hanno solai */
+
+            float cell = BUILD_CELL * p->scale;
+            float lx, lz;
+            ToHouseLocal(p, pos.x, pos.z, &lx, &lz);
+            lx /= cell; lz /= cell;               /* da metri a celle */
+
+            if (fabsf(lx) > HouseHalfX(&sh) - HOUSE_WALL_T) continue;
+            if (fabsf(lz) > HouseHalfZ(&sh) - HOUSE_WALL_T) continue;
+
+            int ix = (int)floorf(lx + sh.nx * 0.5f);
+            int iz = (int)floorf(lz + sh.nz * 0.5f);
+
+            float surf;
+            if (ix == sh.stairX && iz == sh.stairZ) {
+                /* La rampa sale lungo +X dentro la sua cella: l'altezza e' la
+                 * frazione di cella percorsa. */
+                float edge = (float)sh.stairX - sh.nx * 0.5f;
+                float t = FmClamp(lx - edge, 0.0f, 1.0f);
+                surf = p->pos.y + t * cell;
+            } else {
+                surf = p->pos.y + cell;           /* solaio del primo piano */
+            }
+
+            if (surf <= pos.y + reach && surf > best) best = surf;
         }
     }
     return best;
@@ -1002,11 +1123,12 @@ bool WorldInsideBuilding(const World *w, Vector3 pos)
         for (int k = 0; k < c->propCount; k++) {
             const Prop *p = &c->props[k];
             if (p->type != PROP_HOUSE) continue;
+            HouseShape sh = HouseShapeOf(p);
             float cell = BUILD_CELL * p->scale;
             float lx, lz;
             ToHouseLocal(p, pos.x, pos.z, &lx, &lz);
-            if (fabsf(lx) < (HOUSE_HX - HOUSE_WALL_T) * cell &&
-                fabsf(lz) < (HOUSE_HZ - HOUSE_WALL_T) * cell) return true;
+            if (fabsf(lx) < (HouseHalfX(&sh) - HOUSE_WALL_T) * cell &&
+                fabsf(lz) < (HouseHalfZ(&sh) - HOUSE_WALL_T) * cell) return true;
         }
     }
     return false;

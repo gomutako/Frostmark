@@ -221,7 +221,8 @@ Nei menu: `↑ ↓` per scorrere, `Invio` per confermare, `ESC` per uscire.
   un mercante e un anziano; il terreno viene spianato automaticamente sotto
   l'abitato. Con i modelli scaricati (`./tools/fetch_assets.sh models`) le case
   sono composte dai pezzi del kit e **ci si entra dalla porta**: la collisione
-  è sui muri, non su un cerchio.
+  è sui muri, non su un cerchio. Una casa su tre è un edificio a **due piani**,
+  con una scala da salire.
 - **Sole e ombre**: una luce direzionale illumina terreno, edifici e
   personaggi, e due mappe di profondità - una stretta e nitida, una larga -
   proiettano le ombre attorno al giocatore.

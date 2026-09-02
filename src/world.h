@@ -93,6 +93,11 @@ void    WorldResolveCollision(World *w, Vector3 *pos, float radius);
 /* true se il punto e' dentro le mura di una casa: la camera in terza persona
  * si accorcia, altrimenti resterebbe fuori a inquadrare un muro. */
 bool    WorldInsideBuilding(const World *w, Vector3 pos);
+/* La superficie calpestabile piu' alta sotto 'pos', entro 'reach' sopra i
+ * piedi: solai e scale degli edifici alti. -1e9 se non ce n'e' nessuna. */
+float   WorldSupportHeight(const World *w, Vector3 pos, float reach);
+/* Quanti piani ha una casa: 1 o 2, deciso dalla sua posizione. */
+int     WorldHouseFloors(const Prop *p);
 /* Quanto puo' arretrare la camera da 'eye' lungo 'dir' senza che un edificio
  * finisca fra lei e il giocatore. */
 float   WorldCameraClip(const World *w, Vector3 eye, Vector3 dir, float maxDist);
