@@ -754,6 +754,10 @@ void WorldDrawShadowCasters(World *w, Vector3 center, float radius)
         if (!c->active) continue;
         for (int k = 0; k < c->propCount; k++) {
             Prop *p = &c->props[k];
+            /* Un ciuffo d'erba e un fiore non proiettano niente che si veda, e
+             * nel bosco sono la maggioranza dei prop: saltarli dimezza il
+             * passaggio senza togliere un'ombra che qualcuno noterebbe. */
+            if (p->type == PROP_HERB || p->type == PROP_BUSH) continue;
             float dx = p->pos.x - center.x, dz = p->pos.z - center.z;
             if (dx * dx + dz * dz > r2) continue;
             DrawProp(w, p, WHITE, false);

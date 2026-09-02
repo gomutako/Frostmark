@@ -16,8 +16,12 @@ uniform float sunAmount;     /* 1 a mezzogiorno, 0 di notte            */
 uniform int   depthOnly;     /* 1 durante il passaggio d'ombra         */
 uniform int   shadowOn;
 uniform int   shadowRes;
-uniform mat4  lightVP;
-uniform sampler2D shadowMap;
+uniform vec3  viewPos;
+uniform float splitDist;      /* oltre questa distanza si usa la mappa larga */
+uniform mat4  lightVP0;       /* mappa vicina, texel piccoli   */
+uniform mat4  lightVP1;       /* mappa lontana, texel grossi   */
+uniform sampler2D shadowMap0;
+uniform sampler2D shadowMap1;
 
 out vec4 finalColor;
 
@@ -29,28 +33,56 @@ out vec4 finalColor;
 const float AMBIENT = 0.45;
 const float SUN     = 0.85;
 
+/* Media 4x4 su mezzo texel di passo: sedici confronti invece di nove, e su
+ * mezzo texel invece che uno intero. Il bordo dell'ombra passa da chiaro a
+ * scuro in piu' gradini, quindi non si legge piu' come una scaletta. */
+float Pcf(sampler2D map, vec3 proj, float bias)
+{
+    float texel = 1.0 / float(shadowRes);
+    float sum = 0.0;
+    for (int x = -2; x <= 1; x++)
+        for (int y = -2; y <= 1; y++) {
+            vec2 off = (vec2(x, y) + 0.5) * 0.5 * texel;
+            float d = texture(map, proj.xy + off).r;
+            sum += (proj.z - bias > d) ? 0.0 : 1.0;
+        }
+    return sum / 16.0;
+}
+
 float ShadowFactor(vec3 n)
 {
     if (shadowOn == 0) return 1.0;
 
-    vec4 lp = lightVP * vec4(fragPosition, 1.0);
-    vec3 proj = lp.xyz / lp.w * 0.5 + 0.5;
-    if (proj.z > 1.0 || proj.x < 0.0 || proj.x > 1.0 || proj.y < 0.0 || proj.y > 1.0)
-        return 1.0;                       /* fuori dalla mappa: niente ombra */
-
     /* Lo scostamento cresce sulle superfici radenti, dove un solo texel della
      * mappa copre molto terreno: senza, comparirebbero strisce di ombra
-     * sulle facce illuminate. */
-    float bias = max(0.0025 * (1.0 - dot(n, lightDir)), 0.0006);
-    float texel = 1.0 / float(shadowRes);
+     * sulle facce illuminate. La mappa larga ha texel piu' grossi e ne chiede
+     * di piu'. */
+    float ndl = dot(n, lightDir);
+    float dist = length(fragPosition - viewPos);
 
-    float sum = 0.0;
-    for (int x = -1; x <= 1; x++)
-        for (int y = -1; y <= 1; y++) {
-            float d = texture(shadowMap, proj.xy + vec2(x, y) * texel).r;
-            sum += (proj.z - bias > d) ? 0.0 : 1.0;
+    if (dist < splitDist) {
+        vec4 lp = lightVP0 * vec4(fragPosition, 1.0);
+        vec3 proj = lp.xyz / lp.w * 0.5 + 0.5;
+        if (proj.z <= 1.0 && proj.x > 0.0 && proj.x < 1.0 && proj.y > 0.0 && proj.y < 1.0) {
+            float bias = max(0.0012 * (1.0 - ndl), 0.0003);
+            /* dissolvenza verso l'altra mappa: senza, il passaggio si vede
+               come una linea netta sul terreno */
+            float f = Pcf(shadowMap0, proj, bias);
+            float edge = smoothstep(splitDist * 0.82, splitDist, dist);
+            if (edge <= 0.0) return f;
+
+            vec4 lp1 = lightVP1 * vec4(fragPosition, 1.0);
+            vec3 p1 = lp1.xyz / lp1.w * 0.5 + 0.5;
+            if (p1.z > 1.0 || p1.x < 0.0 || p1.x > 1.0 || p1.y < 0.0 || p1.y > 1.0) return f;
+            return mix(f, Pcf(shadowMap1, p1, max(0.0035 * (1.0 - ndl), 0.0009)), edge);
         }
-    return sum / 9.0;                     /* tre per tre: bordi meno scalettati */
+    }
+
+    vec4 lp = lightVP1 * vec4(fragPosition, 1.0);
+    vec3 proj = lp.xyz / lp.w * 0.5 + 0.5;
+    if (proj.z > 1.0 || proj.x < 0.0 || proj.x > 1.0 || proj.y < 0.0 || proj.y > 1.0)
+        return 1.0;                       /* fuori da entrambe: niente ombra */
+    return Pcf(shadowMap1, proj, max(0.0035 * (1.0 - ndl), 0.0009));
 }
 
 void main()

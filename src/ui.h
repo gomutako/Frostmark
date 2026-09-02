@@ -12,6 +12,11 @@ extern int SHOP_STOCK[MAX_SHOP_STOCK];
 extern int SHOP_STOCK_COUNT;
 bool ShopLoad(const char *path);
 
+/* I font esterni si caricano una volta all'avvio: LoadFontEx vuole il contesto
+ * grafico, quindi non si puo' fare prima della finestra. */
+void UILoadFonts(void);
+void UIUnloadFonts(void);
+
 void UIDrawHUD(Game *g);
 void UIDrawCrosshair(Game *g);
 void UIDrawMenu(Game *g);

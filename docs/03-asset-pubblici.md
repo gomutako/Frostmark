@@ -20,7 +20,7 @@ Stato degli innesti nel codice:
 | `assets/models/*.glb` | rilevati in automatico (`LoadExtProps`), texture inclusa |
 | `assets/models/player.glb` | rilevato in automatico (`PlayerLoadModel`), con animazioni |
 | `assets/models/npc_*.glb` | rilevati in automatico (`EntitiesLoadModels`) |
-| `assets/fonts/ui.ttf` | **richiede modifiche a `ui.c`** (sezione 5) |
+| `assets/fonts/ui.ttf`, `title.ttf` | rilevati in automatico (`UILoadFonts`) |
 | `assets/audio/*` | **richiede modifiche a `main.c`** (sezione 6) |
 
 I primi quattro bastano copiare al posto giusto: se il file manca, il gioco usa
@@ -66,7 +66,7 @@ assets/
     tree.glb  pine.glb  rock.glb  bush.glb  herb.glb    dal Nature Kit di Kenney
     player.glb                                          personaggio animato, da KayKit
   fonts/
-    ui.ttf                                       da Google Fonts
+    ui.ttf  title.ttf                            da Google Fonts (OFL)
   audio/
     ambient_wind.ogg  hit.wav  step.wav          da Kenney / Freesound
 ```
@@ -457,20 +457,25 @@ se serve, è togliere le clip inutilizzate direttamente dal `.glb`.
 
 ### 5. Font dell'interfaccia
 
-`ui.c` usa `DrawText()`, che impiega il font di default (bitmap, un po' rigido).
-Con un TTF:
-
-```c
-/* una volta, all'avvio */
-Font uiFont = LoadFontEx("assets/fonts/ui.ttf", 32, NULL, 0);
-SetTextureFilter(uiFont.texture, TEXTURE_FILTER_BILINEAR);
-
-/* al posto di DrawText(...) */
-DrawTextEx(uiFont, testo, (Vector2){ x, y }, size, 1.0f, colore);
+```bash
+./tools/fetch_assets.sh font
 ```
 
-Conviene metterlo in `Game` e passarlo alle funzioni di `ui.c`, oppure tenerlo in
-una variabile `static` del modulo.
+Scarica due font **OFL** dal repository di Google Fonts, verificando la licenza
+prima di usarli: `ui.ttf` (Alegreya Sans) per il testo e `title.ttf` (Cinzel)
+per i titoli. Se mancano si usa il font di raylib, che è una bitmap e su uno
+schermo grande si sgrana.
+
+Dentro `ui.c` le chiamate sono rimaste quelle di prima nella forma: `UiText()`
+ha la stessa firma di `DrawText()` e `UiTextWidth()` quella di `MeasureText()`.
+Cambia solo chi disegna — così il resto del file non si è dovuto riscrivere.
+
+Due dettagli che si vedono se si sbagliano:
+
+- i font si **caricano grandi** (64 px) e si rimpiccioliscono, con filtro
+  bilineare: il contrario dà bordi impastati;
+- il font da titolo scatta da solo oltre i 26 punti, invece di essere scelto a
+  mano in ogni chiamata.
 
 ### 6. Audio
 

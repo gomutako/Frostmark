@@ -91,9 +91,15 @@ vero somma ambiente e sole e legge l'ombra dalla mappa.
 
 Tre decisioni che si vedono:
 
-- **La mappa segue il giocatore** e copre 80 m a 2048 texel, cioè 3,9 cm per
-  texel. Le ombre ci sono dove si guarda, e il passaggio in più disegna solo ciò
-  che sta vicino: misurato, 1,24 ms nel bosco fitto e 1,62 ms al villaggio.
+- **Le mappe sono due**, entrambe 2048 texel: una stretta attorno al giocatore
+  (48 m di lato, 2,3 cm per texel) e una larga per il resto (120 m, 5,9 cm). Con
+  una sola bisognava scegliere fra ombre nitide e ombre lontane: a 3,9 cm per
+  texel, a tre metri dalla camera un texel copriva quasi sette pixel di schermo
+  e i blocchi si vedevano. Le due passate costano 3,3 ms.
+- **Il quadrato della mappa è spostato verso il sole**, non centrato sul
+  giocatore: le ombre cadono dalla parte opposta al sole, quindi chi può
+  oscurarti sta dalla parte del sole. Centrandolo sul giocatore, una torre a
+  venti metri restava fuori e la sua ombra spariva.
 - **La proiezione dev'essere quadrata quanto la mappa.** Accendendo il
   framebuffer a mano, `BeginMode3D()` prendeva l'aspetto dello *schermo*: la
   proiezione copriva 124 m in orizzontale contro 70 in verticale, schiacciati

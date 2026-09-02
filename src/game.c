@@ -141,6 +141,7 @@ bool GameNewWorld(Game *g)
 bool GameInit(Game *g)
 {
     LightInit();      /* prima del mondo: i materiali nascono gia' illuminati */
+    UILoadFonts();
     memset(g, 0, sizeof(Game));
     g->state   = GS_MENU;
     g->running = true;
@@ -157,6 +158,7 @@ void GameShutdown(Game *g)
 {
     MouseLookShutdown();
     LightUnload();
+    UIUnloadFonts();
     WorldUnload(&g->world);
     PlayerUnload(&g->player);
     EntitiesUnloadModels();
@@ -552,13 +554,16 @@ static void DrawScene(Game *g)
     /* Passaggio d'ombra: la scena vista dal sole, ristretta a un raggio
      * attorno al giocatore. Disegna prima di tutto, fuori dalla vista. */
     if (LightReady() && sun.y > 0.02f) {
-        LightShadowBegin(g->player.pos);
-            WorldDrawShadowCasters(&g->world, g->player.pos, LightShadowRadius());
-            Camera3D near = g->cam;
-            near.position = g->player.pos;
-            EntitiesDraw(g->ents, &g->world, near, WHITE);
-            PlayerDraw(&g->player, WHITE);
-        LightShadowEnd();
+        for (int c = 0; c < LightCascades(); c++) {
+            Vector3 mid = LightShadowCenter(g->player.pos, c);
+            LightShadowBegin(g->player.pos, c);
+                WorldDrawShadowCasters(&g->world, mid, LightShadowRadius(c) * 1.5f);
+                Camera3D near = g->cam;
+                near.position = g->player.pos;
+                EntitiesDraw(g->ents, &g->world, near, WHITE);
+                PlayerDraw(&g->player, WHITE);
+            LightShadowEnd();
+        }
     }
     LightFrame(g->cam);
 

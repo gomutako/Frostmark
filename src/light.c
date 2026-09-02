@@ -4,24 +4,33 @@
 #include "config.h"
 #include <stddef.h>
 
-/* La mappa e' quadrata e segue il giocatore. Piu' e' larga, piu' ombre si
- * vedono ma piu' grossolane: a 2048 texel su 80 metri un texel copre 3,9 cm.
- * Il quadrato conta: la mappa e' quadrata, quindi anche la proiezione deve
- * esserlo - vedi LightShadowBegin. */
-#define SHADOW_RES     2048
-#define SHADOW_RADIUS  40.0f
-#define SHADOW_DEPTH   180.0f
+/* DUE mappe, non una. Con una sola bisogna scegliere fra ombre nitide e ombre
+ * lontane: a 2048 texel su 80 m un texel copre 3,9 cm, che a tre metri dalla
+ * camera sono quasi sette pixel di schermo - i blocchi si vedono. La mappa
+ * vicina spende gli stessi texel su un quadrato piccolo, dove l'occhio guarda;
+ * quella lontana copre il resto, dove un texel grosso non si distingue.
+ *
+ * Il quadrato conta: la mappa e' quadrata, quindi la proiezione deve esserlo -
+ * vedi LightShadowBegin. */
+#define SHADOW_RES        2048
+#define SHADOW_NEAR_R     24.0f      /* 2,3 cm per texel */
+#define SHADOW_FAR_R      60.0f      /* 5,9 cm per texel */
+#define SHADOW_SPLIT      20.0f      /* oltre questa distanza si usa la lontana */
+#define SHADOW_DEPTH      180.0f
+#define SHADOW_CASCADES   2
 
 static Shader   gShader;
 static bool     gReady;
-static RenderTexture2D gMap;
+static RenderTexture2D gMap[SHADOW_CASCADES];
 
 static int locLightDir, locSunAmount, locDepthOnly, locShadowOn, locShadowRes;
-static int locLightVP, locShadowMap, locViewPos;
+static int locLightVP[SHADOW_CASCADES], locShadowMap[SHADOW_CASCADES];
+static int locViewPos, locSplit;
 
 static Vector3 gSunDir  = { 0.0f, 1.0f, 0.0f };
 static float   gSunAmt  = 1.0f;
-static Matrix  gLightVP;
+static Matrix  gLightVP[SHADOW_CASCADES];
+static int     gPass;                    /* cascata in corso di disegno */
 
 /* Framebuffer di sola profondita': il colore non serve, e non allocarlo fa
  * risparmiare memoria e banda. Vedi l'esempio shaders_shadowmap di raylib. */
@@ -60,32 +69,40 @@ bool LightInit(void)
     locDepthOnly = GetShaderLocation(gShader, "depthOnly");
     locShadowOn  = GetShaderLocation(gShader, "shadowOn");
     locShadowRes = GetShaderLocation(gShader, "shadowRes");
-    locLightVP   = GetShaderLocation(gShader, "lightVP");
-    locShadowMap = GetShaderLocation(gShader, "shadowMap");
-    locViewPos   = GetShaderLocation(gShader, "viewPos");
-    (void)locViewPos;
+    locLightVP[0]   = GetShaderLocation(gShader, "lightVP0");
+    locLightVP[1]   = GetShaderLocation(gShader, "lightVP1");
+    locShadowMap[0] = GetShaderLocation(gShader, "shadowMap0");
+    locShadowMap[1] = GetShaderLocation(gShader, "shadowMap1");
+    locViewPos      = GetShaderLocation(gShader, "viewPos");
+    locSplit        = GetShaderLocation(gShader, "splitDist");
 
-    gMap = LoadDepthFbo(SHADOW_RES, SHADOW_RES);
+    for (int i = 0; i < SHADOW_CASCADES; i++) gMap[i] = LoadDepthFbo(SHADOW_RES, SHADOW_RES);
     gReady = true;
 
     int res = SHADOW_RES;
     SetShaderValue(gShader, locShadowRes, &res, SHADER_UNIFORM_INT);
-    TraceLog(LOG_INFO, "LUCE: sole e ombre attivi (mappa %dx%d su %.0f m)",
-             SHADOW_RES, SHADOW_RES, SHADOW_RADIUS * 2.0f);
+    TraceLog(LOG_INFO, "LUCE: sole e ombre attive, due mappe %dx%d: "
+                       "vicina %.0f m (%.1f cm/texel), lontana %.0f m (%.1f cm/texel)",
+             SHADOW_RES, SHADOW_RES, SHADOW_NEAR_R * 2.0f,
+             SHADOW_NEAR_R * 200.0f / SHADOW_RES, SHADOW_FAR_R * 2.0f,
+             SHADOW_FAR_R * 200.0f / SHADOW_RES);
     return true;
 }
 
 void LightUnload(void)
 {
     if (!gReady) return;
-    if (gMap.depth.id > 0) rlUnloadTexture(gMap.depth.id);
-    if (gMap.id > 0)       rlUnloadFramebuffer(gMap.id);
+    for (int i = 0; i < SHADOW_CASCADES; i++) {
+        if (gMap[i].depth.id > 0) rlUnloadTexture(gMap[i].depth.id);
+        if (gMap[i].id > 0)       rlUnloadFramebuffer(gMap[i].id);
+    }
     UnloadShader(gShader);
     gReady = false;
 }
 
-bool  LightReady(void)         { return gReady; }
-float LightShadowRadius(void)  { return SHADOW_RADIUS; }
+bool  LightReady(void)              { return gReady; }
+int   LightCascades(void)           { return SHADOW_CASCADES; }
+float LightShadowRadius(int cascade) { return cascade == 0 ? SHADOW_NEAR_R : SHADOW_FAR_R; }
 
 void LightApplyToMaterial(Material *m)
 {
@@ -106,9 +123,27 @@ void LightSetSun(Vector3 dirToSun, float amount)
 
 /* Proiezione ortogonale: il sole e' lontano, i suoi raggi sono paralleli. Il
  * volume segue il giocatore, quindi la mappa e' sempre spesa dove si guarda. */
-void LightShadowBegin(Vector3 center)
+/* Il quadrato non sta centrato sul giocatore ma spostato VERSO il sole. Le
+ * ombre cadono dalla parte opposta al sole, quindi cio' che puo' oscurare il
+ * giocatore sta dalla parte del sole: centrando sul giocatore, una torre a
+ * venti metri restava fuori dalla mappa e la sua ombra spariva - e' successo
+ * davvero, alla prima prova con due mappe. */
+Vector3 LightShadowCenter(Vector3 base, int cascade)
+{
+    Vector3 s = { gSunDir.x, 0.0f, gSunDir.z };
+    float len = sqrtf(s.x * s.x + s.z * s.z);
+    if (len > 0.001f) { s.x /= len; s.z /= len; }
+    float shift = LightShadowRadius(cascade) * 0.55f;
+    return (Vector3){ base.x + s.x * shift, base.y, base.z + s.z * shift };
+}
+
+void LightShadowBegin(Vector3 base, int cascade)
 {
     if (!gReady) return;
+    gPass = cascade;
+
+    float radius = LightShadowRadius(cascade);
+    Vector3 center = LightShadowCenter(base, cascade);
 
     Camera3D lightCam = { 0 };
     lightCam.position   = Vector3Add(center, Vector3Scale(gSunDir, SHADOW_DEPTH * 0.5f));
@@ -116,7 +151,7 @@ void LightShadowBegin(Vector3 center)
     lightCam.up         = (Vector3){ 0.0f, 1.0f, 0.0f };
     /* con il sole allo zenit 'up' e la direzione sarebbero paralleli */
     if (fabsf(gSunDir.y) > 0.99f) lightCam.up = (Vector3){ 0.0f, 0.0f, 1.0f };
-    lightCam.fovy       = SHADOW_RADIUS * 2.0f;
+    lightCam.fovy       = radius * 2.0f;
     lightCam.projection = CAMERA_ORTHOGRAPHIC;
 
     /* BeginTextureMode e non rlEnableFramebuffer a mano: e' l'unico modo per
@@ -124,11 +159,11 @@ void LightShadowBegin(Vector3 center)
      * framebuffer acceso a mano prendeva l'aspetto dello SCHERMO, e la
      * proiezione copriva 124 m in orizzontale contro 70 in verticale, tutti
      * schiacciati negli stessi 1024 texel: le ombre uscivano a scaletta. */
-    BeginTextureMode(gMap);
+    BeginTextureMode(gMap[cascade]);
     rlClearScreenBuffers();
 
     BeginMode3D(lightCam);
-    gLightVP = MatrixMultiply(rlGetMatrixModelview(), rlGetMatrixProjection());
+    gLightVP[cascade] = MatrixMultiply(rlGetMatrixModelview(), rlGetMatrixProjection());
 
     int one = 1;
     SetShaderValue(gShader, locDepthOnly, &one, SHADER_UNIFORM_INT);
@@ -152,15 +187,22 @@ void LightFrame(Camera3D cam)
 
     SetShaderValue(gShader, locLightDir,  &gSunDir, SHADER_UNIFORM_VEC3);
     SetShaderValue(gShader, locSunAmount, &gSunAmt, SHADER_UNIFORM_FLOAT);
-    SetShaderValueMatrix(gShader, locLightVP, gLightVP);
+    SetShaderValue(gShader, locViewPos,   &cam.position, SHADER_UNIFORM_VEC3);
+    float split = SHADOW_SPLIT;
+    SetShaderValue(gShader, locSplit, &split, SHADER_UNIFORM_FLOAT);
 
-    int on = (gMap.depth.id > 0) ? 1 : 0;
+    for (int i = 0; i < SHADOW_CASCADES; i++)
+        SetShaderValueMatrix(gShader, locLightVP[i], gLightVP[i]);
+
+    int on = (gMap[0].depth.id > 0) ? 1 : 0;
     SetShaderValue(gShader, locShadowOn, &on, SHADER_UNIFORM_INT);
 
-    /* La mappa vive in uno slot alto: gli slot bassi servono alle texture del
+    /* Le mappe vivono in slot alti: i bassi servono alle texture del
      * materiale, e raylib li riassegna a ogni DrawMesh. */
-    rlActiveTextureSlot(10);
-    rlEnableTexture(gMap.depth.id);
-    int slot = 10;
-    SetShaderValue(gShader, locShadowMap, &slot, SHADER_UNIFORM_INT);
+    for (int i = 0; i < SHADOW_CASCADES; i++) {
+        rlActiveTextureSlot(10 + i);
+        rlEnableTexture(gMap[i].depth.id);
+        int slot = 10 + i;
+        SetShaderValue(gShader, locShadowMap[i], &slot, SHADER_UNIFORM_INT);
+    }
 }

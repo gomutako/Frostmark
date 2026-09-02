@@ -16,6 +16,7 @@
 #        ./tools/fetch_assets.sh models     scarica i modelli CC0 di Kenney
 #        ./tools/fetch_assets.sh player     scarica il personaggio animato CC0
 #        ./tools/fetch_assets.sh npc        scarica i personaggi animati degli NPC
+#        ./tools/fetch_assets.sh font       scarica i font dell'interfaccia (OFL)
 # ============================================================================
 set -euo pipefail
 
@@ -149,6 +150,44 @@ PLAYER_MODEL_SCALE in src/config.h.
 
 Arma, scudo ed elmo sono elencati in assets/models/player.attach: e' un file di
 testo, per cambiare arma basta spostare un cancelletto.
+NOTE
+    exit 0
+fi
+
+# ---- font dell'interfaccia (SIL Open Font License) -------------------------
+#  Due tagli: uno per leggere - nomi, dialoghi, inventario - e uno per i titoli.
+#  Il font di raylib e' una bitmap a pixel: va bene per un prototipo, ma a 18
+#  punti su uno schermo grande si sgrana.
+if [ "${1:-}" = "font" ]; then
+    command -v curl >/dev/null 2>&1 || { echo "serve curl"; exit 1; }
+    mkdir -p "$ASSETS/fonts"
+    GF="https://raw.githubusercontent.com/google/fonts/main/ofl"
+
+    while IFS='|' read -r dir file dst nome; do
+        [ -n "$dir" ] || continue
+        echo "verifico la licenza di $nome..."
+        if ! curl -sSL "$GF/$dir/OFL.txt" | grep -qi "SIL Open Font License"; then
+            echo "ATTENZIONE: $nome non risulta OFL. Mi fermo."
+            exit 1
+        fi
+        curl -fsSL -o "$ASSETS/fonts/$dst" "$GF/$dir/$file" || {
+            echo "download fallito per $nome"; exit 1; }
+        echo "  $nome -> assets/fonts/$dst"
+
+        TODAY="$(date +%Y-%m-%d)"
+        grep -v "^| assets/fonts/$dst |" "$ASSETS/CREDITS.md" > "$ASSETS/CREDITS.tmp" 2>/dev/null || true
+        mv "$ASSETS/CREDITS.tmp" "$ASSETS/CREDITS.md"
+        echo "| assets/fonts/$dst | $nome | https://fonts.google.com/specimen/${nome// /+} | OFL | $TODAY |" \
+            >> "$ASSETS/CREDITS.md"
+    done <<'FONTS'
+alegreyasans|AlegreyaSans-Regular.ttf|ui.ttf|Alegreya Sans
+cinzel|Cinzel%5Bwght%5D.ttf|title.ttf|Cinzel
+FONTS
+
+    cat <<'NOTE'
+
+Fatto. Il gioco li rileva all'avvio: ui.ttf per il testo, title.ttf per i
+titoli. Se mancano si torna al font di raylib.
 NOTE
     exit 0
 fi

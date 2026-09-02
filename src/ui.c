@@ -16,6 +16,84 @@ static const Color UI_HP     = (Color){ 176,  58,  58, 255 };
 static const Color UI_STA    = (Color){  88, 150,  78, 255 };
 static const Color UI_MP     = (Color){  70, 118, 180, 255 };
 
+
+/* --- Testo ---------------------------------------------------------------
+ * raylib disegna con un font a bitmap: va bene per un prototipo, ma su uno
+ * schermo grande si sgrana. Qui si usano due font veri se ci sono - uno da
+ * leggere e uno da titolo - e si torna a quello di raylib se mancano.
+ *
+ * UiText() ha la stessa firma di DrawText(), cosi' le chiamate nel resto del
+ * file non cambiano forma: cambia solo chi disegna. */
+static Font gFontUi, gFontTitle;
+static bool gFontsLoaded;
+
+/* Sopra questa misura il testo e' un titolo e usa l'altro font. */
+#define UI_TITLE_SIZE 26
+
+/* I font si caricano a una misura alta e si rimpiccioliscono: il contrario
+ * darebbe bordi impastati. */
+#define UI_FONT_BAKE  64
+
+void UILoadFonts(void)
+{
+    if (gFontsLoaded) return;
+
+    if (FileExists("assets/fonts/ui.ttf")) {
+        gFontUi = LoadFontEx("assets/fonts/ui.ttf", UI_FONT_BAKE, NULL, 0);
+        if (gFontUi.texture.id != 0)
+            SetTextureFilter(gFontUi.texture, TEXTURE_FILTER_BILINEAR);
+    }
+    if (FileExists("assets/fonts/title.ttf")) {
+        gFontTitle = LoadFontEx("assets/fonts/title.ttf", UI_FONT_BAKE, NULL, 0);
+        if (gFontTitle.texture.id != 0)
+            SetTextureFilter(gFontTitle.texture, TEXTURE_FILTER_BILINEAR);
+    }
+    gFontsLoaded = true;
+
+    if (gFontUi.texture.id != 0)
+        TraceLog(LOG_INFO, "UI: font esterni (%s%s)",
+                 "assets/fonts/ui.ttf",
+                 gFontTitle.texture.id != 0 ? " + title.ttf" : "");
+    else
+        TraceLog(LOG_INFO, "UI: font di raylib (assets/fonts/ assente)");
+}
+
+void UIUnloadFonts(void)
+{
+    if (!gFontsLoaded) return;
+    if (gFontUi.texture.id != 0)    UnloadFont(gFontUi);
+    if (gFontTitle.texture.id != 0) UnloadFont(gFontTitle);
+    gFontsLoaded = false;
+}
+
+static Font UiFontFor(int size)
+{
+    if (size >= UI_TITLE_SIZE && gFontTitle.texture.id != 0) return gFontTitle;
+    if (gFontUi.texture.id != 0) return gFontUi;
+    return GetFontDefault();
+}
+
+/* Spaziatura proporzionale: a occhio un dodicesimo della misura tiene le
+ * parole leggibili senza allargarle. */
+static float UiSpacing(int size) { return (float)size / 12.0f; }
+
+static void UiText(const char *text, int x, int y, int size, Color col)
+{
+    if (gFontUi.texture.id == 0 && gFontTitle.texture.id == 0) {
+        DrawText(text, x, y, size, col);
+        return;
+    }
+    DrawTextEx(UiFontFor(size), text, (Vector2){ (float)x, (float)y },
+               (float)size, UiSpacing(size), col);
+}
+
+static int UiTextWidth(const char *text, int size)
+{
+    if (gFontUi.texture.id == 0 && gFontTitle.texture.id == 0)
+        return MeasureText(text, size);
+    return (int)MeasureTextEx(UiFontFor(size), text, (float)size, UiSpacing(size)).x;
+}
+
 int SHOP_STOCK[MAX_SHOP_STOCK];
 int SHOP_STOCK_COUNT = 0;
 
@@ -71,7 +149,7 @@ static void Panel(int x, int y, int w, int h, const char *title)
     if (title) {
         DrawRectangle(x, y, w, 30, (Color){ 40, 46, 58, 255 });
         DrawRectangleLines(x, y, w, 30, UI_LINE);
-        DrawText(title, x + 12, y + 8, 18, UI_GOLD);
+        UiText(title, x + 12, y + 8, 18, UI_GOLD);
     }
 }
 
@@ -81,7 +159,7 @@ static void Bar(int x, int y, int w, int h, float v, float maxv, Color c, const 
     DrawRectangle(x, y, w, h, (Color){ 12, 14, 18, 200 });
     DrawRectangle(x, y, (int)(w * t), h, c);
     DrawRectangleLines(x, y, w, h, (Color){ 8, 10, 14, 255 });
-    if (label) DrawText(label, x + 6, y + h / 2 - 5, 10, UI_TEXT);
+    if (label) UiText(label, x + 6, y + h / 2 - 5, 10, UI_TEXT);
 }
 
 /* Testo a capo automatico dentro una larghezza data. Ritorna l'altezza usata. */
@@ -100,8 +178,8 @@ static int WrapText(const char *txt, int x, int y, int maxW, int size, Color col
         if (lineLen > 0) snprintf(test, sizeof(test), "%s %s", line, word);
         else             snprintf(test, sizeof(test), "%s", word);
 
-        if (MeasureText(test, size) > maxW && lineLen > 0) {
-            DrawText(line, x, cursorY, size, col);
+        if (UiTextWidth(test, size) > maxW && lineLen > 0) {
+            UiText(line, x, cursorY, size, col);
             cursorY += size + 6;
             snprintf(line, sizeof(line), "%s", word);
         } else {
@@ -111,7 +189,7 @@ static int WrapText(const char *txt, int x, int y, int maxW, int size, Color col
         wi = 0;
         if (ch == '\0') break;
     }
-    if (lineLen > 0) { DrawText(line, x, cursorY, size, col); cursorY += size + 6; }
+    if (lineLen > 0) { UiText(line, x, cursorY, size, col); cursorY += size + 6; }
     return cursorY - y;
 }
 
@@ -133,7 +211,7 @@ static void DrawCompass(Game *g)
         while (rel < -PI) rel += 2.0f * PI;
         if (fabsf(rel) > 1.25f) continue;
         int px = cx + (int)(rel * (w * 0.42f));
-        DrawText(dirs[i], px - MeasureText(dirs[i], 16) / 2, y + 4, 16,
+        UiText(dirs[i], px - UiTextWidth(dirs[i], 16) / 2, y + 4, 16,
                  (i == 0) ? UI_GOLD : UI_TEXT);
     }
 
@@ -179,7 +257,7 @@ static void DrawMiniMap(Game *g)
     DrawCircleV(c, 3.5f, UI_GOLD);
     Vector2 tip = { c.x + sinf(g->player.yaw) * 12.0f, c.y + cosf(g->player.yaw) * 12.0f };
     DrawLineV(c, tip, UI_GOLD);
-    DrawText("MAPPA [M]", x, y + size + 6, 10, UI_DIM);
+    UiText("MAPPA [M]", x, y + size + 6, 10, UI_DIM);
 }
 
 void UIDrawHUD(Game *g)
@@ -191,10 +269,10 @@ void UIDrawHUD(Game *g)
     Bar(20, H - 84, 240, 18, p->hp,  p->maxHp,  UI_HP,  TextFormat("VITA %d/%d", (int)p->hp, (int)p->maxHp));
     Bar(20, H - 60, 240, 14, p->sta, p->maxSta, UI_STA, NULL);
     Bar(20, H - 40, 240, 14, p->mp,  p->maxMp,  UI_MP,  NULL);
-    DrawText(TextFormat("Lv %d   %d/%d PE   %d oro", p->level, p->xp, p->xpNext, p->gold),
+    UiText(TextFormat("Lv %d   %d/%d PE   %d oro", p->level, p->xp, p->xpNext, p->gold),
              20, H - 108, 16, UI_GOLD);
-    DrawText(TextFormat("%s", ITEMS[p->weapon].name), 268, H - 60, 14, UI_DIM);
-    DrawText(TextFormat("%s", (p->armor != ITEM_NONE) ? ITEMS[p->armor].name : "nessuna armatura"),
+    UiText(TextFormat("%s", ITEMS[p->weapon].name), 268, H - 60, 14, UI_DIM);
+    UiText(TextFormat("%s", (p->armor != ITEM_NONE) ? ITEMS[p->armor].name : "nessuna armatura"),
              268, H - 40, 14, UI_DIM);
 
     DrawCompass(g);
@@ -203,8 +281,8 @@ void UIDrawHUD(Game *g)
     /* Quest attiva tracciata in alto a sinistra. */
     for (int i = 0; i < QuestCount(); i++) {
         if (g->quests[i].state == Q_ACTIVE || g->quests[i].state == Q_READY) {
-            DrawText(QUESTS[i].title, 20, 20, 18, UI_GOLD);
-            DrawText(TextFormat("%s  %d/%d", QUESTS[i].objective,
+            UiText(QUESTS[i].title, 20, 20, 18, UI_GOLD);
+            UiText(TextFormat("%s  %d/%d", QUESTS[i].objective,
                                 g->quests[i].progress, QUESTS[i].target),
                      20, 42, 15, UI_TEXT);
             break;
@@ -215,20 +293,20 @@ void UIDrawHUD(Game *g)
     int hh = (int)(g->timeOfDay * 24.0f) % 24;
     int mm = (int)((g->timeOfDay * 24.0f - hh) * 60.0f) % 60;
     Biome b = WorldBiomeAt(&g->world, p->pos.x, p->pos.z);
-    DrawText(TextFormat("%02d:%02d  -  %s", hh, mm, WorldBiomeName(b)),
+    UiText(TextFormat("%02d:%02d  -  %s", hh, mm, WorldBiomeName(b)),
              GetScreenWidth() - 200, 20, 15, UI_DIM);
 
     /* Messaggi temporanei. */
     if (g->toastTimer > 0.0f) {
-        int w = MeasureText(g->toast, 18) + 28;
+        int w = UiTextWidth(g->toast, 18) + 28;
         int x = GetScreenWidth() / 2 - w / 2;
         DrawRectangle(x, H - 160, w, 34, Fade(UI_BG, fminf(1.0f, g->toastTimer)));
         DrawRectangleLines(x, H - 160, w, 34, Fade(UI_LINE, fminf(1.0f, g->toastTimer)));
-        DrawText(g->toast, x + 14, H - 150, 18, Fade(UI_TEXT, fminf(1.0f, g->toastTimer)));
+        UiText(g->toast, x + 14, H - 150, 18, Fade(UI_TEXT, fminf(1.0f, g->toastTimer)));
     }
     if (g->subtitleTimer > 0.0f) {
-        int w = MeasureText(g->subtitle, 16);
-        DrawText(g->subtitle, GetScreenWidth() / 2 - w / 2, H - 200, 16,
+        int w = UiTextWidth(g->subtitle, 16);
+        UiText(g->subtitle, GetScreenWidth() / 2 - w / 2, H - 200, 16,
                  Fade(UI_GOLD, fminf(1.0f, g->subtitleTimer)));
     }
 
@@ -237,7 +315,7 @@ void UIDrawHUD(Game *g)
         DrawRectangle(0, 0, GetScreenWidth(), H,
                       Fade((Color){ 150, 20, 20, 255 }, p->hurtFlash * 0.45f));
 
-    DrawText("[E] interagisci  [TAB] zaino  [J] diario  [M] mappa  [ESC] pausa",
+    UiText("[E] interagisci  [TAB] zaino  [J] diario  [M] mappa  [ESC] pausa",
              20, H - 22, 13, Fade(UI_DIM, 0.75f));
 }
 
@@ -280,11 +358,11 @@ void UIDrawWorldMarkers(Game *g)
             DrawRectangle((int)sp.x - w / 2, (int)sp.y, w, h, Fade(BLACK, alpha * 0.6f));
             DrawRectangle((int)sp.x - w / 2, (int)sp.y, (int)(w * t), h, Fade(UI_HP, alpha));
             const char *n = e->name;
-            DrawText(n, (int)sp.x - MeasureText(n, 12) / 2, (int)sp.y - 15, 12,
+            UiText(n, (int)sp.x - UiTextWidth(n, 12) / 2, (int)sp.y - 15, 12,
                      Fade(UI_TEXT, alpha));
         } else {
             const char *n = e->name;
-            DrawText(n, (int)sp.x - MeasureText(n, 12) / 2, (int)sp.y, 12,
+            UiText(n, (int)sp.x - UiTextWidth(n, 12) / 2, (int)sp.y, 12,
                      Fade(UI_GOLD, alpha));
         }
     }
@@ -300,9 +378,9 @@ void UIDrawMenu(Game *g)
     DrawRectangleGradientV(0, 0, W, H, (Color){ 16, 22, 34, 255 }, (Color){ 40, 48, 62, 255 });
 
     const char *title = GAME_NAME;
-    DrawText(title, W / 2 - MeasureText(title, 84) / 2, H / 4, 84, UI_GOLD);
+    UiText(title, W / 2 - UiTextWidth(title, 84) / 2, H / 4, 84, UI_GOLD);
     const char *sub = "un piccolo RPG open world in C + raylib";
-    DrawText(sub, W / 2 - MeasureText(sub, 20) / 2, H / 4 + 96, 20, UI_DIM);
+    UiText(sub, W / 2 - UiTextWidth(sub, 20) / 2, H / 4 + 96, 20, UI_DIM);
 
     /* Il tasto "nuovo mondo con seme casuale" non c'e' piu': il mondo e' fisso,
      * si cuoce una volta con tools/baker e da allora si modifica. */
@@ -312,9 +390,9 @@ void UIDrawMenu(Game *g)
         "[ESC]    Esci",
     };
     for (int i = 0; i < 3; i++)
-        DrawText(lines[i], W / 2 - 150, H / 2 + 40 + i * 34, 22, UI_TEXT);
+        UiText(lines[i], W / 2 - 150, H / 2 + 40 + i * 34, 22, UI_TEXT);
 
-    DrawText(TextFormat("mondo %u   -   v%s", g->world.seed, GAME_VERSION),
+    UiText(TextFormat("mondo %u   -   v%s", g->world.seed, GAME_VERSION),
              W / 2 - 150, H - 60, 14, UI_DIM);
 }
 
@@ -330,8 +408,8 @@ void UIDrawPause(Game *g)
         "[Q]    Torna al menu",
     };
     for (int i = 0; i < 4; i++)
-        DrawText(lines[i], W / 2 - 150, H / 2 - 90 + i * 40, 20, UI_TEXT);
-    DrawText(TextFormat("Tempo di gioco: %.0f min", g->playTime / 60.0f),
+        UiText(lines[i], W / 2 - 150, H / 2 - 90 + i * 40, 20, UI_TEXT);
+    UiText(TextFormat("Tempo di gioco: %.0f min", g->playTime / 60.0f),
              W / 2 - 150, H / 2 + 100, 14, UI_DIM);
 }
 
@@ -343,7 +421,7 @@ void UIDrawInventory(Game *g)
     Panel(px, py, 660, 500, "ZAINO");
 
     Player *p = &g->player;
-    DrawText(TextFormat("Oro: %d      Peso: %.1f      Slot: %d/%d",
+    UiText(TextFormat("Oro: %d      Peso: %.1f      Slot: %d/%d",
                         p->gold, InvWeight(p->inv), InvUsedSlots(p->inv), MAX_INVENTORY),
              px + 16, py + 42, 15, UI_DIM);
 
@@ -357,25 +435,25 @@ void UIDrawInventory(Game *g)
 
         const char *tagW = (p->weapon == p->inv[i].id) ? " [equipaggiata]" : "";
         const char *tagA = (p->armor  == p->inv[i].id) ? " [indossata]"    : "";
-        DrawText(TextFormat("%-22s x%-3d  %4d oro%s%s", d->name, p->inv[i].qty,
+        UiText(TextFormat("%-22s x%-3d  %4d oro%s%s", d->name, p->inv[i].qty,
                             d->value, tagW, tagA),
                  px + 20, rowY, 17, sel ? UI_GOLD : UI_TEXT);
         rowY += 26;
         shown++;
         if (rowY > py + 400) break;
     }
-    if (shown == 0) DrawText("Lo zaino e' vuoto.", px + 20, rowY, 17, UI_DIM);
+    if (shown == 0) UiText("Lo zaino e' vuoto.", px + 20, rowY, 17, UI_DIM);
 
     /* Descrizione dell'oggetto selezionato. */
     if (g->invCursor >= 0 && g->invCursor < MAX_INVENTORY &&
         p->inv[g->invCursor].id != ITEM_NONE) {
         const ItemDef *d = &ITEMS[p->inv[g->invCursor].id];
         DrawLine(px + 12, py + 420, px + 648, py + 420, UI_LINE);
-        DrawText(d->name, px + 20, py + 430, 18, UI_GOLD);
+        UiText(d->name, px + 20, py + 430, 18, UI_GOLD);
         WrapText(d->desc, px + 20, py + 454, 600, 15, UI_DIM);
     }
 
-    DrawText("[SU/GIU] scorri   [INVIO] usa/equipaggia   [X] getta   [TAB] chiudi",
+    UiText("[SU/GIU] scorri   [INVIO] usa/equipaggia   [X] getta   [TAB] chiudi",
              px + 16, py + 476, 13, UI_DIM);
 }
 
@@ -390,21 +468,21 @@ void UIDrawJournal(Game *g)
     for (int i = 0; i < QuestCount(); i++) {
         if (g->quests[i].state == Q_LOCKED) continue;
         Color c = (g->quests[i].state == Q_DONE) ? UI_DIM : UI_GOLD;
-        DrawText(TextFormat("%s  (%s)", QUESTS[i].title,
+        UiText(TextFormat("%s  (%s)", QUESTS[i].title,
                             QuestStateLabel(g->quests[i].state)), px + 20, y, 20, c);
         y += 26;
-        DrawText(TextFormat("Committente: %s", QUESTS[i].giver), px + 20, y, 14, UI_DIM);
+        UiText(TextFormat("Committente: %s", QUESTS[i].giver), px + 20, y, 14, UI_DIM);
         y += 22;
         y += WrapText(QUESTS[i].desc, px + 20, y, 630, 15, UI_TEXT);
         if (g->quests[i].state == Q_ACTIVE || g->quests[i].state == Q_READY) {
-            DrawText(TextFormat("-> %s: %d/%d", QUESTS[i].objective,
+            UiText(TextFormat("-> %s: %d/%d", QUESTS[i].objective,
                                 g->quests[i].progress, QUESTS[i].target),
                      px + 20, y, 16, UI_STA);
             y += 24;
         }
         y += 14;
     }
-    DrawText("[J] chiudi", px + 20, py + 470, 14, UI_DIM);
+    UiText("[J] chiudi", px + 20, py + 470, 14, UI_DIM);
 }
 
 void UIDrawMap(Game *g)
@@ -415,7 +493,7 @@ void UIDrawMap(Game *g)
     int size = (H < W ? H : W) - 120;
     int x = W / 2 - size / 2, y = H / 2 - size / 2 + 10;
 
-    DrawText("MAPPA DI FROSTMARK", W / 2 - MeasureText("MAPPA DI FROSTMARK", 24) / 2,
+    UiText("MAPPA DI FROSTMARK", W / 2 - UiTextWidth("MAPPA DI FROSTMARK", 24) / 2,
              y - 44, 24, UI_GOLD);
 
     Rectangle src = { 0, 0, (float)g->world.mapTex.width, (float)g->world.mapTex.height };
@@ -428,14 +506,14 @@ void UIDrawMap(Game *g)
         float mx = x + (g->world.towns[i].pos.x / WORLD_SIZE) * size;
         float my = y + (g->world.towns[i].pos.z / WORLD_SIZE) * size;
         DrawCircle((int)mx, (int)my, 5, UI_GOLD);
-        DrawText(g->world.towns[i].name, (int)mx + 8, (int)my - 7, 14, UI_TEXT);
+        UiText(g->world.towns[i].name, (int)mx + 8, (int)my - 7, 14, UI_TEXT);
     }
 
     /* Cripta. */
     float cx = x + (g->world.cryptPos.x / WORLD_SIZE) * size;
     float cy = y + (g->world.cryptPos.z / WORLD_SIZE) * size;
     DrawCircle((int)cx, (int)cy, 5, (Color){ 210, 70, 70, 255 });
-    DrawText("Cripta di Vald", (int)cx + 8, (int)cy - 7, 14, (Color){ 230, 140, 140, 255 });
+    UiText("Cripta di Vald", (int)cx + 8, (int)cy - 7, 14, (Color){ 230, 140, 140, 255 });
 
     /* Giocatore. */
     float px = x + (g->player.pos.x / WORLD_SIZE) * size;
@@ -443,7 +521,7 @@ void UIDrawMap(Game *g)
     DrawCircle((int)px, (int)py, 4, WHITE);
     DrawCircleLines((int)px, (int)py, 9, WHITE);
 
-    DrawText("[M] chiudi", x, y + size + 10, 14, UI_DIM);
+    UiText("[M] chiudi", x, y + size + 10, 14, UI_DIM);
 }
 
 void UIDrawDialogue(Game *g)
@@ -460,11 +538,11 @@ void UIDrawDialogue(Game *g)
     for (int i = 0; i < g->dlg.optCount; i++) {
         bool sel = (i == g->dialogueOpt);
         if (sel) DrawRectangle(px + 12, y - 4, 776, 26, (Color){ 56, 64, 80, 255 });
-        DrawText(TextFormat("%d. %s", i + 1, g->dlg.opts[i].text),
+        UiText(TextFormat("%d. %s", i + 1, g->dlg.opts[i].text),
                  px + 24, y, 17, sel ? UI_GOLD : UI_DIM);
         y += 28;
     }
-    DrawText("[SU/GIU] scegli   [INVIO] conferma   [ESC] chiudi",
+    UiText("[SU/GIU] scegli   [INVIO] conferma   [ESC] chiudi",
              px + 20, py + 232, 13, UI_DIM);
 }
 
@@ -475,7 +553,7 @@ void UIDrawShop(Game *g)
     int px = W / 2 - 320, py = H / 2 - 230;
     Panel(px, py, 640, 460, "MERCANTE");
 
-    DrawText(TextFormat("Il tuo oro: %d", g->player.gold), px + 16, py + 42, 16, UI_GOLD);
+    UiText(TextFormat("Il tuo oro: %d", g->player.gold), px + 16, py + 42, 16, UI_GOLD);
 
     int y = py + 74;
     for (int i = 0; i < SHOP_STOCK_COUNT; i++) {
@@ -483,7 +561,7 @@ void UIDrawShop(Game *g)
         bool sel = (i == g->shopCursor);
         if (sel) DrawRectangle(px + 10, y - 4, 620, 26, (Color){ 56, 64, 80, 255 });
         Color c = (g->player.gold >= d->value) ? (sel ? UI_GOLD : UI_TEXT) : (Color){ 120, 90, 90, 255 };
-        DrawText(TextFormat("%-24s %5d oro   (ne hai %d)", d->name, d->value,
+        UiText(TextFormat("%-24s %5d oro   (ne hai %d)", d->name, d->value,
                             InvCount(g->player.inv, SHOP_STOCK[i])),
                  px + 20, y, 17, c);
         y += 26;
@@ -491,10 +569,10 @@ void UIDrawShop(Game *g)
 
     DrawLine(px + 12, py + 300, px + 628, py + 300, UI_LINE);
     const ItemDef *sd = &ITEMS[SHOP_STOCK[g->shopCursor]];
-    DrawText(sd->name, px + 20, py + 312, 18, UI_GOLD);
+    UiText(sd->name, px + 20, py + 312, 18, UI_GOLD);
     WrapText(sd->desc, px + 20, py + 336, 580, 15, UI_DIM);
 
-    DrawText("[SU/GIU] scegli   [INVIO] compra   [V] vendi selezionato (meta' prezzo)   [ESC] esci",
+    UiText("[SU/GIU] scegli   [INVIO] compra   [V] vendi selezionato (meta' prezzo)   [ESC] esci",
              px + 16, py + 434, 13, UI_DIM);
 }
 
@@ -503,9 +581,9 @@ void UIDrawDeath(Game *g)
     int W = GetScreenWidth(), H = GetScreenHeight();
     DrawRectangle(0, 0, W, H, Fade((Color){ 60, 10, 10, 255 }, 0.75f));
     const char *t = "SEI CADUTO";
-    DrawText(t, W / 2 - MeasureText(t, 64) / 2, H / 2 - 90, 64, (Color){ 220, 190, 190, 255 });
-    DrawText("Ti risvegli al villaggio piu' vicino, piu' povero ma vivo.",
+    UiText(t, W / 2 - UiTextWidth(t, 64) / 2, H / 2 - 90, 64, (Color){ 220, 190, 190, 255 });
+    UiText("Ti risvegli al villaggio piu' vicino, piu' povero ma vivo.",
              W / 2 - 260, H / 2, 18, UI_TEXT);
-    DrawText("[INVIO] risorgi     [Q] torna al menu", W / 2 - 160, H / 2 + 50, 20, UI_GOLD);
+    UiText("[INVIO] risorgi     [Q] torna al menu", W / 2 - 160, H / 2 + 50, 20, UI_GOLD);
     (void)g;
 }

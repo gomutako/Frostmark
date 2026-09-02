@@ -20,3 +20,5 @@ richiedono attribuzione: serve a dimostrare la provenienza in caso di dubbi.
 | assets/models/graveyard/crypt.glb | Kenney, Graveyard Kit (crypt-large) | https://kenney.nl/assets/graveyard-kit | CC0 | 2026-09-02 |
 | assets/models/town/wall.glb | Kenney, Fantasy Town Kit (muri e falde delle case) | https://kenney.nl/assets/fantasy-town-kit | CC0 | 2026-09-02 |
 | assets/models/castle/tower-square-base.glb | Kenney, Castle Kit (pezzi della torre) | https://kenney.nl/assets/castle-kit | CC0 | 2026-09-02 |
+| assets/fonts/ui.ttf | Alegreya Sans | https://fonts.google.com/specimen/Alegreya+Sans | OFL | 2026-09-03 |
+| assets/fonts/title.ttf | Cinzel | https://fonts.google.com/specimen/Cinzel | OFL | 2026-09-03 |

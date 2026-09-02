@@ -34,14 +34,19 @@ void LightSetSun(Vector3 dirToSun, float amount);
 
 /* Il passaggio d'ombra: fra queste due si disegna la scena che proietta.
  * 'center' e' il punto attorno a cui si concentra la mappa - il giocatore. */
-void LightShadowBegin(Vector3 center);
+void LightShadowBegin(Vector3 base, int cascade);
+/* Dove finisce davvero il quadrato della mappa: spostato verso il sole rispetto
+ * al giocatore, perche' gli occlusori stanno da quella parte. Serve a chi
+ * decide quali oggetti disegnare nel passaggio. */
+Vector3 LightShadowCenter(Vector3 base, int cascade);
 void LightShadowEnd(void);
 
 /* Uniform che cambiano a ogni fotogramma: da chiamare prima di disegnare. */
 void LightFrame(Camera3D cam);
 
-/* Raggio coperto dalla mappa d'ombra, in metri: serve a chi decide cosa
- * disegnare nel passaggio d'ombra. */
-float LightShadowRadius(void);
+/* Le mappe sono due: una stretta e nitida attorno al giocatore, una larga per
+ * il resto. Chi disegna il passaggio d'ombra le percorre entrambe. */
+int   LightCascades(void);
+float LightShadowRadius(int cascade);
 
 #endif /* LIGHT_H */

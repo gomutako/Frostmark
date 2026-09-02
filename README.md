@@ -223,7 +223,8 @@ Nei menu: `↑ ↓` per scorrere, `Invio` per confermare, `ESC` per uscire.
   sono composte dai pezzi del kit e **ci si entra dalla porta**: la collisione
   è sui muri, non su un cerchio.
 - **Sole e ombre**: una luce direzionale illumina terreno, edifici e
-  personaggi, e una mappa di profondità proietta le ombre attorno al giocatore.
+  personaggi, e due mappe di profondità - una stretta e nitida, una larga -
+  proiettano le ombre attorno al giocatore.
 - **Ciclo giorno/notte** (12 minuti reali = 24 ore di gioco) che tinta cielo,
   terreno e personaggi.
 - **Due visuali**: prima persona con arma a schermo, terza persona con la
