@@ -220,9 +220,34 @@ Vale solo quando i pezzi ci sono. Senza modelli la casa resta la scatola
 procedurale, e una scatola piena si aggira: la collisione seguirebbe un
 disegno che non c'è.
 
-In terza persona la camera si accorcia a `CAM_DIST_INDOOR` quando il giocatore
-è dentro, e i campioni lungo il braccio della camera si fermano se cambiano
-lato rispetto ai muri — così non esce dalla casa né entra in quella accanto.
+### La camera non guarda mai un muro
+
+Se fra il giocatore e la camera si mette qualcosa, la camera si avvicina finché
+il giocatore torna visibile (`WorldCameraClip()` in `world.c`). È la soluzione
+abituale in terza persona: rendere trasparente l'edificio richiederebbe di
+ordinare le facce per profondità, e da dentro si vedrebbe peggio.
+
+Il taglio è esatto, non campionato — un muro è sottile e fra due campioni ci
+passa — e usa due scatole a seconda di dove sta il giocatore:
+
+- **fuori**: la camera non deve *entrare* nell'ingombro dell'edificio, tetto
+  compreso. Risolve il caso di chi esce di casa e resta coperto dal muro;
+- **dentro**: la camera non deve *uscire* dal vano, soffitto compreso. Risolve
+  il caso di chi guarda in basso e si trova la falda davanti all'obiettivo.
+
+Valgono anche torre e cripta (scatole piene) e i **fusti** degli alberi: la
+chioma no, attraversare le foglie non dà fastidio e fermarsi a ogni ramo darebbe
+una camera nervosa.
+
+La camera rientra all'istante — un fotogramma con il muro davanti si vede — e si
+riallontana a `CAM_RETURN_SPEED` metri al secondo: nel bosco fitto, senza,
+entrerebbe e uscirebbe a ogni tronco. Misurato camminando in mezzo agli alberi:
+un salto brusco ogni 40 campioni invece di uno ogni due.
+
+Quando la camera finisce comunque addosso al collo, il personaggio si
+**dissolve** invece di sparire di colpo: da `CAM_FADE_IN` a `CAM_FADE_OUT`
+l'opacità va da piena a zero. Il giocatore è disegnato per ultimo fra le cose
+solide, quindi la trasparenza non ha bisogno di ordinamenti.
 
 La torre e la cripta restano piene: i pezzi della torre non hanno una porta, e
 la cripta è un modello unico.

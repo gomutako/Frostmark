@@ -799,6 +799,146 @@ static void ResolveHouse(const Prop *p, Vector3 *pos, float radius)
     pos->z += -dx * s + dz * c;
 }
 
+/* --- La camera contro gli edifici ---------------------------------------
+ * Il giocatore deve restare visibile: se fra lui e la camera si mette un muro,
+ * la camera si avvicina invece di guardare l'intonaco. E' la soluzione
+ * abituale in terza persona - la trasparenza dell'edificio richiederebbe di
+ * ordinare le facce per profondita' e da dentro si vedrebbe peggio.
+ *
+ * Le scatole sono due, e quale si usa dipende da dove sta il giocatore:
+ *   - fuori: la camera non deve ENTRARE nell'ingombro esterno;
+ *   - dentro: la camera non deve USCIRE dal vano interno, soffitto compreso.
+ * Cosi' lo stesso conto risolve i due casi che si vedono giocando: uscire di
+ * casa con la camera rimasta dietro il muro, e guardare in basso da dentro con
+ * la camera che sale oltre il soffitto. */
+
+/* Intersezione raggio/scatola allineata agli assi, metodo delle lastre.
+ * 'enter' chiede il primo ingresso, altrimenti la prima uscita. */
+static bool RayBox(Vector3 o, Vector3 d, Vector3 bmin, Vector3 bmax,
+                   bool enter, float maxT, float *hit)
+{
+    float t0 = 0.0f, t1 = maxT;
+    const float *po = &o.x, *pd = &d.x, *pmin = &bmin.x, *pmax = &bmax.x;
+
+    for (int a = 0; a < 3; a++) {
+        if (fabsf(pd[a]) < 1e-6f) {
+            if (po[a] < pmin[a] || po[a] > pmax[a]) return false;  /* parallelo e fuori */
+            continue;
+        }
+        float inv = 1.0f / pd[a];
+        float ta = (pmin[a] - po[a]) * inv;
+        float tb = (pmax[a] - po[a]) * inv;
+        if (ta > tb) { float tmp = ta; ta = tb; tb = tmp; }
+        if (ta > t0) t0 = ta;
+        if (tb < t1) t1 = tb;
+        if (t0 > t1) return false;
+    }
+    *hit = enter ? t0 : t1;
+    return true;
+}
+
+/* Porta un vettore (non un punto) nel sistema della casa. */
+static Vector3 DirToHouseLocal(const Prop *p, Vector3 v)
+{
+    float a = p->rot * DEG2RAD, c = cosf(a), s = sinf(a);
+    return (Vector3){ v.x * c - v.z * s, v.y, v.x * s + v.z * c };
+}
+
+/* Raggio contro cilindro verticale: serve ai tronchi, che non sono scatole.
+ * Si risolve in pianta e poi si controlla che il punto colpito stia
+ * nell'altezza del tronco. */
+static bool RayTrunk(Vector3 o, Vector3 d, Vector3 c, float r, float h,
+                     float maxT, float *hit)
+{
+    float ox = o.x - c.x, oz = o.z - c.z;
+    float a = d.x * d.x + d.z * d.z;
+    if (a < 1e-6f) return false;
+    float b = 2.0f * (ox * d.x + oz * d.z);
+    float cc = ox * ox + oz * oz - r * r;
+    float disc = b * b - 4.0f * a * cc;
+    if (disc < 0.0f) return false;
+
+    float t = (-b - sqrtf(disc)) / (2.0f * a);
+    if (t < 0.0f || t > maxT) return false;
+    float y = o.y + d.y * t;
+    if (y < c.y || y > c.y + h) return false;
+    *hit = t;
+    return true;
+}
+
+float WorldCameraClip(const World *w, Vector3 eye, Vector3 dir, float maxDist)
+{
+    float best = maxDist;
+
+    for (int i = 0; i < MAX_LOADED_CHUNKS; i++) {
+        const Chunk *c = &w->chunks[i];
+        if (!c->active) continue;
+        float cxm = (c->cx + 0.5f) * CHUNK_SIZE, czm = (c->cz + 0.5f) * CHUNK_SIZE;
+        if (fabsf(eye.x - cxm) > CHUNK_SIZE || fabsf(eye.z - czm) > CHUNK_SIZE) continue;
+
+        for (int k = 0; k < c->propCount; k++) {
+            const Prop *p = &c->props[k];
+
+            /* Solo cio' che sta a portata del braccio della camera. */
+            float dx = p->pos.x - eye.x, dz = p->pos.z - eye.z;
+            if (dx * dx + dz * dz > (maxDist + 14.0f) * (maxDist + 14.0f)) continue;
+
+            float hitT;
+
+            /* Tronchi: un albero fra la camera e il giocatore lo nasconde
+             * quanto un muro. Solo il fusto, non la chioma: attraversare le
+             * foglie non da' fastidio, e fermarsi a ogni ramo darebbe una
+             * camera nervosa. */
+            if (p->type == PROP_TREE || p->type == PROP_PINE) {
+                float sc = p->scale;
+                if (RayTrunk(eye, dir, p->pos, 0.30f * sc, 3.0f * sc, best, &hitT)
+                    && hitT < best) best = hitT;
+                continue;
+            }
+
+            /* Torre e cripta: scatole piene, non ci si entra. */
+            if (p->type == PROP_TOWER || p->type == PROP_CRYPT) {
+                float halfXZ = (p->type == PROP_TOWER) ? 1.6f : 6.0f;
+                float high   = (p->type == PROP_TOWER) ? 12.0f : 5.5f;
+                Vector3 bmin = { p->pos.x - halfXZ, p->pos.y, p->pos.z - halfXZ };
+                Vector3 bmax = { p->pos.x + halfXZ, p->pos.y + high, p->pos.z + halfXZ };
+                if (RayBox(eye, dir, bmin, bmax, true, best, &hitT) && hitT < best)
+                    best = hitT;
+                continue;
+            }
+
+            if (p->type != PROP_HOUSE || !w->hasBuildParts) continue;
+
+            float cell = BUILD_CELL * p->scale;
+            float t    = HOUSE_WALL_T * cell;
+            float m    = CAM_BUILD_MARGIN;
+
+            float lx, lz;
+            ToHouseLocal(p, eye.x, eye.z, &lx, &lz);
+            Vector3 o = { lx, eye.y - p->pos.y, lz };
+            Vector3 d = DirToHouseLocal(p, dir);
+
+            bool inside = fabsf(lx) < HOUSE_HX * cell - t &&
+                          fabsf(lz) < HOUSE_HZ * cell - t &&
+                          o.y > 0.0f && o.y < cell;
+
+            Vector3 bmin, bmax;
+            if (inside) {          /* resta nel vano: pareti, pavimento, soffitto */
+                bmin = (Vector3){ -(HOUSE_HX * cell - t) + m, 0.05f + m, -(HOUSE_HZ * cell - t) + m };
+                bmax = (Vector3){  (HOUSE_HX * cell - t) - m, cell - m,   (HOUSE_HZ * cell - t) - m };
+            } else {               /* non entrare nell'ingombro, tetto compreso */
+                bmin = (Vector3){ -(HOUSE_HX * cell + t) - m, 0.0f, -(HOUSE_HZ * cell + t) - m };
+                bmax = (Vector3){  (HOUSE_HX * cell + t) + m, cell * 1.95f + m,
+                                   (HOUSE_HZ * cell + t) + m };
+            }
+
+            if (RayBox(o, d, bmin, bmax, !inside, best, &hitT) && hitT < best)
+                best = hitT > 0.0f ? hitT : 0.0f;
+        }
+    }
+    return best;
+}
+
 /* Serve alla camera: dentro casa non puo' restare arretrata di sei metri. */
 bool WorldInsideBuilding(const World *w, Vector3 pos)
 {

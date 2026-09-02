@@ -71,6 +71,11 @@
 #define CAM_SHOULDER   0.45f            /* scostamento a destra: libera il mirino */
 #define CAM_RISE       0.35f            /* la camera guarda da sopra la spalla */
 #define CAM_DIST_INDOOR 2.2f            /* dentro un edificio si sta stretti */
+#define CAM_BUILD_MARGIN 0.28f          /* stacco della camera dai muri */
+/* Dissolvenza del personaggio quando la camera gli finisce addosso. */
+#define CAM_FADE_OUT   0.45f            /* sotto questa distanza e' invisibile */
+#define CAM_FADE_IN    1.25f            /* sopra e' pieno */
+#define CAM_RETURN_SPEED 3.5f           /* m/s con cui la camera si riallontana */
 
 /* --- Modelli animati dei personaggi (opzionali) -------------------------
  * Se il file esiste sostituisce le primitive. La scala non si indovina: viene

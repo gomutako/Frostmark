@@ -22,6 +22,7 @@ typedef struct {
 
     CamMode camMode;
     float   camDist;             /* distanza della camera in terza persona */
+    float   camDistActual;       /* quella davvero usata, dopo muri e terreno */
     bool    blocking;            /* guardia alzata (CTRL sinistro)         */
     bool    jumpQueued;          /* salto richiesto nel fotogramma corrente */
     float   moveSpeed;           /* velocita' orizzontale voluta, m/s      */
@@ -59,7 +60,7 @@ void  PlayerUpdate(Player *p, World *w, float dt, bool controlsEnabled);
 
 /* La camera in terza persona interroga l'altezza del terreno per non
  * sprofondare, quindi serve il mondo. */
-void  PlayerCamera(const Player *p, const World *w, Camera3D *cam);
+void  PlayerCamera(Player *p, const World *w, Camera3D *cam);
 /* Disegna il corpo: non fa nulla in prima persona. */
 void  PlayerDraw(const Player *p, Color tint);
 /* Fa scorrere l'animazione. PlayerUpdate() la chiama da se': serve a parte solo

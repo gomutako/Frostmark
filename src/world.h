@@ -90,6 +90,9 @@ void    WorldResolveCollision(World *w, Vector3 *pos, float radius);
 /* true se il punto e' dentro le mura di una casa: la camera in terza persona
  * si accorcia, altrimenti resterebbe fuori a inquadrare un muro. */
 bool    WorldInsideBuilding(const World *w, Vector3 pos);
+/* Quanto puo' arretrare la camera da 'eye' lungo 'dir' senza che un edificio
+ * finisca fra lei e il giocatore. */
+float   WorldCameraClip(const World *w, Vector3 eye, Vector3 dir, float maxDist);
 /* Ritorna il prop raccoglibile piu' vicino (o NULL). */
 Prop   *WorldNearestProp(World *w, Vector3 pos, float maxDist, PropType type);
 /* Punto sicuro (terra emersa) piu' vicino a (x,z). */

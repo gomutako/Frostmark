@@ -75,6 +75,7 @@ void PlayerInit(Player *p, Vector3 spawn)
     memset(p, 0, sizeof(Player));
     p->pos   = spawn;
     p->yaw   = 0.0f;
+    p->camDistActual = CAM_DIST_DEF;
     p->pitch = -0.05f;
 
     p->camMode = CAM_FIRST;
@@ -114,7 +115,7 @@ Vector3 PlayerLookDir(const Player *p)
                       cosf(p->pitch) * cosf(p->yaw) };
 }
 
-void PlayerCamera(const Player *p, const World *w, Camera3D *cam)
+void PlayerCamera(Player *p, const World *w, Camera3D *cam)
 {
     /* Leggero "head bob" quando si cammina: costa poco, aggiunge molto. In
      * terza persona darebbe il mal di mare, quindi vale solo in soggettiva. */
@@ -146,29 +147,41 @@ void PlayerCamera(const Player *p, const World *w, Camera3D *cam)
     bool indoors = WorldInsideBuilding(w, p->pos);
     float want = indoors ? fminf(p->camDist, CAM_DIST_INDOOR) : p->camDist;
 
+    /* Gli edifici si tagliano esatti, non a campioni: un muro e' sottile e fra
+     * due campioni ci passa. Vedi WorldCameraClip(). */
+    Vector3 back = { -fwd.x, -fwd.y, -fwd.z };
+    want = fminf(want, WorldCameraClip(w, eye, back, want));
+
     float dist = want;
     for (int i = 1; i <= STEPS; i++) {
         float t = want * (float)i / (float)STEPS;
         Vector3 s = Vector3Subtract(eye, Vector3Scale(fwd, t));
-        /* la camera deve restare dalla stessa parte dei muri del giocatore:
-         * cosi' non esce da una casa ne' entra in quella accanto */
-        if (s.y < WorldHeight(w, s.x, s.z) + CAM_CLEARANCE ||
-            WorldInsideBuilding(w, s) != indoors) {
+        if (s.y < WorldHeight(w, s.x, s.z) + CAM_CLEARANCE) {
             dist = t - want / (float)STEPS;         /* fermati un passo prima */
             break;
         }
     }
-    if (dist < 0.5f) dist = 0.5f;
+    if (dist < 0.35f) dist = 0.35f;
+
+    /* Rientrare deve essere immediato - un fotogramma con il muro davanti si
+     * vede - ma riallontanarsi no: in un bosco fitto la camera entrerebbe e
+     * uscirebbe a ogni tronco. Quindi dentro subito, fuori piano. */
+    if (dist < p->camDistActual) p->camDistActual = dist;
+    else p->camDistActual = fminf(dist, p->camDistActual + CAM_RETURN_SPEED * GetFrameTime());
+    dist = p->camDistActual;
 
     /* Scostamento in alto e a destra: senza, il giocatore sta esattamente sul
      * mirino e copre quello che si sta inquadrando. Il prezzo e' che l'asse
      * della camera non coincide piu' con la direzione di mira - qui sono 3
      * gradi - ma il combattimento non ne soffre: usa PlayerLookDir(), non la
      * camera. */
+    /* Lo scostamento si riduce con la distanza: a camera accostata sposterebbe
+     * l'obiettivo dentro il muro che si e' appena evitato. */
+    float k = (p->camDist > 0.01f) ? dist / p->camDist : 0.0f;
     Vector3 right = { -cosf(p->yaw), 0.0f, sinf(p->yaw) };
     cam->position = Vector3Subtract(eye, Vector3Scale(fwd, dist));
-    cam->position = Vector3Add(cam->position, Vector3Scale(right, CAM_SHOULDER));
-    cam->position.y += CAM_RISE;
+    cam->position = Vector3Add(cam->position, Vector3Scale(right, CAM_SHOULDER * k));
+    cam->position.y += CAM_RISE * k;
 
     float minY = WorldHeight(w, cam->position.x, cam->position.z) + CAM_CLEARANCE;
     if (cam->position.y < minY) cam->position.y = minY;
@@ -182,18 +195,31 @@ void PlayerDraw(const Player *p, Color tint)
 {
     if (p->camMode == CAM_FIRST) return;
 
+    /* Quando un muro costringe la camera addosso al collo, il modello coprirebbe
+     * tutta la scena. Invece di farlo sparire di colpo lo si dissolve: fra
+     * CAM_FADE_OUT e CAM_FADE_IN passa da invisibile a pieno, e l'occhio non
+     * vede uno scatto. Il giocatore resta disegnato per ultimo fra le cose
+     * solide, quindi la trasparenza non ha bisogno di ordinamenti. */
+    float fade = (p->camDistActual - CAM_FADE_OUT) / (CAM_FADE_IN - CAM_FADE_OUT);
+    if (fade <= 0.0f) return;
+    if (fade > 1.0f) fade = 1.0f;
+    unsigned char alpha = (unsigned char)(255.0f * fade);
+
     if (p->model.loaded) {
+        Color t = { tint.r, tint.g, tint.b, alpha };
+        BeginBlendMode(BLEND_ALPHA);
         CharModelDraw(&p->model, p->pos, p->yaw + PLAYER_MODEL_YAW * DEG2RAD,
-                      p->anim, p->animFrame, tint);
+                      p->anim, p->animFrame, t);
+        EndBlendMode();
         return;
     }
 
     Color body = { (unsigned char)( 96 * tint.r / 255),
                    (unsigned char)(104 * tint.g / 255),
-                   (unsigned char)(126 * tint.b / 255), 255 };
+                   (unsigned char)(126 * tint.b / 255), alpha };
     Color skin = { (unsigned char)(216 * tint.r / 255),
                    (unsigned char)(186 * tint.g / 255),
-                   (unsigned char)(152 * tint.b / 255), 255 };
+                   (unsigned char)(152 * tint.b / 255), alpha };
 
     /* Stessa grammatica visiva dei bipedi in entity.c: capsula, testa, arma.
      * Il raggio e' piu' sottile di BAL.radius, che serve alle collisioni:
