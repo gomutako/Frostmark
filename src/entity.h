@@ -82,6 +82,9 @@ Entity *EntitySpawn(Entity *ents, int type, Vector3 pos, World *w);
 
 /* Aggiorna IA, movimento e attacchi di tutte le entita'. */
 void EntitiesUpdate(Entity *ents, World *w, Player *p, float dt);
+/* Separa giocatore ed entita' che si sono sovrapposti. Da chiamare dopo che
+ * tutti si sono mossi. */
+void EntitiesPushPlayer(Entity *ents, World *w, Player *p);
 
 /* Spawner dinamico: mantiene un numero di nemici attorno al giocatore. */
 void EntitiesPopulate(Entity *ents, World *w, Player *p, float dt);

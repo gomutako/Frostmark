@@ -77,6 +77,13 @@ oscillazioni al secondo — un saltellio fine che si sentiva proprio correndo.
 Lungo un asse della griglia le due superfici coincidono, ed è per questo che il
 difetto spariva andando dritti a nord o a est.
 
+Giocatore ed entità non si attraversano: `EntitiesPushPlayer()` in `entity.c`
+li separa come due cerchi sul piano, dopo che tutti si sono mossi — sta lì e
+non in `PlayerUpdate()` perché il giocatore non conosce le entità. Lo
+spostamento non si divide in parti uguali: la parte grossa la prende l'entità,
+così camminando addosso a un popolano lo si scansa mentre un lupo che carica
+non ti sposta di peso. Sui morti si cammina.
+
 Le entità seguono la stessa fisica (`EntityFall()` in `entity.c`), che gira una
 volta per entità a fine aggiornamento, qualunque cosa abbia deciso l'IA: prima
 stava dentro il movimento, e un nemico fermo lasciato a mezz'aria non cadeva

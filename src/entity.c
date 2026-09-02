@@ -333,6 +333,50 @@ static void MoveTowards(Entity *e, World *w, Vector3 target, float dt)
     WorldResolveCollision(w, &e->pos, e->radius);
 }
 
+/* Il giocatore e le entita' non si attraversano piu'. Due cerchi sul piano: se
+ * si sovrappongono si separano, ma non in parti uguali: la parte grossa la
+ * prende l'entita'. Cosi' camminando addosso a un popolano lo si scansa, e un
+ * lupo che carica non ti sposta di peso - farsi spingere in giro dai nemici e'
+ * fastidioso, mentre farsi bloccare la strada e' giusto.
+ *
+ * Sta qui e non in PlayerUpdate perche' il giocatore non conosce le entita':
+ * e' l'unico punto in cui si vedono entrambi. Gira dopo che tutti si sono
+ * mossi, cosi' non dipende dall'ordine.
+ *
+ * I morti non fermano nessuno: sopra un cadavere ci si cammina. */
+void EntitiesPushPlayer(Entity *ents, World *w, Player *p)
+{
+    for (int i = 0; i < MAX_ENTITIES; i++) {
+        Entity *e = &ents[i];
+        if (!e->active || e->state == AI_DEAD) continue;
+
+        /* In verticale devono sovrapporsi: saltare sopra un lupo non conta. */
+        if (p->pos.y > e->pos.y + e->height) continue;
+        if (p->pos.y + BAL.bodyHeight < e->pos.y) continue;
+
+        float dx = p->pos.x - e->pos.x, dz = p->pos.z - e->pos.z;
+        float d2 = dx * dx + dz * dz;
+        float rr = BAL.radius + e->radius;
+        if (d2 >= rr * rr) continue;
+
+        float d = sqrtf(d2);
+        if (d < 0.0001f) {           /* esattamente sovrapposti: si sceglie una via */
+            dx = sinf(e->yaw); dz = cosf(e->yaw); d = 1.0f;
+        }
+        float push = (rr - d) / d;
+
+        p->pos.x += dx * push * 0.35f;
+        p->pos.z += dz * push * 0.35f;
+        e->pos.x -= dx * push * 0.65f;
+        e->pos.z -= dz * push * 0.65f;
+
+        /* Spinta e muri devono restare d'accordo: chi e' stato spostato torna
+         * a confrontarsi con il mondo. */
+        WorldResolveCollision(w, &p->pos, BAL.radius);
+        WorldResolveCollision(w, &e->pos, e->radius);
+    }
+}
+
 void EntitiesUpdate(Entity *ents, World *w, Player *p, float dt)
 {
     for (int i = 0; i < MAX_ENTITIES; i++) {

@@ -303,6 +303,7 @@ static void UpdatePlaying(Game *g, float dt)
     WorldUpdateStreaming(&g->world, p->pos);
     EntitiesPopulate(g->ents, &g->world, p, dt);
     EntitiesUpdate(g->ents, &g->world, p, dt);
+    EntitiesPushPlayer(g->ents, &g->world, p);
     ProjUpdate(g->projs, g->ents, &g->world, p, dt);
     UpdateCrypt(g);
 
