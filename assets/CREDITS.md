@@ -18,3 +18,5 @@ richiedono attribuzione: serve a dimostrare la provenienza in caso di dubbi.
 | assets/models/Textures/colormap.png | Kenney, Survival Kit (atlante) | https://kenney.nl/assets/survival-kit | CC0 | 2026-09-02 |
 | assets/models/herb.glb | Kenney, Nature Kit (flower_yellowA) | https://kenney.nl/assets/nature-kit | CC0 | 2026-09-02 |
 | assets/models/graveyard/crypt.glb | Kenney, Graveyard Kit (crypt-large) | https://kenney.nl/assets/graveyard-kit | CC0 | 2026-09-02 |
+| assets/models/town/wall.glb | Kenney, Fantasy Town Kit (muri e falde delle case) | https://kenney.nl/assets/fantasy-town-kit | CC0 | 2026-09-02 |
+| assets/models/castle/tower-square-base.glb | Kenney, Castle Kit (pezzi della torre) | https://kenney.nl/assets/castle-kit | CC0 | 2026-09-02 |

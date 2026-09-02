@@ -55,6 +55,11 @@ typedef struct {
      * Vedi docs/03-asset-pubblici.md. */
     Model  extProp[PROP_COUNT];
     bool   hasExtProp[PROP_COUNT];
+
+    /* Pezzi modulari degli edifici: vedi BUILD_FILES in world.c. Casa e torre
+     * non esistono come modello unico nei kit CC0, si compongono. */
+    Model  buildPart[BUILD_PART_COUNT];
+    bool   hasBuildParts;
 } World;
 
 /* Carica il mondo cotto da 'dir' e prepara le risorse grafiche. false se il

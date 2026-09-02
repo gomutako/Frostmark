@@ -220,6 +220,29 @@ MODELS
         > "$ASSETS/models/graveyard/Textures/colormap.png"
     echo "  crypt-large.glb -> assets/models/graveyard/crypt.glb  (con texture)"
 
+    # --- pezzi per gli edifici modulari ---------------------------------
+    # Nei kit CC0 le case medievali non esistono come modello unico: esistono i
+    # pezzi (muro, muro con porta, falda, solaio) su una griglia di celle da 1
+    # unita'. src/world.c li compone. Ogni kit porta il suo colormap.png, che
+    # ha lo stesso nome degli altri: cartelle separate.
+    fetch_kit fantasy-town-kit "$TMP/town.zip"
+    mkdir -p "$ASSETS/models/town/Textures"
+    for f in wall wall-door wall-window-small roof-gable planks; do
+        unzip -p "$TMP/town.zip" "Models/GLB format/$f.glb" > "$ASSETS/models/town/$f.glb"
+    done
+    unzip -p "$TMP/town.zip" "Models/GLB format/Textures/colormap.png" \
+        > "$ASSETS/models/town/Textures/colormap.png"
+    echo "  Fantasy Town Kit -> assets/models/town/ (5 pezzi + atlante)"
+
+    fetch_kit castle-kit "$TMP/castle.zip"
+    mkdir -p "$ASSETS/models/castle/Textures"
+    for f in tower-square-base tower-square-mid-windows tower-square-top tower-square-top-roof; do
+        unzip -p "$TMP/castle.zip" "Models/GLB format/$f.glb" > "$ASSETS/models/castle/$f.glb"
+    done
+    unzip -p "$TMP/castle.zip" "Models/GLB format/Textures/colormap.png" \
+        > "$ASSETS/models/castle/Textures/colormap.png"
+    echo "  Castle Kit -> assets/models/castle/ (4 pezzi + atlante)"
+
     # Il fiore giallo: unico dei due kit che non si confonde con un cespuglio.
     # E' del Nature Kit, quindi va riparata la scena (vedi glb_fix_scene.py).
     unzip -p "$TMP/nature.zip" "Models/GLTF format/flower_yellowA.glb" > "$ASSETS/models/herb.glb"
@@ -243,6 +266,8 @@ bush.glb|Survival Kit (grass-large)|survival-kit
 Textures/colormap.png|Survival Kit (atlante)|survival-kit
 herb.glb|Nature Kit (flower_yellowA)|nature-kit
 graveyard/crypt.glb|Graveyard Kit (crypt-large)|graveyard-kit
+town/wall.glb|Fantasy Town Kit (muri e falde delle case)|fantasy-town-kit
+castle/tower-square-base.glb|Castle Kit (pezzi della torre)|castle-kit
 CREDITS
 
     cat <<'NOTE'

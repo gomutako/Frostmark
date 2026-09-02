@@ -21,6 +21,15 @@ typedef enum {
     PROP_HERB, PROP_HOUSE, PROP_TOWER, PROP_CRYPT, PROP_COUNT
 } PropType;
 
+/* Pezzi con cui si costruiscono casa e torre. Nei kit CC0 gli edifici
+ * medievali sono modulari - muro, muro con porta, falda, solaio - su una
+ * griglia di celle da 1 unita': un edificio e' una ricetta, non un file. */
+typedef enum {
+    BUILD_WALL, BUILD_DOOR, BUILD_WINDOW, BUILD_ROOF, BUILD_FLOOR,
+    BUILD_TOWER_BASE, BUILD_TOWER_MID, BUILD_TOWER_TOP, BUILD_TOWER_ROOF,
+    BUILD_PART_COUNT
+} BuildPart;
+
 /* Un oggetto sparso sul terreno (albero, sasso, casa...). */
 typedef struct {
     Vector3  pos;

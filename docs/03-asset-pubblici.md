@@ -164,10 +164,8 @@ trasformazioni dei nodi, non solo i minimi e massimi degli accessori: un
 pacchetto che scala nel nodo radice farebbe sbagliare il conto di un fattore
 intero.
 
-Casa e torre restano procedurali: nei kit CC0 con download diretto gli edifici
-medievali sono **modulari** — muri, tetti e angoli separati — quindi non basta
-caricarli, andrebbero composti. Quaternius ha case intere ma si scarica solo a
-mano da Google Drive.
+Casa e torre non sono in questa tabella: non sono modelli singoli ma
+composizioni di pezzi, vedi più sotto.
 
 ### Due tranelli sulle texture
 
@@ -182,6 +180,33 @@ file cercato.
 rispetto alla cartella del modello, quindi due atlanti omonimi non possono
 stare vicini: la cripta del Graveyard Kit sta in
 `assets/models/graveyard/` con la sua `Textures/`.
+
+### Casa e torre: un edificio è una ricetta, non un file
+
+Nei kit CC0 gli edifici medievali non esistono come modello unico: esistono i
+**pezzi** — muro, muro con porta, muro con finestra, falda, solaio — su una
+griglia di celle da 1 unità, e i pezzi della torre che si impilano. `world.c`
+li compone in `DrawHouse()` e `DrawTower()`:
+
+| Edificio | Ricetta | Pezzi disegnati |
+|---|---|---|
+| casa | 3×2 celle, muri sul perimetro, porta al centro della facciata, finestre altrove, tetto a due falde | 19 |
+| torre | base + due piani con feritoie + coronamento + tetto | 5 |
+
+Il muro del kit sta sul bordo **+X** della sua cella: per portarlo sugli altri
+lati lo si ruota di 90 gradi alla volta (90 = lato -Z, 180 = -X, 270 = +Z).
+`BUILD_CELL` vale 2,6 m, quindi una casa misura 7,8 × 5,2 m con i muri alti
+2,6: le stesse dimensioni della scatola procedurale che sostituisce.
+
+Il pezzo del tetto è un segmento a due falde largo **una** cella: affiancarne
+due lascia una valle in mezzo, quindi se ne allunga uno solo sulla profondità
+(`scale.z = 2`) e si alza il colmo (`scale.y = 1,6`) per non appiattire la
+pendenza.
+
+I pezzi vengono da due kit diversi — Fantasy Town Kit per le case, Castle Kit
+per la torre — e ognuno porta il suo `Textures/colormap.png`: stanno quindi in
+`assets/models/town/` e `assets/models/castle/`. Se manca anche un solo pezzo
+si torna alle primitive per tutti: mezza casa è peggio di una scatola.
 
 ### Cosa non ha un equivalente texturizzato
 

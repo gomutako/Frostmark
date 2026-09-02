@@ -155,6 +155,48 @@ static const struct { const char *file; float scale; } gExtProp[PROP_COUNT] = {
     [PROP_CRYPT]= { "assets/models/graveyard/crypt.glb", 5.0f }, /* h 1.0 -> 5 m */
 };
 
+/* --- Edifici modulari ----------------------------------------------------
+ * I pezzi vengono da due kit diversi, quindi da due cartelle: ognuno porta il
+ * suo Textures/colormap.png e i due file hanno lo stesso nome.
+ * La cella e' l'unita' del kit: qui vale BUILD_CELL metri. */
+static const char *BUILD_FILES[BUILD_PART_COUNT] = {
+    [BUILD_WALL]        = "assets/models/town/wall.glb",
+    [BUILD_DOOR]        = "assets/models/town/wall-door.glb",
+    [BUILD_WINDOW]      = "assets/models/town/wall-window-small.glb",
+    [BUILD_ROOF]        = "assets/models/town/roof-gable.glb",
+    [BUILD_FLOOR]       = "assets/models/town/planks.glb",
+    [BUILD_TOWER_BASE]  = "assets/models/castle/tower-square-base.glb",
+    [BUILD_TOWER_MID]   = "assets/models/castle/tower-square-mid-windows.glb",
+    [BUILD_TOWER_TOP]   = "assets/models/castle/tower-square-top.glb",
+    [BUILD_TOWER_ROOF]  = "assets/models/castle/tower-square-top-roof.glb",
+};
+
+/* Metri per cella. 3x2 celle fanno una casa di 7,8 x 5,2 m con i muri alti
+ * 2,6: le stesse dimensioni della scatola procedurale che sostituisce. */
+#define BUILD_CELL   2.6f
+
+/* Tutti o nessuno: mezza casa e' peggio di una scatola. */
+static void LoadBuildParts(World *w)
+{
+    for (int i = 0; i < BUILD_PART_COUNT; i++)
+        if (!FileExists(BUILD_FILES[i])) return;
+
+    for (int i = 0; i < BUILD_PART_COUNT; i++) {
+        w->buildPart[i] = LoadModel(BUILD_FILES[i]);
+        if (w->buildPart[i].meshCount == 0) {
+            TraceLog(LOG_WARNING, "WORLD: %s non caricato, edifici procedurali",
+                     BUILD_FILES[i]);
+            for (int k = 0; k <= i; k++) UnloadModel(w->buildPart[k]);
+            return;
+        }
+        for (int k = 0; k < w->buildPart[i].materialCount; k++)
+            SetTextureFilter(w->buildPart[i].materials[k].maps[MATERIAL_MAP_DIFFUSE].texture,
+                             TEXTURE_FILTER_POINT);
+    }
+    w->hasBuildParts = true;
+    TraceLog(LOG_INFO, "WORLD: %d pezzi per gli edifici modulari", BUILD_PART_COUNT);
+}
+
 static void LoadExtProps(World *w)
 {
     for (int t = 0; t < PROP_COUNT; t++) {
@@ -334,6 +376,7 @@ bool WorldInit(World *w, const char *dir)
 
     /* Modelli scaricati a mano in assets/models/ (opzionali). */
     LoadExtProps(w);
+    LoadBuildParts(w);
 
     for (int i = 0; i < MAX_LOADED_CHUNKS; i++) w->chunks[i].active = false;
     return true;
@@ -365,6 +408,10 @@ void WorldUnload(World *w)
     }
     for (int t = 0; t < PROP_COUNT; t++)
         if (w->hasExtProp[t]) { UnloadModel(w->extProp[t]); w->hasExtProp[t] = false; }
+    if (w->hasBuildParts) {
+        for (int i = 0; i < BUILD_PART_COUNT; i++) UnloadModel(w->buildPart[i]);
+        w->hasBuildParts = false;
+    }
 
     WorldIoFree(&w->io);
     w->terrainTex.id = 0;
@@ -480,6 +527,72 @@ static float PropMaxDist(int type)
  * meno di un pixel e costa una chiamata intera. */
 #define PROP_LOD_DIST  120.0f
 
+/* Posa un pezzo dell'edificio. Le coordinate sono in celle rispetto al centro,
+ * e vengono ruotate in blocco: cosi' la ricetta si scrive su una griglia e
+ * l'orientamento dell'istanza arriva dopo. */
+static void PlacePart(World *w, BuildPart part, Vector3 origin, float rotDeg,
+                      float lx, float ly, float lz, float localRot,
+                      float cell, Vector3 scale, Color tint)
+{
+    float a = rotDeg * DEG2RAD, c = cosf(a), sn = sinf(a);
+    float wx = lx * cell, wz = lz * cell;
+    Vector3 p = { origin.x + wx * c + wz * sn,
+                  origin.y + ly * cell,
+                  origin.z - wx * sn + wz * c };
+    DrawModelEx(w->buildPart[part], p, (Vector3){ 0.0f, 1.0f, 0.0f },
+                rotDeg + localRot, scale, tint);
+}
+
+/* Casa: 3x2 celle, muri sul perimetro, una porta al centro della facciata,
+ * finestre altrove, e un tetto a due falde allungato sulla profondita'.
+ * I pezzi del kit stanno sul bordo +X della loro cella: per portarli sugli
+ * altri lati si ruota di 90 gradi alla volta. */
+static void DrawHouse(World *w, Vector3 pos, float rotDeg, float s, Color tint)
+{
+    const int NX = 3, NZ = 2;
+    float cell = BUILD_CELL * s;
+    Vector3 sc = { cell, cell, cell };
+
+    for (int ix = 0; ix < NX; ix++) {
+        float lx = (float)ix - (NX - 1) / 2.0f;
+        for (int iz = 0; iz < NZ; iz++) {
+            float lz = (float)iz - (NZ - 1) / 2.0f;
+            PlacePart(w, BUILD_FLOOR, pos, rotDeg, lx, 0.0f, lz,   0.0f, cell, sc, tint);
+            if (ix == NX - 1)
+                PlacePart(w, BUILD_WALL, pos, rotDeg, lx, 0.0f, lz,   0.0f, cell, sc, tint);
+            if (ix == 0)
+                PlacePart(w, BUILD_WALL, pos, rotDeg, lx, 0.0f, lz, 180.0f, cell, sc, tint);
+            if (iz == 0)
+                PlacePart(w, (ix == NX / 2) ? BUILD_DOOR : BUILD_WINDOW,
+                          pos, rotDeg, lx, 0.0f, lz,  90.0f, cell, sc, tint);
+            if (iz == NZ - 1)
+                PlacePart(w, BUILD_WINDOW, pos, rotDeg, lx, 0.0f, lz, 270.0f, cell, sc, tint);
+        }
+    }
+
+    /* Il pezzo del tetto e' un segmento a due falde largo una cella: due
+     * affiancati farebbero una valle in mezzo, quindi se ne allunga uno solo
+     * sulla profondita'. */
+    /* Allungandolo in profondita' la falda si appiattisce: si alza il colmo
+     * per riportare la pendenza a quella del pezzo originale. */
+    Vector3 roofSc = { cell, cell * 1.6f, cell * NZ };
+    for (int ix = 0; ix < NX; ix++)
+        PlacePart(w, BUILD_ROOF, pos, rotDeg,
+                  (float)ix - (NX - 1) / 2.0f, 1.0f, 0.0f, 0.0f, cell, roofSc, tint);
+}
+
+/* Torre: i pezzi del Castle Kit si impilano, uno per unita' di altezza. */
+static void DrawTower(World *w, Vector3 pos, float rotDeg, float s, Color tint)
+{
+    float cell = BUILD_CELL * s;
+    Vector3 sc = { cell, cell, cell };
+    PlacePart(w, BUILD_TOWER_BASE, pos, rotDeg, 0.0f, 0.0f, 0.0f, 0.0f, cell, sc, tint);
+    PlacePart(w, BUILD_TOWER_MID,  pos, rotDeg, 0.0f, 1.0f, 0.0f, 0.0f, cell, sc, tint);
+    PlacePart(w, BUILD_TOWER_MID,  pos, rotDeg, 0.0f, 2.0f, 0.0f, 0.0f, cell, sc, tint);
+    PlacePart(w, BUILD_TOWER_TOP,  pos, rotDeg, 0.0f, 3.0f, 0.0f, 0.0f, cell, sc, tint);
+    PlacePart(w, BUILD_TOWER_ROOF, pos, rotDeg, 0.0f, 3.3f, 0.0f, 0.0f, cell, sc, tint);
+}
+
 static void DrawProp(World *w, const Prop *p, Color tint, bool lod)
 {
     const Vector3 Y = { 0.0f, 1.0f, 0.0f };
@@ -534,6 +647,7 @@ static void DrawProp(World *w, const Prop *p, Color tint, bool lod)
                         (Color){ 230, 240, 130, 255 });
             break;
         case PROP_HOUSE: {
+            if (w->hasBuildParts) { DrawHouse(w, pos, p->rot, s, Shade(WHITE, tint)); break; }
             Vector3 body = { pos.x, pos.y + 1.7f, pos.z };
             DrawModelEx(w->mCube, body, Y, p->rot, (Vector3){7.0f, 3.4f, 5.5f},
                         Shade((Color){ 176, 156, 126, 255 }, tint));
@@ -542,6 +656,7 @@ static void DrawProp(World *w, const Prop *p, Color tint, bool lod)
                         Shade((Color){ 108, 62, 48, 255 }, tint));
         } break;
         case PROP_TOWER: {
+            if (w->hasBuildParts) { DrawTower(w, pos, p->rot, s, Shade(WHITE, tint)); break; }
             DrawModelEx(w->mCyl, pos, Y, 0.0f, (Vector3){3.0f, 11.0f, 3.0f},
                         Shade((Color){ 138, 134, 128, 255 }, tint));
             Vector3 roof = { pos.x, pos.y + 11.0f, pos.z };
