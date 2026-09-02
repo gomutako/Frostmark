@@ -445,7 +445,28 @@ static Color Shade(Color c, Color tint)
                     (unsigned char)(c.b * tint.b / 255), c.a };
 }
 
-static void DrawProp(World *w, const Prop *p, Color tint)
+/* Distanza massima di disegno per tipo. Un cespuglio a 300 m e' un pixel che
+ * costa quanto una casa: ogni prop e' una o due chiamate di disegno, e con
+ * ~6000 props caricati il conto misurato era 25 ms per fotogramma, cioe' tutto
+ * il budget. Gli alberi restano visibili da lontano perche' danno la forma del
+ * paesaggio; case e torri sono punti di riferimento e non si tagliano. */
+static float PropMaxDist(int type)
+{
+    switch (type) {
+        case PROP_HERB:
+        case PROP_BUSH: return 80.0f;
+        case PROP_ROCK: return 140.0f;
+        case PROP_TREE:
+        case PROP_PINE: return 260.0f;
+        default:        return 400.0f;
+    }
+}
+
+/* Oltre questa distanza di un albero si disegna solo la chioma: il tronco e'
+ * meno di un pixel e costa una chiamata intera. */
+#define PROP_LOD_DIST  120.0f
+
+static void DrawProp(World *w, const Prop *p, Color tint, bool lod)
 {
     const Vector3 Y = { 0.0f, 1.0f, 0.0f };
     float s = p->scale;
@@ -464,15 +485,17 @@ static void DrawProp(World *w, const Prop *p, Color tint)
 
     switch (p->type) {
         case PROP_TREE: {
-            DrawModelEx(w->mCyl, pos, Y, p->rot, (Vector3){0.30f*s, 4.2f*s, 0.30f*s},
-                        Shade((Color){ 92, 66, 44, 255 }, tint));
+            if (!lod)
+                DrawModelEx(w->mCyl, pos, Y, p->rot, (Vector3){0.30f*s, 4.2f*s, 0.30f*s},
+                            Shade((Color){ 92, 66, 44, 255 }, tint));
             Vector3 top = { pos.x, pos.y + 4.6f * s, pos.z };
             DrawModelEx(w->mSphere, top, Y, p->rot, (Vector3){2.1f*s, 1.9f*s, 2.1f*s},
                         Shade((Color){ 54, 96, 46, 255 }, tint));
         } break;
         case PROP_PINE: {
-            DrawModelEx(w->mCyl, pos, Y, p->rot, (Vector3){0.26f*s, 3.0f*s, 0.26f*s},
-                        Shade((Color){ 80, 58, 40, 255 }, tint));
+            if (!lod)
+                DrawModelEx(w->mCyl, pos, Y, p->rot, (Vector3){0.26f*s, 3.0f*s, 0.26f*s},
+                            Shade((Color){ 80, 58, 40, 255 }, tint));
             Vector3 a = { pos.x, pos.y + 2.2f * s, pos.z };
             DrawModelEx(w->mCone, a, Y, p->rot, (Vector3){1.9f*s, 4.6f*s, 1.9f*s},
                         Shade((Color){ 38, 74, 48, 255 }, tint));
@@ -531,14 +554,27 @@ static void DrawProp(World *w, const Prop *p, Color tint)
 
 void WorldDrawProps(World *w, Camera3D cam, Color tint)
 {
-    float maxDist = (VIEW_CHUNKS) * CHUNK_SIZE * 1.15f;
+    /* La direzione della camera si normalizzava una volta per prop: con 6000
+     * props sono 6000 radici quadrate buttate. Si calcola qui, una volta. */
+    Vector3 fwd = Vector3Normalize(Vector3Subtract(cam.target, cam.position));
+    float lodD2 = PROP_LOD_DIST * PROP_LOD_DIST;
+
     for (int i = 0; i < MAX_LOADED_CHUNKS; i++) {
         Chunk *c = &w->chunks[i];
         if (!c->active) continue;
         for (int k = 0; k < c->propCount; k++) {
             Prop *p = &c->props[k];
-            if (!InView(cam, p->pos, 12.0f, maxDist)) continue;
-            DrawProp(w, p, tint);
+
+            Vector3 rel = Vector3Subtract(p->pos, cam.position);
+            float d2 = rel.x*rel.x + rel.y*rel.y + rel.z*rel.z;
+            float md = PropMaxDist(p->type);
+            if (d2 > md * md) continue;
+
+            /* Fuori dal cono visivo, tranne quel che ci sta addosso. */
+            if (d2 > 144.0f &&
+                Vector3DotProduct(rel, fwd) < 0.30f * sqrtf(d2)) continue;
+
+            DrawProp(w, p, tint, d2 > lodD2);
         }
     }
 }

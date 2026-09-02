@@ -24,6 +24,11 @@ typedef struct {
     float hpPerLevel, staPerLevel, mpPerLevel;
 
     float daySeconds;
+
+    /* Radianti di rotazione per unita' di movimento del mouse. Col movimento
+     * grezzo (vedi rawmouse.h) l'unita' e' un conteggio del dispositivo, non
+     * un pixel: dipende dai DPI, quindi si tara qui. */
+    float mouseSens;
 } Balance;
 
 extern Balance BAL;

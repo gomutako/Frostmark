@@ -1,10 +1,16 @@
 #include "player.h"
 #include "balance.h"
+#include "mouse.h"
 #include "raymath.h"
 #include <math.h>
 #include <string.h>
 
-#define MOUSE_SENS 0.0026f
+/* La sensibilita' sta in balance.txt: col movimento grezzo l'unita' dipende
+ * dai DPI del mouse, e si tara provando.
+ * Oltre questo scarto per fotogramma il dato non e' credibile: un colpo di
+ * polso veloce arriva a qualche centinaio di conteggi, la spazzatura misurata
+ * sotto WSLg stava fra 13.000 e 35.000. */
+#define MOUSE_MAX_DELTA 2500.0f
 
 /* ------------------------------------------------------------------------ */
 /*  ANIMAZIONI                                                              */
@@ -287,34 +293,47 @@ bool PlayerUseItem(Player *p, int slotIndex)
     }
 }
 
-void PlayerUpdate(Player *p, World *w, float dt, bool controlsEnabled)
+/* Input istantaneo della visuale: si legge una volta per fotogramma, non a
+ * ogni passo di simulazione. Il delta del mouse e' gia' un movimento, non una
+ * velocita': applicarlo dentro il ciclo a passo fisso lo moltiplicherebbe per
+ * il numero di passi del fotogramma, e la visuale schizzerebbe in verticale. */
+void PlayerLook(Player *p)
 {
-    /* ---- Rotazione della visuale ------------------------------------- */
-    if (controlsEnabled) {
-        Vector2 md = GetMouseDelta();
-        p->yaw   -= md.x * MOUSE_SENS;
-        p->pitch -= md.y * MOUSE_SENS;
-        if (p->pitch >  1.50f) p->pitch =  1.50f;
-        if (p->pitch < -1.50f) p->pitch = -1.50f;
-    }
+    Vector2 md = MouseLookDelta();
+
+    /* Rete di sicurezza: un delta cosi' grande non viene da una mano - viene
+     * da un driver che sbaglia (vedi GrabMouse in game.c) o dalla finestra che
+     * riprende il fuoco. Si butta via invece di limitarlo, per non introdurre
+     * una rotazione che il giocatore non ha chiesto. */
+    if (fabsf(md.x) > MOUSE_MAX_DELTA || fabsf(md.y) > MOUSE_MAX_DELTA) return;
+
+    p->yaw   -= md.x * BAL.mouseSens;
+    p->pitch -= md.y * BAL.mouseSens;
+    if (p->pitch >  1.50f) p->pitch =  1.50f;
+    if (p->pitch < -1.50f) p->pitch = -1.50f;
 
     /* ---- Visuale: prima o terza persona ------------------------------- */
-    if (controlsEnabled) {
-        float wheel = GetMouseWheelMove();
-        if (wheel != 0.0f) {
-            if (p->camMode == CAM_FIRST) {
-                /* rotellina indietro: si esce dalla soggettiva */
-                if (wheel < 0.0f) { p->camMode = CAM_THIRD; p->camDist = CAM_DIST_MIN; }
-            } else {
-                p->camDist -= wheel * CAM_ZOOM_STEP;
-                if (p->camDist < CAM_DIST_MIN) p->camMode = CAM_FIRST;
-                p->camDist = Clamp(p->camDist, CAM_DIST_MIN, CAM_DIST_MAX);
-            }
+    float wheel = GetMouseWheelMove();
+    if (wheel != 0.0f) {
+        if (p->camMode == CAM_FIRST) {
+            /* rotellina indietro: si esce dalla soggettiva */
+            if (wheel < 0.0f) { p->camMode = CAM_THIRD; p->camDist = CAM_DIST_MIN; }
+        } else {
+            p->camDist -= wheel * CAM_ZOOM_STEP;
+            if (p->camDist < CAM_DIST_MIN) p->camMode = CAM_FIRST;
+            p->camDist = Clamp(p->camDist, CAM_DIST_MIN, CAM_DIST_MAX);
         }
-        if (IsKeyPressed(KEY_F))
-            p->camMode = (p->camMode == CAM_FIRST) ? CAM_THIRD : CAM_FIRST;
     }
+    if (IsKeyPressed(KEY_F))
+        p->camMode = (p->camMode == CAM_FIRST) ? CAM_THIRD : CAM_FIRST;
 
+    /* Il salto e' un evento: si registra qui e si consuma al primo passo di
+     * simulazione, altrimenti un fotogramma lento darebbe piu' spinte. */
+    if (IsKeyPressed(KEY_SPACE)) p->jumpQueued = true;
+}
+
+void PlayerUpdate(Player *p, World *w, float dt, bool controlsEnabled)
+{
     /* ---- Direzioni sul piano orizzontale ------------------------------ */
     Vector3 fwd   = { sinf(p->yaw), 0.0f, cosf(p->yaw) };
     Vector3 right = { -cosf(p->yaw), 0.0f, sinf(p->yaw) };
@@ -379,10 +398,13 @@ void PlayerUpdate(Player *p, World *w, float dt, bool controlsEnabled)
     float ground = WorldHeight(w, p->pos.x, p->pos.z);
     p->inWater = (ground < SEA_LEVEL - 0.2f) && (p->pos.y < SEA_LEVEL);
 
-    if (controlsEnabled && IsKeyPressed(KEY_SPACE) && p->onGround && p->sta > 10.0f) {
-        p->vel.y = BAL.jump;
-        p->sta  -= BAL.staminaJump;
-        p->onGround = false;
+    if (p->jumpQueued) {
+        p->jumpQueued = false;
+        if (controlsEnabled && p->onGround && p->sta > 10.0f) {
+            p->vel.y = BAL.jump;
+            p->sta  -= BAL.staminaJump;
+            p->onGround = false;
+        }
     }
 
     p->vel.y -= BAL.gravity * dt * (p->inWater ? 0.25f : 1.0f);

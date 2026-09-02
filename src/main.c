@@ -7,6 +7,9 @@
  * Il seme non e' piu' un argomento: si passa a tools/baker, una volta, per
  * cuocere il mondo (make mondo). Vedi docs/05, fase 3.
  * ========================================================================== */
+/* setenv()/access(): con -std=c99 vanno chieste esplicitamente. */
+#define _POSIX_C_SOURCE 200809L
+
 #include "raylib.h"
 #include "game.h"
 #include "world.h"
@@ -15,7 +18,29 @@
 #include "gamedata.h"
 #include <stdlib.h>
 #include <stdio.h>
+#if defined(__linux__)
+#include <unistd.h>
+#endif
 #include <string.h>
+
+/* Sotto WSL Mesa sceglie llvmpipe, cioe' rendering software: misurato, il
+ * mondo gira a 23 fps con 2,6 passi di simulazione per fotogramma, e il gioco
+ * diventa ingovernabile. Il driver d3d12, che passa per la GPU di Windows, c'e'
+ * ma va chiesto: con quello siamo a 58 fps e un passo per fotogramma. Si
+ * imposta prima di InitWindow - Mesa legge la variabile quando crea il
+ * contesto - e solo se c'e' davvero il dispositivo e l'utente non ha gia'
+ * scelto da se'. */
+static void PreferGPUOnWSL(void)
+{
+#if !defined(__linux__)
+    return;             /* la variabile riguarda solo Mesa su Linux */
+#else
+    if (getenv("WSL_DISTRO_NAME") == NULL && getenv("WSL_INTEROP") == NULL) return;
+    if (getenv("GALLIUM_DRIVER") != NULL || getenv("LIBGL_ALWAYS_SOFTWARE") != NULL) return;
+    if (access("/dev/dxg", F_OK) != 0) return;   /* niente GPU condivisa */
+    setenv("GALLIUM_DRIVER", "d3d12", 0);
+#endif
+}
 
 int main(int argc, char **argv)
 {
@@ -57,6 +82,8 @@ int main(int argc, char **argv)
         return 1;
     }
 
+    PreferGPUOnWSL();
+
     SetConfigFlags(FLAG_MSAA_4X_HINT | FLAG_WINDOW_RESIZABLE | FLAG_VSYNC_HINT);
     InitWindow(SCREEN_W, SCREEN_H, GAME_NAME " " GAME_VERSION);
     SetExitKey(KEY_NULL);          /* ESC serve al menu, non per uscire */
@@ -92,6 +119,8 @@ int main(int argc, char **argv)
             steps++;
         }
         if (steps == SIM_MAX_STEPS) accumulator = 0.0;      /* rinuncia al resto */
+
+        GameUpdateCamera(&game);
 
         BeginDrawing();
             ClearBackground(BLACK);

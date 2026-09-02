@@ -74,6 +74,23 @@ mkdir -p vendor && tar xzf raylib-5.5_linux_amd64.tar.gz -C vendor/
 make RAYLIB_PATH=vendor/raylib-5.5_linux_amd64
 ```
 
+### Sotto WSL: compila l'eseguibile Windows
+
+WSLg non offre il movimento relativo del mouse. Il puntatore è un dispositivo
+assoluto: tenuto dentro la finestra satura contro il bordo, lasciato libero
+XWayland smette di consegnare eventi. La visuale a mouse resta perciò zoppa,
+qualunque cosa faccia il gioco. Il rimedio è compilare l'eseguibile Windows,
+che gira sullo stesso albero e legge gli stessi asset:
+
+```bash
+sudo apt install gcc-mingw-w64-x86-64      # una volta sola
+make windows
+./frostmark.exe                            # si avvia anche dalla shell WSL
+```
+
+Lì il mouse lo gestisce Win32 e la GPU è quella vera, senza traduzione. La
+build Linux resta buona per tutto il resto e avvisa all'avvio della partita.
+
 ### Asset opzionali
 
 ```bash

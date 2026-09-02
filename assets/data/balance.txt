@@ -42,5 +42,10 @@ vita_livello         = 12.0
 vigore_livello       = 6.0
 magia_livello        = 8.0
 
+# --- mouse ---
+# Radianti di rotazione per unita' di movimento. Sotto WSL l'unita' e' un
+# conteggio del mouse (dipende dai DPI): se la visuale corre troppo, abbassa.
+mouse_sensibilita    = 0.0026
+
 # --- tempo ---
 giorno_secondi       = 720

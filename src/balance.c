@@ -32,6 +32,7 @@ static const Field FIELDS[] = {
     { "vigore_salto",       &BAL.staminaJump,       NULL, 0.0f, 100.0f },
     { "magia_recupero",     &BAL.manaRegen,         NULL, 0.0f, 100.0f },
     { "vita_recupero",      &BAL.healthRegen,       NULL, 0.0f, 100.0f },
+    { "mouse_sensibilita",  &BAL.mouseSens,         NULL, 0.0001f, 0.05f },
     { "caduta_soglia",      &BAL.fallThreshold,     NULL, 0.0f, 200.0f },
     { "caduta_fattore",     &BAL.fallFactor,        NULL, 0.0f, 100.0f },
     { "vita_livello",       &BAL.hpPerLevel,        NULL, 0.0f, 1000.0f },

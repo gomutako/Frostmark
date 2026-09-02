@@ -53,6 +53,8 @@ void GameShutdown(Game *g);
 /* Input una volta per fotogramma, simulazione a passo fisso: vedi main.c. */
 void GameInput(Game *g);
 void GameSimulate(Game *g, float dt);
+/* Da chiamare dopo i passi di simulazione, prima del disegno. */
+void GameUpdateCamera(Game *g);
 void GameDraw(Game *g);
 
 void GameToast(Game *g, const char *fmt, ...);

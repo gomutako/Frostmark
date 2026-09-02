@@ -23,6 +23,7 @@ typedef struct {
     CamMode camMode;
     float   camDist;             /* distanza della camera in terza persona */
     bool    blocking;            /* guardia alzata (CTRL sinistro)         */
+    bool    jumpQueued;          /* salto richiesto nel fotogramma corrente */
     float   moveSpeed;           /* velocita' orizzontale voluta, m/s      */
 
     /* Modello animato opzionale: se assets/models/player.glb non c'e', in
@@ -51,6 +52,9 @@ void  PlayerInit(Player *p, Vector3 spawn);
 /* Rilascia il modello animato: da chiamare prima di reinizializzare il
  * giocatore e alla chiusura. */
 void  PlayerUnload(Player *p);
+/* Visuale e comandi istantanei (mouse, rotellina, F, salto): una volta per
+ * fotogramma, fuori dal ciclo a passo fisso. */
+void  PlayerLook(Player *p);
 void  PlayerUpdate(Player *p, World *w, float dt, bool controlsEnabled);
 
 /* La camera in terza persona interroga l'altezza del terreno per non

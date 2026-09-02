@@ -2,11 +2,13 @@
 #include "balance.h"
 #include "ui.h"
 #include "save.h"
+#include "mouse.h"
 #include "fmath.h"
 #include "raymath.h"
 #include <math.h>
 #include <stdio.h>
 #include <stdarg.h>
+#include <stdlib.h>
 #include <string.h>
 
 /* ------------------------------------------------------------------------ */
@@ -151,6 +153,7 @@ bool GameInit(Game *g)
 
 void GameShutdown(Game *g)
 {
+    MouseLookShutdown();
     WorldUnload(&g->world);
     PlayerUnload(&g->player);
     EntitiesUnloadModels();
@@ -240,7 +243,7 @@ static void DoInteract(Game *g)
         g->dialogueOpt = 0;
         DialogueBuild(g, npc, &g->dlg);
         g->state = GS_DIALOGUE;
-        EnableCursor();
+        MouseLookEnd();
         return;
     }
 
@@ -296,7 +299,6 @@ static void UpdatePlaying(Game *g, float dt)
     if (g->timeOfDay >= 1.0f) g->timeOfDay -= 1.0f;
 
     PlayerUpdate(p, &g->world, dt, true);
-    PlayerCamera(p, &g->world, &g->cam);
 
     WorldUpdateStreaming(&g->world, p->pos);
     EntitiesPopulate(g->ents, &g->world, p, dt);
@@ -315,7 +317,7 @@ static void UpdatePlaying(Game *g, float dt)
 
     if (p->hp <= 0.0f) {
         g->state = GS_DEAD;
-        EnableCursor();
+        MouseLookEnd();
     }
 }
 
@@ -363,6 +365,14 @@ void GameSimulate(Game *g, float dt)
     }
 }
 
+/* La camera si ricalcola una volta per fotogramma, non a ogni passo di
+ * simulazione: dipende da yaw e pitch, che l'input aggiorna per fotogramma.
+ * Tenerla dentro il passo fisso la faceva saltare nei fotogrammi senza passi. */
+void GameUpdateCamera(Game *g)
+{
+    PlayerCamera(&g->player, &g->world, &g->cam);
+}
+
 void GameInput(Game *g)
 {
     switch (g->state) {
@@ -373,11 +383,11 @@ void GameInput(Game *g)
              * genera niente. Un mondo nuovo si cuoce con tools/baker. */
             if (!GameNewWorld(g)) break;
             g->state = GS_PLAY;
-            DisableCursor();
+            MouseLookBegin();
         } else if (IsKeyPressed(KEY_C)) {
             if (LoadGameFromFile(g, SAVE_FILE)) {
                 g->state = GS_PLAY;
-                DisableCursor();
+                MouseLookBegin();
                 GameToast(g, "Partita caricata.");
             } else GameToast(g, "Nessun salvataggio valido trovato.");
         } else if (IsKeyPressed(KEY_ESCAPE)) {
@@ -386,10 +396,14 @@ void GameInput(Game *g)
         break;
 
     case GS_PLAY:
-        if (IsKeyPressed(KEY_ESCAPE))    { g->state = GS_PAUSE;     EnableCursor(); break; }
-        if (IsKeyPressed(KEY_TAB))       { g->state = GS_INVENTORY; EnableCursor(); break; }
-        if (IsKeyPressed(KEY_J))         { g->state = GS_JOURNAL;   EnableCursor(); break; }
-        if (IsKeyPressed(KEY_M))         { g->state = GS_MAP;       EnableCursor(); break; }
+        if (IsKeyPressed(KEY_ESCAPE))    { g->state = GS_PAUSE;     MouseLookEnd(); break; }
+        if (IsKeyPressed(KEY_TAB))       { g->state = GS_INVENTORY; MouseLookEnd(); break; }
+        if (IsKeyPressed(KEY_J))         { g->state = GS_JOURNAL;   MouseLookEnd(); break; }
+        if (IsKeyPressed(KEY_M))         { g->state = GS_MAP;       MouseLookEnd(); break; }
+
+        /* Visuale: il mouse e' un delta per fotogramma, non per passo di
+         * simulazione. */
+        PlayerLook(&g->player);
 
         /* Combattimento e interazione: una volta per fotogramma. */
         if (IsMouseButtonPressed(MOUSE_BUTTON_LEFT))  DoMeleeAttack(g);
@@ -407,20 +421,20 @@ void GameInput(Game *g)
         break;
 
     case GS_PAUSE:
-        if (IsKeyPressed(KEY_ESCAPE)) { g->state = GS_PLAY; DisableCursor(); }
+        if (IsKeyPressed(KEY_ESCAPE)) { g->state = GS_PLAY; MouseLookBegin(); }
         if (IsKeyPressed(KEY_F5))
             GameToast(g, SaveGameToFile(g, SAVE_FILE) ? "Partita salvata."
                                                       : "Salvataggio fallito.");
         if (IsKeyPressed(KEY_F9)) {
-            if (LoadGameFromFile(g, SAVE_FILE)) { GameToast(g, "Partita caricata."); g->state = GS_PLAY; DisableCursor(); }
+            if (LoadGameFromFile(g, SAVE_FILE)) { GameToast(g, "Partita caricata."); g->state = GS_PLAY; MouseLookBegin(); }
             else GameToast(g, "Nessun salvataggio valido.");
         }
-        if (IsKeyPressed(KEY_Q)) { g->state = GS_MENU; EnableCursor(); }
+        if (IsKeyPressed(KEY_Q)) { g->state = GS_MENU; MouseLookEnd(); }
         break;
 
     case GS_INVENTORY: {
         Player *p = &g->player;
-        if (IsKeyPressed(KEY_TAB) || IsKeyPressed(KEY_ESCAPE)) { g->state = GS_PLAY; DisableCursor(); break; }
+        if (IsKeyPressed(KEY_TAB) || IsKeyPressed(KEY_ESCAPE)) { g->state = GS_PLAY; MouseLookBegin(); break; }
         if (IsKeyPressed(KEY_DOWN)) {
             for (int i = g->invCursor + 1; i < MAX_INVENTORY; i++)
                 if (p->inv[i].id != ITEM_NONE) { g->invCursor = i; break; }
@@ -443,27 +457,27 @@ void GameInput(Game *g)
     } break;
 
     case GS_JOURNAL:
-        if (IsKeyPressed(KEY_J) || IsKeyPressed(KEY_ESCAPE)) { g->state = GS_PLAY; DisableCursor(); }
+        if (IsKeyPressed(KEY_J) || IsKeyPressed(KEY_ESCAPE)) { g->state = GS_PLAY; MouseLookBegin(); }
         break;
 
     case GS_MAP:
-        if (IsKeyPressed(KEY_M) || IsKeyPressed(KEY_ESCAPE)) { g->state = GS_PLAY; DisableCursor(); }
+        if (IsKeyPressed(KEY_M) || IsKeyPressed(KEY_ESCAPE)) { g->state = GS_PLAY; MouseLookBegin(); }
         break;
 
     case GS_DIALOGUE:
-        if (IsKeyPressed(KEY_ESCAPE)) { g->state = GS_PLAY; DisableCursor(); break; }
+        if (IsKeyPressed(KEY_ESCAPE)) { g->state = GS_PLAY; MouseLookBegin(); break; }
         if (IsKeyPressed(KEY_DOWN) && g->dlg.optCount > 0)
             g->dialogueOpt = (g->dialogueOpt + 1) % g->dlg.optCount;
         if (IsKeyPressed(KEY_UP) && g->dlg.optCount > 0)
             g->dialogueOpt = (g->dialogueOpt + g->dlg.optCount - 1) % g->dlg.optCount;
         if (IsKeyPressed(KEY_ENTER)) {
             DialogueChoose(g, g->talkTarget, g->dialogueOpt);
-            if (g->state == GS_PLAY) DisableCursor();
+            if (g->state == GS_PLAY) MouseLookBegin();
         }
         for (int k = 0; k < g->dlg.optCount; k++) {
             if (IsKeyPressed(KEY_ONE + k)) {
                 DialogueChoose(g, g->talkTarget, k);
-                if (g->state == GS_PLAY) DisableCursor();
+                if (g->state == GS_PLAY) MouseLookBegin();
                 break;
             }
         }
@@ -471,7 +485,7 @@ void GameInput(Game *g)
 
     case GS_SHOP: {
         Player *p = &g->player;
-        if (IsKeyPressed(KEY_ESCAPE)) { g->state = GS_PLAY; DisableCursor(); break; }
+        if (IsKeyPressed(KEY_ESCAPE)) { g->state = GS_PLAY; MouseLookBegin(); break; }
         if (IsKeyPressed(KEY_DOWN)) g->shopCursor = (g->shopCursor + 1) % SHOP_STOCK_COUNT;
         if (IsKeyPressed(KEY_UP))   g->shopCursor = (g->shopCursor + SHOP_STOCK_COUNT - 1) % SHOP_STOCK_COUNT;
         if (IsKeyPressed(KEY_ENTER)) {
@@ -494,7 +508,7 @@ void GameInput(Game *g)
     } break;
 
     case GS_DEAD:
-        if (IsKeyPressed(KEY_ENTER)) { RespawnPlayer(g); g->state = GS_PLAY; DisableCursor(); }
+        if (IsKeyPressed(KEY_ENTER)) { RespawnPlayer(g); g->state = GS_PLAY; MouseLookBegin(); }
         if (IsKeyPressed(KEY_Q))     { g->state = GS_MENU; }
         break;
     }

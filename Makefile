@@ -112,6 +112,31 @@ valida: all
 
 # ---- baker e mondo cotto ---------------------------------------------------
 # 'baker' e' il file, non un target finto: 'make baker' lo costruisce.
+
+# --- Eseguibile Windows nativo -------------------------------------------
+# Serve perche' sotto WSLg il puntatore e' un dispositivo assoluto e non
+# esiste movimento relativo del mouse (vedi src/rawmouse.h): la visuale non e'
+# governabile, e non e' un difetto del gioco. Su Windows il mouse lo gestisce
+# Win32 e la GPU e' diretta. Si avvia anche da qui:  ./frostmark.exe
+WIN_CC := x86_64-w64-mingw32-gcc
+WIN_AR := x86_64-w64-mingw32-ar
+WIN_RL := $(BUILD_DIR)/win/libraylib.a
+
+.PHONY: windows
+windows: $(WIN_RL)
+	$(WIN_CC) -std=c99 -O2 -I$(SRC_DIR) -I$(RAYLIB_SRC) $(SRCS) $(WIN_RL) \
+	    -o frostmark.exe -lopengl32 -lgdi32 -lwinmm -lm -static
+	@echo "==> frostmark.exe pronto. Avvialo da qui: ./frostmark.exe"
+
+$(WIN_RL):
+	@mkdir -p $(BUILD_DIR)/win
+	$(MAKE) -C $(RAYLIB_SRC) PLATFORM=PLATFORM_DESKTOP OS=Windows_NT \
+	    CC=$(WIN_CC) AR=$(WIN_AR) RAYLIB_LIBTYPE=STATIC \
+	    RAYLIB_RELEASE_PATH=$(CURDIR)/$(BUILD_DIR)/win
+	@# gli oggetti Windows vivono nella stessa cartella di quelli Linux:
+	@# lasciarli li' farebbe linkare architetture miste al prossimo make.
+	rm -f $(RAYLIB_SRC)/*.o
+
 $(BUILD_DIR)/baker-%.o: $(TOOL_DIR)/%.c | dirs
 	$(CC) $(CFLAGS_COMMON) $(CFLAGS) -c $< -o $@
 
