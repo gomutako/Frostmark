@@ -6,7 +6,8 @@ terza persona, scritto in **C99 standard** con la sola libreria **raylib**.
 Il progetto ha due obiettivi dichiarati:
 
 1. **Didattico** — ogni sistema (mondo, IA, quest, inventario, salvataggio) sta in
-   un modulo breve e leggibile, senza astrazioni inutili. ~2.700 righe in totale.
+   un modulo breve e leggibile, senza astrazioni inutili. ~7.700 righe in `src/`,
+   più 1.000 negli strumenti e 130 di shader.
 2. **Operativo** — non è uno scheletro: si compila, si gioca, si finisce.
 
 Il mondo è **generato proceduralmente** (4096 × 4096 metri), non ci sono asset
@@ -17,6 +18,23 @@ fonti pubbliche CC0 (vedi `docs/03-asset-pubblici.md`).
 ![Foresta](docs/img/01-foresta.png)
 ![Villaggio](docs/img/02-villaggio.png)
 ![Terza persona](docs/img/05-terza-persona.png)
+
+---
+
+## Da zero, in cinque comandi
+
+```bash
+git clone --recurse-submodules git@github.com:gomutako/Frostmark.git && cd Frostmark
+make raylib                                   # una volta sola, ~1 minuto
+for a in models player npc font; do ./tools/fetch_assets.sh $a; done
+make                                          # sotto WSL costruisce anche il .exe
+./frostmark          # oppure ./frostmark.exe se sei su WSL, vedi sotto
+```
+
+Gli asset sono **facoltativi**: senza, il gioco parte lo stesso e disegna
+primitive: alberi a cilindro e sfera, case a scatola, personaggi a capsula. Il
+mondo cotto (`assets/world/`) e i dati (`assets/data/`) sono invece nel
+repository, quindi non c'è niente da generare per giocare.
 
 ---
 
@@ -99,11 +117,18 @@ build Linux resta buona per tutto il resto e avvisa all'avvio della partita.
 
 ```bash
 ./tools/fetch_assets.sh              # prepara assets/ e stampa le fonti CC0
-./tools/fetch_assets.sh models       # scarica i modelli low-poly CC0 di Kenney
-./tools/fetch_assets.sh player       # scarica il personaggio animato CC0 (KayKit)
-./tools/fetch_assets.sh npc          # scarica i personaggi animati degli NPC
+./tools/fetch_assets.sh models       # alberi, sassi, cespugli, cripta, pezzi degli edifici
+./tools/fetch_assets.sh player       # il personaggio animato (KayKit, CC0)
+./tools/fetch_assets.sh npc          # popolani, guardie, banditi, scheletri
+./tools/fetch_assets.sh font         # i due font dell'interfaccia (OFL)
 ./tools/fetch_assets.sh heightmap    # genera anche una heightmap di prova
 ```
+
+Lo script **verifica la licenza prima di usare** ogni pacchetto: se il file di
+licenza non dichiara CC0 (o OFL per i font) si ferma. Ogni file scaricato
+lascia una riga in `assets/CREDITS.md` con autore, fonte e data — e le righe si
+riscrivono, non si accodano: dopo un cambio di pacchetto una riga vecchia
+direbbe una provenienza falsa.
 
 Gli asset riconosciuti in automatico, senza toccare il codice — se mancano, il
 gioco ricade sulle primitive:
@@ -114,6 +139,13 @@ gioco ricade sulle primitive:
 | `assets/models/tree.glb`, `pine.glb`, `rock.glb`, `bush.glb`, `herb.glb` | modelli al posto delle primitive (alberi, sassi, cespugli, erbe) |
 | `assets/models/player.glb` | personaggio animato in terza persona (camminata, corsa, attacco, parata, salto, morte) |
 | `assets/models/npc_villager.glb`, `npc_guard.glb`, `npc_bandit.glb`, `npc_revenant.glb`, `npc_boss.glb` | NPC animati; l'animazione segue lo stato dell'IA |
+| `assets/models/town/*.glb`, `castle/*.glb` | pezzi con cui si compongono case e torri; senza, restano scatole |
+| `assets/models/graveyard/crypt.glb` | la cripta |
+| `assets/fonts/ui.ttf`, `title.ttf` | testo e titoli dell'interfaccia al posto del font a bitmap di raylib |
+
+`assets/shaders/` fa eccezione: **è versionato**, perché è codice e non un
+pacchetto scaricato. Se lo si cancella il gioco parte lo stesso, senza luce né
+ombre.
 
 Una heightmap esterna (QGIS/GDAL, Blender, GIMP) non si innesta più a caldo: si
 passa al baker, che la cuoce nel mondo. Vedi *Il mondo cotto* qui sotto e
@@ -263,7 +295,10 @@ src/
   worldfmt.h  formato del mondo cotto e sua quantizzazione
   worldio.c/h caricamento di assets/world/: quote, biomi, prop, spawn
   world.c/h   mesh dei chunk, streaming, prop, disegno, collisioni
-  player.c/h  movimento, statistiche, camera in prima/terza persona
+  player.c/h  movimento, fisica, statistiche, camera in prima/terza persona
+  mouse.c/h   presa del mouse per la visuale (tre vie, vedi sotto)
+  rawmouse.c/h  movimento grezzo del mouse via XInput2, solo Linux/X11
+  light.c/h   sole, mappe d'ombra e lo shader che le applica
   entity.c/h  NPC, nemici, IA a stati finiti, proiettili
   items.c/h   database oggetti + inventario
   quest.c/h   missioni e dialoghi generati dallo stato di gioco
@@ -272,8 +307,9 @@ src/
   save.c/h    salvataggio binario
   game.c/h    stato globale, ciclo di gioco, combattimento, disegno
   main.c      finestra e loop principale
-assets/data/  dati di gioco: oggetti, negozio, dicerie (obbligatori)
-assets/world/ il mondo cotto: quote, biomi, prop, spawn (obbligatorio)
+assets/data/    dati di gioco: oggetti, negozio, dicerie (obbligatori)
+assets/world/   il mondo cotto: quote, biomi, prop, spawn (obbligatorio)
+assets/shaders/ luce e ombre; versionati, perche' sono codice
 docs/         approfondimenti didattici
 tools/
   baker.c     cuoce il mondo dal seme in assets/world/
@@ -284,8 +320,10 @@ vendor/
   raylib/     submodule: sorgenti di raylib 5.5 (l'unica dipendenza)
 ```
 
-**Dipendenze**: solo raylib e la libreria standard C (`math.h`, `stdio.h`,
-`string.h`, `stdlib.h`, `stdarg.h`). Nessun'altra libreria, nessun C++.
+**Dipendenze**: raylib e la libreria standard C. Nient'altro da linkare, nessun
+C++. Su Linux `rawmouse.c` apre `libXi` **a runtime** con `dlopen()` per leggere
+il movimento grezzo del mouse: se la libreria non c'è il gioco compila e gira lo
+stesso, con la presa normale di GLFW.
 
 Il file da leggere per primo è `src/worldio.c`, insieme a `src/worldfmt.h`: il
 mondo è un **dato**, cotto una volta da un seme e da lì in poi modificabile.

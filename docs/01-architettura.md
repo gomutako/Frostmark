@@ -182,8 +182,15 @@ salendo una collina finirebbe sotto la superficie. `PlayerCamera()` campiona
 `WorldHeight()` in otto punti lungo l'arretramento e accorcia la distanza al
 primo che sfonda, poi alza comunque la camera di `CAM_CLEARANCE` sul terreno.
 Costa una manciata di `WorldHeight()` per frame, cioè niente: sono letture di una
-griglia in memoria. I prop non sono considerati: un albero fra camera e
-giocatore lo si attraversa, come in molti giochi veri.
+griglia in memoria.
+
+**Anche gli edifici si mettono in mezzo**, e lì il campionamento non basta: un
+muro è sottile e fra due campioni ci passa. `WorldCameraClip()` taglia il
+braccio della camera in modo esatto, contro le scatole degli edifici e i fusti
+degli alberi — la chioma no, attraversare le foglie non dà fastidio e fermarsi a
+ogni ramo darebbe una camera nervosa. Vedi la sezione *La camera non guarda mai
+un muro* in `docs/03-asset-pubblici.md`. Quando la camera finisce comunque
+addosso al collo, il personaggio si **dissolve** invece di sparire di colpo.
 
 `charmodel.c` contiene il modello di personaggio animato, condiviso fra
 giocatore e NPC: ricerca delle clip per nome, vista con le sole mesh skinnate
@@ -200,33 +207,40 @@ stessa fase che in soggettiva muove la testa.
 
 ![Terza persona](img/05-terza-persona.png)
 
-## Illuminazione senza shader
+## Illuminazione: com'era e com'è
 
-Lo shader di default di raylib non calcola illuminazione. Invece di scriverne uno
-(che introdurrebbe differenze GLSL 100/330 e problemi di portabilità), la luce
-diffusa viene **pre-calcolata nei colori dei vertici** quando la mesh viene
-costruita:
+Per molto tempo qui non c'era luce. Lo shader di default di raylib non ne
+calcola, e invece di scriverne uno la luce diffusa veniva **cotta nei colori dei
+vertici** quando la mesh nasceva:
 
 ```c
 float diff = Vector3DotProduct(normal, SUN_DIR);
 float lit  = 0.42f + 0.58f * fmaxf(diff, 0.0f);
 ```
 
-Il ciclo giorno/notte moltiplica poi l'intero fotogramma per un colore ambiente
-(`GameAmbientTint`) applicato come `colDiffuse` del materiale e come tinta dei
-modelli. È un compromesso: il sole non proietta ombre dinamiche, ma il costo è
-zero e il codice resta a portata di chi sta imparando.
-`docs/04-esercizi.md` propone come sostituirlo con un vero shader di Phong.
+Costava zero e restava leggibile, ma il sole era fisso, i prop e i personaggi
+non avevano una faccia più chiara dell'altra, e niente proiettava ombra.
+
+Adesso c'è uno shader vero (`assets/shaders/`, sezione *Luce e ombre* qui
+sopra). La riga qui sotto resta nel codice per il caso in cui gli shader
+manchino o non compilino: allora si torna esattamente al comportamento di prima,
+perché l'assenza di un file non deve essere un errore.
 
 ## Costi e limiti noti
 
-| Aspetto | Scelta attuale | Limite |
+Le voci con un numero sono state misurate, non stimate.
+
+| Aspetto | Scelta attuale | Costo o limite |
 |---|---|---|
-| Disegno terreno | 1 `DrawMesh` per chunk | ~121 draw call |
-| Prop | 1–5 `DrawModelEx` ciascuno | pesante nelle foreste dense |
+| Disegno terreno | 1 `DrawMesh` per chunk | ~121 draw call, 0,2 ms |
+| Prop | 1–5 `DrawModelEx` ciascuno, distanza di disegno per tipo e chioma sola oltre i 120 m | 0,5–5 ms; era 25 ms prima del taglio per tipo |
+| Edifici | composti dai pezzi del kit: 19 chiamate una casa bassa, 45 una alta | i villaggi sono nove edifici, non seimila come gli alberi |
+| Ombre | due mappe 2048², una passata ciascuna | 3,3 ms; oltre 60 m dal giocatore non ce ne sono |
 | Personaggi animati | skinning su CPU, ~0,06 ms per istanza | 6 draw call ciascuno; oltre 140 m tornano primitive |
-| Culling | solo dot product sul forward | niente frustum vero |
-| Collisioni | cerchi 2D contro i prop | niente collisione verticale |
+| Culling | dot product sul forward, nessun frustum vero | prop dietro l'angolo disegnati inutilmente |
+| Collisioni | cerchi 2D contro i prop, muri per le case, solai e rampe per gli edifici alti | nessuna collisione con il tetto: saltando sotto un solaio ci si passa attraverso |
+| Entità | si separano fra loro e dal giocatore | non salgono le scale: la loro IA non sa che sopra c'è un piano |
 | Nemici | 12 attivi attorno al giocatore | nessuna persistenza |
+| Mouse | XInput2 sotto WSL, GLFW altrove | sotto WSLg il puntatore è assoluto: la visuale resta zoppa, si gioca con il `.exe` |
 
 Sono tutti punti volutamente semplici: ognuno è un esercizio nel documento 04.
