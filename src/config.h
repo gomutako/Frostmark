@@ -60,6 +60,10 @@
  * Velocita', gravita', altezze e parata sono dati: stanno in
  * assets/data/balance.txt e si leggono da BAL (balance.h). */
 
+/* Pendenza massima a cui il giocatore resta incollato scendendo: oltre, e'
+ * una caduta. Il valore e' un rapporto altezza/distanza, non un angolo. */
+#define STEP_DOWN_SLOPE 2.0f
+
 /* --- Camera -------------------------------------------------------------
  * In terza persona la camera orbita dietro la testa. Sotto CAM_DIST_MIN si
  * rientra in prima persona: e' il comportamento della rotellina in Skyrim. */

@@ -409,6 +409,7 @@ void PlayerUpdate(Player *p, World *w, float dt, bool controlsEnabled)
     if (p->hp > 0.0f) p->hp = fminf(p->maxHp, p->hp + BAL.healthRegen * dt);
 
     /* ---- Integrazione del movimento ----------------------------------- */
+    float prevX = p->pos.x, prevZ = p->pos.z;
     Vector3 next = p->pos;
     next.x += wish.x * speed * dt;
     next.z += wish.z * speed * dt;
@@ -443,10 +444,26 @@ void PlayerUpdate(Player *p, World *w, float dt, bool controlsEnabled)
         }
     }
 
+    float floorY = fmaxf(ground, p->inWater ? SEA_LEVEL - 1.2f : ground);
+
+    /* Aggancio al terreno in discesa. Senza, a ogni passo il suolo scende
+     * sotto i piedi, il giocatore resta in aria per un fotogramma, la gravita'
+     * lo riprende e atterra: un sobbalzo ritmico di pochi centimetri, e per
+     * giunta 'onGround' falso quasi sempre - niente salto, niente parata.
+     * Ci si incolla solo per il dislivello che un passo puo' giustificare:
+     * un salto nel vuoto resta una caduta. */
+    if (p->onGround && p->vel.y <= 0.0f) {
+        float step = hypotf(p->pos.x - prevX, p->pos.z - prevZ);
+        float drop = p->pos.y - floorY;
+        if (drop > 0.0f && drop <= step * STEP_DOWN_SLOPE + 0.05f) {
+            p->pos.y  = floorY;
+            p->vel.y  = 0.0f;
+        }
+    }
+
     p->vel.y -= BAL.gravity * dt * (p->inWater ? 0.25f : 1.0f);
     p->pos.y += p->vel.y * dt;
 
-    float floorY = fmaxf(ground, p->inWater ? SEA_LEVEL - 1.2f : ground);
     if (p->pos.y <= floorY) {
         /* Danno da caduta. */
         if (!p->onGround && p->vel.y < -BAL.fallThreshold && !p->inWater)

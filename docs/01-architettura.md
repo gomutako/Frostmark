@@ -49,15 +49,24 @@ main()
      ├─ GameSimulate(g, SIM_STEP)        a passo fisso, anche piu' volte
      │   └─ GS_PLAY → UpdatePlaying()
      │            ├─ PlayerUpdate()          movimento, gravità, stamina
-     │            ├─ PlayerCamera()           camera in prima o terza persona
      │            ├─ WorldUpdateStreaming()   carica/scarica chunk
      │            ├─ EntitiesPopulate()       spawn/despawn nemici
      │            ├─ EntitiesUpdate()         IA e attacchi
      │            ├─ ProjUpdate()             proiettili
      │            └─ input di combattimento/interazione
+     ├─ GameUpdateCamera(g)              dopo i passi, una volta per fotogramma
+     │                                    (dipende da yaw e pitch, che l'input
+     │                                     aggiorna per fotogramma)
      └─ GameDraw(g)
          ├─ BeginMode3D → terreno, prop, entità, proiettili, acqua
          └─ 2D → marker, HUD, schermata attiva
+
+`PlayerUpdate()` in discesa si **aggancia al terreno**: senza, a ogni passo il
+suolo scende sotto i piedi, il giocatore resta in aria per un fotogramma e la
+gravità lo riprende — un sobbalzo ritmico di pochi centimetri, e `onGround`
+falso quasi sempre, quindi niente salto e niente parata. Ci si incolla solo per
+il dislivello che un passo può giustificare (`STEP_DOWN_SLOPE` in `config.h`):
+un salto nel vuoto resta una caduta, con il suo danno.
 ```
 
 Nota su `dt`: viene limitato a 0,05 s in `main.c`. Senza questo limite, dopo una
