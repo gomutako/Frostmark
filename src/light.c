@@ -5,10 +5,11 @@
 #include <stddef.h>
 
 /* La mappa e' quadrata e segue il giocatore. Piu' e' larga, piu' ombre si
- * vedono ma piu' grossolane: a 1024 texel su 70 metri un texel copre 7 cm,
- * che su un tronco si vede appena. */
-#define SHADOW_RES     1024
-#define SHADOW_RADIUS  35.0f
+ * vedono ma piu' grossolane: a 2048 texel su 80 metri un texel copre 3,9 cm.
+ * Il quadrato conta: la mappa e' quadrata, quindi anche la proiezione deve
+ * esserlo - vedi LightShadowBegin. */
+#define SHADOW_RES     2048
+#define SHADOW_RADIUS  40.0f
 #define SHADOW_DEPTH   180.0f
 
 static Shader   gShader;
@@ -118,8 +119,12 @@ void LightShadowBegin(Vector3 center)
     lightCam.fovy       = SHADOW_RADIUS * 2.0f;
     lightCam.projection = CAMERA_ORTHOGRAPHIC;
 
-    rlEnableFramebuffer(gMap.id);
-    rlViewport(0, 0, SHADOW_RES, SHADOW_RES);
+    /* BeginTextureMode e non rlEnableFramebuffer a mano: e' l'unico modo per
+     * cui BeginMode3D sappia che sta disegnando in un quadrato. Con il
+     * framebuffer acceso a mano prendeva l'aspetto dello SCHERMO, e la
+     * proiezione copriva 124 m in orizzontale contro 70 in verticale, tutti
+     * schiacciati negli stessi 1024 texel: le ombre uscivano a scaletta. */
+    BeginTextureMode(gMap);
     rlClearScreenBuffers();
 
     BeginMode3D(lightCam);
@@ -134,8 +139,7 @@ void LightShadowEnd(void)
     if (!gReady) return;
 
     EndMode3D();
-    rlDisableFramebuffer();
-    rlViewport(0, 0, GetScreenWidth(), GetScreenHeight());
+    EndTextureMode();
 
     int zero = 0;
     SetShaderValue(gShader, locDepthOnly, &zero, SHADER_UNIFORM_INT);

@@ -91,9 +91,14 @@ vero somma ambiente e sole e legge l'ombra dalla mappa.
 
 Tre decisioni che si vedono:
 
-- **La mappa segue il giocatore** e copre 70 m. Le ombre ci sono dove si
-  guarda, e il passaggio in più disegna solo ciò che sta vicino: misurato,
-  1,14 ms nel bosco fitto e 1,61 ms al villaggio.
+- **La mappa segue il giocatore** e copre 80 m a 2048 texel, cioè 3,9 cm per
+  texel. Le ombre ci sono dove si guarda, e il passaggio in più disegna solo ciò
+  che sta vicino: misurato, 1,24 ms nel bosco fitto e 1,62 ms al villaggio.
+- **La proiezione dev'essere quadrata quanto la mappa.** Accendendo il
+  framebuffer a mano, `BeginMode3D()` prendeva l'aspetto dello *schermo*: la
+  proiezione copriva 124 m in orizzontale contro 70 in verticale, schiacciati
+  negli stessi texel, e le ombre uscivano a scaletta. `BeginTextureMode()` dice
+  a raylib quanto è grande il bersaglio, e l'aspetto torna 1:1.
 - **Il sole pesa quasi il doppio dell'ambiente** (0,85 contro 0,45). Con i due
   alla pari l'ombra toglieva un quarto della luce e non si vedeva.
 - **La luce cotta nel terreno sparisce** quando lo shader c'è, altrimenti le
