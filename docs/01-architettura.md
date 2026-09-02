@@ -67,6 +67,12 @@ gravità lo riprende — un sobbalzo ritmico di pochi centimetri, e `onGround`
 falso quasi sempre, quindi niente salto e niente parata. Ci si incolla solo per
 il dislivello che un passo può giustificare (`STEP_DOWN_SLOPE` in `config.h`):
 un salto nel vuoto resta una caduta, con il suo danno.
+
+Le entità seguono la stessa fisica (`EntityFall()` in `entity.c`), che gira una
+volta per entità a fine aggiornamento, qualunque cosa abbia deciso l'IA: prima
+stava dentro il movimento, e un nemico fermo lasciato a mezz'aria non cadeva
+mai. Non prendono danno da caduta: un lupo che si butta da una rupe darebbe
+esperienza e bottino senza che nessuno lo abbia ucciso.
 ```
 
 Nota su `dt`: viene limitato a 0,05 s in `main.c`. Senza questo limite, dopo una

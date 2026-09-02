@@ -1,4 +1,5 @@
 #include "entity.h"
+#include "balance.h"
 #include "dataparse.h"
 #include <stdio.h>
 #include "fmath.h"
@@ -251,6 +252,7 @@ Entity *EntitySpawn(Entity *ents, int type, Vector3 pos, World *w)
     e->pos    = pos;
     e->home   = pos;
     e->pos.y  = WorldHeight(w, pos.x, pos.z);
+    e->onGround = true;          /* nasce appoggiato, non in caduta */
     e->state  = AI_IDLE;
     e->townIndex = -1;
 
@@ -277,6 +279,42 @@ Entity *EntitySpawn(Entity *ents, int type, Vector3 pos, World *w)
 /*  IA                                                                       */
 /* ------------------------------------------------------------------------ */
 
+/* Gravita' e appoggio, con le stesse regole del giocatore (vedi PlayerUpdate):
+ * in discesa ci si aggancia al terreno per il dislivello che un passo puo'
+ * giustificare, altrimenti si cade. Senza, un NPC che scende un pendio
+ * sobbalza, e uno che esce da un dirupo ci cammina sopra nel vuoto.
+ *
+ * vel.x e vel.z servono gia' alla direzione del vagabondaggio: qui si usa solo
+ * vel.y, che era libero. */
+static void EntityFall(Entity *e, World *w, float dt, float prevX, float prevZ)
+{
+    float ground  = WorldHeight(w, e->pos.x, e->pos.z);
+    bool  inWater = (ground < SEA_LEVEL - 0.2f) && (e->pos.y < SEA_LEVEL);
+    float floorY  = fmaxf(ground, inWater ? SEA_LEVEL - 1.2f : ground);
+
+    if (e->onGround && e->vel.y <= 0.0f) {
+        float step = hypotf(e->pos.x - prevX, e->pos.z - prevZ);
+        float drop = e->pos.y - floorY;
+        if (drop > 0.0f && drop <= step * STEP_DOWN_SLOPE + 0.05f) {
+            e->pos.y = floorY;
+            e->vel.y = 0.0f;
+        }
+    }
+
+    e->vel.y -= BAL.gravity * dt * (inWater ? 0.25f : 1.0f);
+    e->pos.y += e->vel.y * dt;
+
+    if (e->pos.y <= floorY) {
+        /* Nessun danno da caduta: un lupo che si butta da una rupe darebbe
+         * esperienza e bottino senza che nessuno lo abbia ucciso. */
+        e->pos.y    = floorY;
+        e->vel.y    = 0.0f;
+        e->onGround = true;
+    } else {
+        e->onGround = false;
+    }
+}
+
 static void MoveTowards(Entity *e, World *w, Vector3 target, float dt)
 {
     Vector3 d = Vector3Subtract(target, e->pos);
@@ -293,7 +331,6 @@ static void MoveTowards(Entity *e, World *w, Vector3 target, float dt)
     e->pos.z = Clamp(e->pos.z, 2.0f, WORLD_SIZE - 2.0f);
 
     WorldResolveCollision(w, &e->pos, e->radius);
-    e->pos.y = WorldHeight(w, e->pos.x, e->pos.z);
 }
 
 void EntitiesUpdate(Entity *ents, World *w, Player *p, float dt)
@@ -302,6 +339,9 @@ void EntitiesUpdate(Entity *ents, World *w, Player *p, float dt)
         Entity *e = &ents[i];
         if (!e->active) continue;
 
+        /* Da dove partiva questo passo: serve all'aggancio in discesa. */
+        float prevX = e->pos.x, prevZ = e->pos.z;
+
         if (e->attackCd   > 0.0f) e->attackCd   -= dt;
         if (e->stateTimer > 0.0f) e->stateTimer -= dt;
 
@@ -309,11 +349,13 @@ void EntitiesUpdate(Entity *ents, World *w, Player *p, float dt)
          * animazione. */
         EntityUpdateAnim(e, dt);
 
-        if (e->state == AI_DEAD) continue;
+        /* Anche un morto pesa: se cade mentre muore, arriva a terra. */
+        if (e->state == AI_DEAD) { EntityFall(e, w, dt, prevX, prevZ); continue; }
 
         if (e->hp <= 0.0f) {
             e->state = AI_DEAD;
             e->justDied = true;          /* il game loop assegna XP e bottino */
+            EntityFall(e, w, dt, prevX, prevZ);
             continue;
         }
 
@@ -337,9 +379,8 @@ void EntitiesUpdate(Entity *ents, World *w, Player *p, float dt)
             if (e->state == AI_WANDER) {
                 Vector3 t = { e->home.x + e->vel.x * 8.0f, 0.0f, e->home.z + e->vel.z * 8.0f };
                 MoveTowards(e, w, t, dt);
-            } else {
-                e->pos.y = WorldHeight(w, e->pos.x, e->pos.z);
             }
+            EntityFall(e, w, dt, prevX, prevZ);
             continue;
         }
 
@@ -384,6 +425,10 @@ void EntitiesUpdate(Entity *ents, World *w, Player *p, float dt)
 
             default: break;
         }
+
+        /* La fisica chiude il passo di ogni entita', qualunque cosa abbia
+         * deciso l'IA: cosi' anche un nemico fermo in aria cade. */
+        EntityFall(e, w, dt, prevX, prevZ);
     }
 }
 
