@@ -89,7 +89,17 @@ endif
 .PHONY: all debug run clean dirs raylib raylib-clean mondo mondo-forza \
         verifica-mondo valida
 
-all: dirs $(TARGET)
+# Sotto WSL si gioca con l'eseguibile Windows - li' il mouse funziona, vedi
+# src/rawmouse.h - quindi "make" costruisce anche quello: altrimenti si
+# ricompila il binario Linux, si avvia il .exe di ieri e si guarda una
+# modifica che non c'e'. Ci vogliono pochi secondi in piu'.
+ifneq ($(wildcard /dev/dxg),)
+ifneq ($(WSL_DISTRO_NAME)$(WSL_INTEROP),)
+  ALSO_WINDOWS := windows
+endif
+endif
+
+all: dirs $(TARGET) $(ALSO_WINDOWS)
 
 debug: CFLAGS := -O0 -g -DDEBUG
 debug: clean all

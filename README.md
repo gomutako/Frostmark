@@ -84,9 +84,13 @@ che gira sullo stesso albero e legge gli stessi asset:
 
 ```bash
 sudo apt install gcc-mingw-w64-x86-64      # una volta sola
-make windows
+make                                       # sotto WSL costruisce anche il .exe
 ./frostmark.exe                            # si avvia anche dalla shell WSL
 ```
+
+Sotto WSL `make` compila **entrambi** gli eseguibili (due secondi in più):
+altrimenti si ricompila il binario Linux, si avvia il `.exe` del giorno prima e
+si guarda una modifica che non c'è. `make windows` costruisce solo quello.
 
 Lì il mouse lo gestisce Win32 e la GPU è quella vera, senza traduzione. La
 build Linux resta buona per tutto il resto e avvisa all'avvio della partita.
