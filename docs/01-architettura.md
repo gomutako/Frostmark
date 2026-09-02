@@ -77,6 +77,29 @@ oscillazioni al secondo — un saltellio fine che si sentiva proprio correndo.
 Lungo un asse della griglia le due superfici coincidono, ed è per questo che il
 difetto spariva andando dritti a nord o a est.
 
+### Luce e ombre
+
+Prima non c'era luce: il terreno portava un'illuminazione **cotta** nei colori
+dei vertici, calcolata una volta da una direzione fissa, e tutto il resto veniva
+solo moltiplicato per la tinta del ciclo giorno/notte. Nessuna faccia era più
+chiara di un'altra e niente proiettava ombra.
+
+Ora `src/light.c` tiene un sole direzionale e una mappa di profondità vista dal
+sole. Lo shader (`assets/shaders/scene.vs|fs`) è uno solo e serve terreno, prop
+e personaggi: nel passaggio d'ombra scrive soltanto la profondità, nel disegno
+vero somma ambiente e sole e legge l'ombra dalla mappa.
+
+Tre decisioni che si vedono:
+
+- **La mappa segue il giocatore** e copre 70 m. Le ombre ci sono dove si
+  guarda, e il passaggio in più disegna solo ciò che sta vicino: misurato,
+  1,14 ms nel bosco fitto e 1,61 ms al villaggio.
+- **Il sole pesa quasi il doppio dell'ambiente** (0,85 contro 0,45). Con i due
+  alla pari l'ombra toglieva un quarto della luce e non si vedeva.
+- **La luce cotta nel terreno sparisce** quando lo shader c'è, altrimenti le
+  colline sarebbero scure due volte. Senza `assets/shaders/` il gioco torna
+  esattamente a com'era: l'assenza di un file non è un errore.
+
 Giocatore ed entità non si attraversano: `EntitiesPushPlayer()` in `entity.c`
 li separa come due cerchi sul piano, dopo che tutti si sono mossi — sta lì e
 non in `PlayerUpdate()` perché il giocatore non conosce le entità. Lo

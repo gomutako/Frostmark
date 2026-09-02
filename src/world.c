@@ -1,5 +1,6 @@
 #include "world.h"
 #include "rlgl.h"
+#include "light.h"
 #include "worldio.h"
 #include "fmath.h"
 #include "raymath.h"
@@ -193,6 +194,7 @@ static void LoadBuildParts(World *w)
         for (int k = 0; k < w->buildPart[i].materialCount; k++)
             SetTextureFilter(w->buildPart[i].materials[k].maps[MATERIAL_MAP_DIFFUSE].texture,
                              TEXTURE_FILTER_POINT);
+        LightApplyToModel(&w->buildPart[i]);
     }
     w->hasBuildParts = true;
     TraceLog(LOG_INFO, "WORLD: %d pezzi per gli edifici modulari", BUILD_PART_COUNT);
@@ -218,6 +220,7 @@ static void LoadExtProps(World *w)
             SetTextureFilter(m.materials[i].maps[MATERIAL_MAP_DIFFUSE].texture,
                              TEXTURE_FILTER_POINT);
 
+        LightApplyToModel(&m);
         w->extProp[t]    = m;
         w->hasExtProp[t] = true;
         TraceLog(LOG_INFO, "WORLD: modello esterno %s (%d mesh)",
@@ -319,9 +322,15 @@ static void BuildChunkMesh(World *w, Chunk *c)
             bc.g = (unsigned char)FmLerp(bc.g, 100.0f, rock);
             bc.b = (unsigned char)FmLerp(bc.b,  95.0f, rock);
 
-            float diff = Vector3DotProduct(nrm, sun);
-            if (diff < 0.0f) diff = 0.0f;
-            float lit = 0.42f + 0.58f * diff;
+            /* Niente luce cotta nei vertici quando c'e' il sole vero: si
+             * sommerebbe a quella dello shader e le colline sarebbero scure
+             * due volte. Senza shader resta la vecchia illuminazione fissa. */
+            float lit = 1.0f;
+            if (!LightReady()) {
+                float diff = Vector3DotProduct(nrm, sun);
+                if (diff < 0.0f) diff = 0.0f;
+                lit = 0.42f + 0.58f * diff;
+            }
 
             m.colors[idx * 4 + 0] = (unsigned char)FmClamp(bc.r * lit, 0, 255);
             m.colors[idx * 4 + 1] = (unsigned char)FmClamp(bc.g * lit, 0, 255);
@@ -374,6 +383,14 @@ bool WorldInit(World *w, const char *dir)
     w->mCone   = LoadModelFromMesh(GenMeshCone(1.0f, 1.0f, 4));
     w->mSphere = LoadModelFromMesh(GenMeshSphere(1.0f, 8, 10));
     w->mCube   = LoadModelFromMesh(GenMeshCube(1.0f, 1.0f, 1.0f));
+
+    /* Il sole illumina anche le primitive e il terreno: senza questa riga
+     * resterebbero piatti mentre il resto della scena e' illuminato. */
+    LightApplyToMaterial(&w->terrainMat);
+    LightApplyToModel(&w->mCyl);
+    LightApplyToModel(&w->mCone);
+    LightApplyToModel(&w->mSphere);
+    LightApplyToModel(&w->mCube);
 
     /* Modelli scaricati a mano in assets/models/ (opzionali). */
     LoadExtProps(w);
@@ -712,6 +729,34 @@ void WorldDrawProps(World *w, Camera3D cam, Color tint)
                 Vector3DotProduct(rel, fwd) < 0.30f * sqrtf(d2)) continue;
 
             DrawProp(w, p, tint, d2 > lodD2);
+        }
+    }
+}
+
+/* Cio' che proietta ombra attorno al giocatore. Non usa il cono visivo: il
+ * sole guarda da un'altra parte, e un albero fuori inquadratura puo' benissimo
+ * proiettare dentro. */
+void WorldDrawShadowCasters(World *w, Vector3 center, float radius)
+{
+    float r2 = radius * radius;
+
+    for (int i = 0; i < MAX_LOADED_CHUNKS; i++) {
+        Chunk *c = &w->chunks[i];
+        if (!c->active) continue;
+        float cx = (c->cx + 0.5f) * CHUNK_SIZE, cz = (c->cz + 0.5f) * CHUNK_SIZE;
+        float dx = cx - center.x, dz = cz - center.z;
+        if (dx * dx + dz * dz > (radius + CHUNK_SIZE) * (radius + CHUNK_SIZE)) continue;
+        DrawMesh(c->mesh, w->terrainMat, c->xform);
+    }
+
+    for (int i = 0; i < MAX_LOADED_CHUNKS; i++) {
+        Chunk *c = &w->chunks[i];
+        if (!c->active) continue;
+        for (int k = 0; k < c->propCount; k++) {
+            Prop *p = &c->props[k];
+            float dx = p->pos.x - center.x, dz = p->pos.z - center.z;
+            if (dx * dx + dz * dz > r2) continue;
+            DrawProp(w, p, WHITE, false);
         }
     }
 }

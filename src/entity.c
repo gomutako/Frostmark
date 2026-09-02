@@ -344,8 +344,48 @@ static void MoveTowards(Entity *e, World *w, Vector3 target, float dt)
  * mossi, cosi' non dipende dall'ordine.
  *
  * I morti non fermano nessuno: sopra un cadavere ci si cammina. */
+/* Le entita' fra loro. Senza, tre lupi che ti attaccano finiscono sovrapposti
+ * nello stesso punto e sembrano uno solo. Qui lo spostamento si divide a meta':
+ * nessuno dei due ha ragione piu' dell'altro.
+ *
+ * E' un ciclo su tutte le coppie, ma le entita' attive sono qualche decina e la
+ * prova sul quadrato della distanza costa due moltiplicazioni: non vale la pena
+ * di una griglia spaziale. */
+static void EntitiesSeparate(Entity *ents, World *w)
+{
+    for (int i = 0; i < MAX_ENTITIES; i++) {
+        Entity *a = &ents[i];
+        if (!a->active || a->state == AI_DEAD) continue;
+
+        for (int j = i + 1; j < MAX_ENTITIES; j++) {
+            Entity *b = &ents[j];
+            if (!b->active || b->state == AI_DEAD) continue;
+
+            if (a->pos.y > b->pos.y + b->height) continue;
+            if (a->pos.y + a->height < b->pos.y) continue;
+
+            float dx = a->pos.x - b->pos.x, dz = a->pos.z - b->pos.z;
+            float d2 = dx * dx + dz * dz;
+            float rr = a->radius + b->radius;
+            if (d2 >= rr * rr) continue;
+
+            float d = sqrtf(d2);
+            if (d < 0.0001f) { dx = sinf(a->yaw); dz = cosf(a->yaw); d = 1.0f; }
+            float push = (rr - d) / d * 0.5f;
+
+            a->pos.x += dx * push;  a->pos.z += dz * push;
+            b->pos.x -= dx * push;  b->pos.z -= dz * push;
+
+            WorldResolveCollision(w, &a->pos, a->radius);
+            WorldResolveCollision(w, &b->pos, b->radius);
+        }
+    }
+}
+
 void EntitiesPushPlayer(Entity *ents, World *w, Player *p)
 {
+    EntitiesSeparate(ents, w);
+
     for (int i = 0; i < MAX_ENTITIES; i++) {
         Entity *e = &ents[i];
         if (!e->active || e->state == AI_DEAD) continue;

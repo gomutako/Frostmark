@@ -1,4 +1,5 @@
 #include "charmodel.h"
+#include "light.h"
 #include "raymath.h"
 #include <string.h>
 
@@ -212,6 +213,7 @@ bool CharModelLoad(CharModel *c, const char *glbPath, float heightMeters)
         UnloadModel(m);
         return false;
     }
+    LightApplyToModel(&m);
     c->model  = m;
     c->loaded = true;
 

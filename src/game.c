@@ -3,6 +3,7 @@
 #include "ui.h"
 #include "save.h"
 #include "mouse.h"
+#include "light.h"
 #include "fmath.h"
 #include "raymath.h"
 #include <math.h>
@@ -139,6 +140,7 @@ bool GameNewWorld(Game *g)
 
 bool GameInit(Game *g)
 {
+    LightInit();      /* prima del mondo: i materiali nascono gia' illuminati */
     memset(g, 0, sizeof(Game));
     g->state   = GS_MENU;
     g->running = true;
@@ -154,6 +156,7 @@ bool GameInit(Game *g)
 void GameShutdown(Game *g)
 {
     MouseLookShutdown();
+    LightUnload();
     WorldUnload(&g->world);
     PlayerUnload(&g->player);
     EntitiesUnloadModels();
@@ -520,11 +523,17 @@ void GameInput(Game *g)
 /* ------------------------------------------------------------------------ */
 
 /* Sole/luna come sfera lontana: un tocco di atmosfera a costo zero. */
-static void DrawSkyBody(Game *g)
+/* Dove sta il sole adesso. La stessa direzione serve al disco in cielo e alla
+ * luce: se divergessero, le ombre cadrebbero dalla parte sbagliata. */
+static Vector3 SunDir(const Game *g)
 {
     float ang = (g->timeOfDay - 0.25f) * 2.0f * PI;
-    Vector3 dir = { cosf(ang) * 0.6f, sinf(ang), 0.45f };
-    dir = Vector3Normalize(dir);
+    return Vector3Normalize((Vector3){ cosf(ang) * 0.6f, sinf(ang), 0.45f });
+}
+
+static void DrawSkyBody(Game *g)
+{
+    Vector3 dir = SunDir(g);
     Vector3 pos = Vector3Add(g->cam.position, Vector3Scale(dir, 320.0f));
     bool isDay = DayLight(g) > 0.35f;
     DrawSphere(pos, isDay ? 16.0f : 11.0f,
@@ -534,6 +543,24 @@ static void DrawSkyBody(Game *g)
 static void DrawScene(Game *g)
 {
     Color tint = GameAmbientTint(g);
+
+    /* Di notte il sole non illumina: resta l'ambiente, e le ombre spariscono
+     * da se' perche' non c'e' piu' luce diretta da bloccare. */
+    Vector3 sun = SunDir(g);
+    LightSetSun(sun, DayLight(g));
+
+    /* Passaggio d'ombra: la scena vista dal sole, ristretta a un raggio
+     * attorno al giocatore. Disegna prima di tutto, fuori dalla vista. */
+    if (LightReady() && sun.y > 0.02f) {
+        LightShadowBegin(g->player.pos);
+            WorldDrawShadowCasters(&g->world, g->player.pos, LightShadowRadius());
+            Camera3D near = g->cam;
+            near.position = g->player.pos;
+            EntitiesDraw(g->ents, &g->world, near, WHITE);
+            PlayerDraw(&g->player, WHITE);
+        LightShadowEnd();
+    }
+    LightFrame(g->cam);
 
     BeginMode3D(g->cam);
         DrawSkyBody(g);

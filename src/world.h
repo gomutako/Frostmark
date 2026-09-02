@@ -83,6 +83,9 @@ const char *WorldBiomeName(Biome b);
 void    WorldUpdateStreaming(World *w, Vector3 center);
 void    WorldDrawTerrain(World *w, Camera3D cam, Color tint);
 void    WorldDrawProps(World *w, Camera3D cam, Color tint);
+/* Terreno e prop entro 'radius' dal centro, senza scarto per cono visivo:
+ * serve al passaggio d'ombra. */
+void    WorldDrawShadowCasters(World *w, Vector3 center, float radius);
 void    WorldDrawWater(const World *w, Vector3 camPos, Color tint, float t);
 
 /* Spinge fuori 'pos' dai prop solidi vicini (collisione a cerchi). */
