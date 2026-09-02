@@ -138,16 +138,21 @@ static Texture2D LoadTerrainTexture(const char *worldDir)
 
 /* Un modello per tipo di prop. 'scale' porta il modello alle dimensioni che
  * DrawProp() da' alle primitive corrispondenti: i valori qui sotto sono tarati
- * sul Nature Kit di Kenney (CC0), dove un albero e' alto 1.71 unita' mentre
- * quello procedurale arriva a 6.5 m. Con un altro pacchetto vanno rifatti:
+ * sul Survival Kit di Kenney (CC0, texture dentro il .glb), dove un albero e'
+ * alto 1.41 unita' mentre quello procedurale arriva a 6.5 m. L'erba curativa
+ * viene dal Nature Kit: e' l'unico fiore giallo, e la quest ha bisogno che si
+ * distingua da un cespuglio. Con un altro pacchetto i valori vanno rifatti:
  * 'scale' = altezza voluta in metri / altezza del modello.
- * I tipi non elencati (casa, torre, cripta) restano procedurali. */
+ * I tipi non elencati (casa e torre) restano procedurali: nei kit CC0 di
+ * Kenney gli edifici medievali sono modulari - muri, tetti, angoli - e
+ * andrebbero composti, non solo caricati. */
 static const struct { const char *file; float scale; } gExtProp[PROP_COUNT] = {
-    [PROP_TREE] = { "assets/models/tree.glb", 3.8f },   /* h 1.71 -> 6.5 m */
-    [PROP_PINE] = { "assets/models/pine.glb", 4.4f },   /* h 1.53 -> 6.8 m */
-    [PROP_ROCK] = { "assets/models/rock.glb", 2.2f },   /* l 1.02 -> 2.2 m */
-    [PROP_BUSH] = { "assets/models/bush.glb", 4.2f },   /* h 0.24 -> 1.0 m */
-    [PROP_HERB] = { "assets/models/herb.glb", 4.5f },   /* h 0.19 -> 0.9 m */
+    [PROP_TREE] = { "assets/models/tree.glb", 4.61f },  /* h 1.41 -> 6.5 m */
+    [PROP_PINE] = { "assets/models/pine.glb", 3.97f },  /* h 1.71 -> 6.8 m */
+    [PROP_ROCK] = { "assets/models/rock.glb", 3.54f },  /* l 0.62 -> 2.2 m */
+    [PROP_BUSH] = { "assets/models/bush.glb", 2.87f },  /* l 0.49 -> 1.4 m */
+    [PROP_HERB] = { "assets/models/herb.glb", 4.50f },  /* h 0.19 -> 0.9 m */
+    [PROP_CRYPT]= { "assets/models/graveyard/crypt.glb", 5.0f }, /* h 1.0 -> 5 m */
 };
 
 static void LoadExtProps(World *w)
@@ -161,6 +166,15 @@ static void LoadExtProps(World *w)
             UnloadModel(m);
             continue;
         }
+        /* L'atlante di Kenney e' una tavolozza: ogni materiale campiona una
+         * cella di colore pieno larga pochi pixel. Con i mipmap, da lontano le
+         * celle vicine si mescolano. Il filtro a punti lo evita - qui non ho
+         * visto differenze a occhio, ma e' il campionamento giusto per una
+         * tavolozza, e la distanza massima di disegno arriva a 260 m. */
+        for (int i = 0; i < m.materialCount; i++)
+            SetTextureFilter(m.materials[i].maps[MATERIAL_MAP_DIFFUSE].texture,
+                             TEXTURE_FILTER_POINT);
+
         w->extProp[t]    = m;
         w->hasExtProp[t] = true;
         TraceLog(LOG_INFO, "WORLD: modello esterno %s (%d mesh)",

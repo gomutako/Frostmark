@@ -17,7 +17,7 @@ Stato degli innesti nel codice:
 |---|---|
 | `assets/heightmap.png` | si passa al baker: `./baker --heightmap ... --forza` (vedi `docs/02`) |
 | `assets/textures/grass.png` | rilevato in automatico (`LoadTerrainTexture`) |
-| `assets/models/*.glb` | rilevati in automatico (`LoadExtProps`) |
+| `assets/models/*.glb` | rilevati in automatico (`LoadExtProps`), texture inclusa |
 | `assets/models/player.glb` | rilevato in automatico (`PlayerLoadModel`), con animazioni |
 | `assets/models/npc_*.glb` | rilevati in automatico (`EntitiesLoadModels`) |
 | `assets/fonts/ui.ttf` | **richiede modifiche a `ui.c`** (sezione 5) |
@@ -105,7 +105,13 @@ Blender e three.js sono più permissivi, per questo il problema non è noto.
 geometria, materiali o trasformazioni; `fetch_assets.sh models` lo applica da
 sé. Il Survival Kit di Kenney, esportato con UnityGLTF, non ha il difetto.
 
-**La tavolozza non coincide.** Il Nature Kit è deliberatamente acido: fogliame
+**Perché il Survival Kit e non il Nature Kit.** `fetch_assets.sh models`
+scarica il **Survival Kit**, che è texturizzato: un atlante 512x512 condiviso
+da tutti i modelli, cioè una sola texture per l'intera foresta. Il Nature Kit
+resta disponibile con `fetch_assets.sh models nature`, ma non ha texture — i
+suoi colori stanno nei vertici.
+
+**La tavolozza del Nature Kit non coincide.** È deliberatamente acida: fogliame
 turchese (43, 166, 170) e tronchi salmone (204, 118, 94), anche nelle varianti
 `_dark`. Sul terreno verde scuro di Frostmark stona. Due strade, entrambe
 legittime:
@@ -115,8 +121,9 @@ legittime:
 2. riscrivere i `baseColorFactor` dei `.glb` con i colori usati da `DrawProp()`
    (CC0 permette la modifica; `assets/CREDITS.md` documenta la provenienza).
 
-Il Survival Kit di Kenney ha verdi più naturali, ma contiene solo conifere e
-dipende da una texture esterna (`Textures/colormap.png` accanto al modello).
+Il Survival Kit ha verdi più naturali ed è quello in uso, ma contiene solo
+conifere: albero e pino sono due varianti dello stesso profilo, e il bosco
+risulta uniforme.
 
 ---
 
@@ -143,16 +150,47 @@ fa da sé):
 
 | File | Sostituisce | Scala in `gExtProp` |
 |---|---|---|
-| `tree.glb` | l'albero (cilindro + sfera) | 3.8 → 6.5 m |
-| `pine.glb` | il pino (cilindro + cono) | 4.4 → 6.8 m |
-| `rock.glb` | il sasso (sfera schiacciata) | 2.2 → 2.2 m di larghezza |
-| `bush.glb` | il cespuglio (sfera) | 4.2 → 1.0 m |
-| `herb.glb` | l'erba curativa della quest | 4.5 → 0.9 m |
+| `tree.glb` | l'albero (cilindro + sfera) | 4.61 → 6.5 m |
+| `pine.glb` | il pino (cilindro + cono) | 3.97 → 6.8 m |
+| `rock.glb` | il sasso (sfera schiacciata) | 3.54 → 2.2 m di larghezza |
+| `bush.glb` | il cespuglio (sfera) | 2.87 → 1.4 m di larghezza |
+| `herb.glb` | l'erba curativa della quest | 4.50 → 0.9 m |
+| `graveyard/crypt.glb` | la cripta (cubi + colonne) | 5.00 → 5 m |
 
-Casa, torre e cripta restano procedurali: nessun kit CC0 con download diretto
-contiene edifici interi. Il Fantasy Town Kit di Kenney è modulare (muri, tetti,
-angoli separati), quindi servirebbe comporre più modelli per edificio; Quaternius
-ha case complete ma si scarica solo a mano da Google Drive.
+Le scale valgono per i file che scarica `fetch_assets.sh models`, e **vanno
+rifatte con un altro pacchetto**: `scale` = dimensione voluta / dimensione del
+modello. Le dimensioni si misurano dal `.glb`, ma vanno lette applicando le
+trasformazioni dei nodi, non solo i minimi e massimi degli accessori: un
+pacchetto che scala nel nodo radice farebbe sbagliare il conto di un fattore
+intero.
+
+Casa e torre restano procedurali: nei kit CC0 con download diretto gli edifici
+medievali sono **modulari** — muri, tetti e angoli separati — quindi non basta
+caricarli, andrebbero composti. Quaternius ha case intere ma si scarica solo a
+mano da Google Drive.
+
+### Due tranelli sulle texture
+
+**I `.glb` di Kenney non contengono la texture.** La cercano accanto a sé, in
+`Textures/colormap.png`, e senza quel file gli alberi si vedono **bianchi** —
+il modello carica, il materiale no. Lo zip la porta in
+`Models/GLB format/Textures/colormap.png`; c'è anche
+`Models/Textures/variation-a.png`, che è una tavolozza alternativa e non il
+file cercato.
+
+**Due kit diversi hanno due `colormap.png` diversi.** raylib risolve l'immagine
+rispetto alla cartella del modello, quindi due atlanti omonimi non possono
+stare vicini: la cripta del Graveyard Kit sta in
+`assets/models/graveyard/` con la sua `Textures/`.
+
+### Cosa non ha un equivalente texturizzato
+
+Nei kit CC0 di Kenney non esiste un cespuglio vero: Survival e Mini Forest
+hanno solo ciuffi d'erba, e il `plant_bushLarge` del Nature Kit ha la forma
+giusta ma è **turchese** (43, 166, 170) e stona sul verde del terreno. Il
+cespuglio usa quindi un ciuffo texturizzato ingrandito; l'erba curativa usa il
+fiore giallo del Nature Kit, a colori per vertice, perché una quest ha bisogno
+che si distingua da un cespuglio.
 
 `LoadExtProps()` in `world.c` li cerca all'avvio; `DrawProp()` usa il modello
 quando c'è e ricade sulle primitive quando manca. raylib carica `.glb`/`.gltf`,
@@ -164,16 +202,16 @@ La tabella `gExtProp` in `world.c` tiene nome del file e fattore di scala:
 
 ```c
 static const struct { const char *file; float scale; } gExtProp[PROP_COUNT] = {
-    [PROP_TREE]  = { "assets/models/tree.glb",  2.0f },
+    [PROP_TREE]  = { "assets/models/tree.glb",  4.61f },
     ...
 };
 ```
 
-La scala converte l'unità del modello nelle dimensioni usate dalle primitive
-(un albero procedurale è alto ~4.6 m) e **va ritoccata a occhio** secondo il
-pacchetto scaricato: Kenney e Quaternius esportano a circa 1 unità = 1 m con
-l'origine alla base, che è l'assunzione del codice. Per aggiungere altri tipi
-(cespuglio, torre, cripta) basta una riga nella tabella.
+La scala converte l'unità del modello nelle dimensioni usate dalle primitive e
+si moltiplica per la scala della singola istanza (`p->scale`, fra 0,75 e 1,45
+per gli alberi): un albero disegnato sta quindi fra 4,9 e 9,4 m. Per aggiungere
+un tipo basta una riga nella tabella — `DrawProp()` usa il modello per
+qualunque tipo elencato.
 
 Per i modelli **animati** servono `LoadModelAnimations()` e
 `UpdateModelAnimation()` — è il salto di qualità più visibile per gli NPC

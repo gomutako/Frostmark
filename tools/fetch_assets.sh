@@ -153,12 +153,108 @@ NOTE
     exit 0
 fi
 
-# ---- modelli low-poly CC0 dal Nature Kit di Kenney -------------------------
-#  E' l'unica sorgente CC0 con download diretto, stile coerente e poligoni bassi
-#  (78-114 triangoli per modello): serve proprio questo, perche' Frostmark
-#  disegna centinaia di prop per frame senza LOD ne' instancing. Poly Haven e
-#  ambientCG sono altrettanto CC0 ma fotogrammetrici: il loro albero piu'
-#  leggero sta a 150.000 triangoli, qui inutilizzabile.
+# ---- modelli low-poly CC0 di Kenney ----------------------------------------
+#  Due pacchetti, tutti e due CC0 con download diretto e poligoni bassi (36-254
+#  triangoli): serve proprio questo, perche' Frostmark disegna centinaia di prop
+#  per frame senza instancing. Poly Haven e ambientCG sono altrettanto CC0 ma
+#  fotogrammetrici: il loro albero piu' leggero sta a 150.000 triangoli.
+#
+#    ./tools/fetch_assets.sh models            Survival Kit: modelli TEXTURIZZATI
+#    ./tools/fetch_assets.sh models nature     Nature Kit: colori per vertice
+#
+#  Il Survival Kit porta una texture dentro ogni .glb; il Nature Kit no, i suoi
+#  colori stanno nei vertici e la sua tavolozza e' acida (fogliame turchese).
+#  L'erba curativa viene comunque dal Nature Kit: e' l'unico fiore giallo dei
+#  due, e una quest ha bisogno che si distingua da un cespuglio.
+if [ "${1:-}" = "models" ] && [ "${2:-survival}" = "survival" ]; then
+    for cmd in curl unzip python3; do
+        command -v "$cmd" >/dev/null 2>&1 || { echo "serve $cmd"; exit 1; }
+    done
+
+    TMP="$(mktemp -d)"
+    trap 'rm -rf "$TMP"' EXIT
+
+    fetch_kit() {   # $1 = nome del pacchetto su kenney.nl, $2 = file zip
+        echo "cerco $1 su kenney.nl..."
+        local url
+        url="$(curl -sSL "https://kenney.nl/assets/$1" \
+               | grep -oE 'https://[^"]*'"$1"'[^"]*\.zip' | head -1)"
+        [ -n "$url" ] || { echo "link non trovato per $1"; exit 1; }
+        curl -sSL -o "$2" "$url"
+        unzip -p "$2" License.txt 2>/dev/null | grep -qi "Creative Commons Zero" \
+            || { echo "ATTENZIONE: $1 non dichiara CC0. Mi fermo."; exit 1; }
+        echo "  licenza verificata: CC0"
+    }
+
+    fetch_kit survival-kit "$TMP/survival.zip"
+    fetch_kit nature-kit   "$TMP/nature.zip"
+
+    while IFS=: read -r src dst; do
+        [ -n "$src" ] || continue
+        unzip -p "$TMP/survival.zip" "Models/GLB format/$src.glb" > "$ASSETS/models/$dst.glb"
+        echo "  $src.glb -> assets/models/$dst.glb  (con texture)"
+    done <<'MODELS'
+tree:tree
+tree-tall:pine
+rock-a:rock
+grass-large:bush
+MODELS
+
+    # I .glb NON contengono la texture: la cercano accanto a se', in
+    # Textures/colormap.png. Senza, gli alberi si vedono bianchi.
+    # (Models/Textures/variation-a.png e' invece una palette alternativa.)
+    mkdir -p "$ASSETS/models/Textures"
+    unzip -p "$TMP/survival.zip" "Models/GLB format/Textures/colormap.png" \
+        > "$ASSETS/models/Textures/colormap.png"
+    echo "  colormap.png -> assets/models/Textures/colormap.png  (atlante 512x512)"
+
+    # La cripta viene dal Graveyard Kit. Sta in una cartella sua perche' porta
+    # un colormap.png diverso ma con lo stesso nome: raylib risolve la texture
+    # rispetto alla cartella del modello, quindi due atlanti omonimi non
+    # possono stare vicini.
+    fetch_kit graveyard-kit "$TMP/graveyard.zip"
+    mkdir -p "$ASSETS/models/graveyard/Textures"
+    unzip -p "$TMP/graveyard.zip" "Models/GLB format/crypt-large.glb" \
+        > "$ASSETS/models/graveyard/crypt.glb"
+    unzip -p "$TMP/graveyard.zip" "Models/GLB format/Textures/colormap.png" \
+        > "$ASSETS/models/graveyard/Textures/colormap.png"
+    echo "  crypt-large.glb -> assets/models/graveyard/crypt.glb  (con texture)"
+
+    # Il fiore giallo: unico dei due kit che non si confonde con un cespuglio.
+    # E' del Nature Kit, quindi va riparata la scena (vedi glb_fix_scene.py).
+    unzip -p "$TMP/nature.zip" "Models/GLTF format/flower_yellowA.glb" > "$ASSETS/models/herb.glb"
+    python3 "$ROOT/tools/glb_fix_scene.py" "$ASSETS/models/herb.glb" >/dev/null
+    echo "  flower_yellowA.glb -> assets/models/herb.glb  (colori per vertice)"
+
+    # I crediti si riscrivono, non si accodano: dopo un cambio di pacchetto una
+    # riga vecchia direbbe una provenienza falsa, che e' peggio di nessuna riga.
+    TODAY="$(date +%Y-%m-%d)"
+    while IFS='|' read -r f who kit; do
+        [ -n "$f" ] || continue
+        grep -v "^| assets/models/$f |" "$ASSETS/CREDITS.md" > "$TMP/credits" 2>/dev/null || true
+        mv "$TMP/credits" "$ASSETS/CREDITS.md"
+        echo "| assets/models/$f | Kenney, $who | https://kenney.nl/assets/$kit | CC0 | $TODAY |" \
+            >> "$ASSETS/CREDITS.md"
+    done <<'CREDITS'
+tree.glb|Survival Kit (tree)|survival-kit
+pine.glb|Survival Kit (tree-tall)|survival-kit
+rock.glb|Survival Kit (rock-a)|survival-kit
+bush.glb|Survival Kit (grass-large)|survival-kit
+Textures/colormap.png|Survival Kit (atlante)|survival-kit
+herb.glb|Nature Kit (flower_yellowA)|nature-kit
+graveyard/crypt.glb|Graveyard Kit (crypt-large)|graveyard-kit
+CREDITS
+
+    cat <<'NOTE'
+
+Fatto. Avvia il gioco: i modelli vengono rilevati in automatico.
+Le scale stanno in gExtProp (src/world.c) e valgono per QUESTI file: con un
+altro pacchetto vanno rifatte, 'scale' = altezza voluta / altezza del modello.
+Per tornare alle primitive, svuota assets/models/.
+NOTE
+    exit 0
+fi
+
 if [ "${1:-}" = "models" ]; then
     for cmd in curl unzip python3; do
         command -v "$cmd" >/dev/null 2>&1 || { echo "serve $cmd"; exit 1; }
