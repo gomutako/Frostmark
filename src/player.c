@@ -139,12 +139,22 @@ void PlayerCamera(const Player *p, const World *w, Camera3D *cam)
      * Il campionamento e' grossolano - otto passi - ma il terreno e' una
      * funzione pura, quindi costa solo qualche WorldHeight() per frame. */
     const int STEPS = 8;
-    float dist = p->camDist;
+
+    /* Dentro casa la camera non puo' restare a sei metri: sarebbe fuori, a
+     * inquadrare un muro. Si accorcia, e i passi sotto la fermano comunque
+     * prima di attraversare una parete. */
+    bool indoors = WorldInsideBuilding(w, p->pos);
+    float want = indoors ? fminf(p->camDist, CAM_DIST_INDOOR) : p->camDist;
+
+    float dist = want;
     for (int i = 1; i <= STEPS; i++) {
-        float t = p->camDist * (float)i / (float)STEPS;
+        float t = want * (float)i / (float)STEPS;
         Vector3 s = Vector3Subtract(eye, Vector3Scale(fwd, t));
-        if (s.y < WorldHeight(w, s.x, s.z) + CAM_CLEARANCE) {
-            dist = t - p->camDist / (float)STEPS;   /* fermati un passo prima */
+        /* la camera deve restare dalla stessa parte dei muri del giocatore:
+         * cosi' non esce da una casa ne' entra in quella accanto */
+        if (s.y < WorldHeight(w, s.x, s.z) + CAM_CLEARANCE ||
+            WorldInsideBuilding(w, s) != indoors) {
+            dist = t - want / (float)STEPS;         /* fermati un passo prima */
             break;
         }
     }

@@ -70,6 +70,7 @@
 #define CAM_CLEARANCE  0.45f            /* stacco minimo dal terreno */
 #define CAM_SHOULDER   0.45f            /* scostamento a destra: libera il mirino */
 #define CAM_RISE       0.35f            /* la camera guarda da sopra la spalla */
+#define CAM_DIST_INDOOR 2.2f            /* dentro un edificio si sta stretti */
 
 /* --- Modelli animati dei personaggi (opzionali) -------------------------
  * Se il file esiste sostituisce le primitive. La scala non si indovina: viene

@@ -1,4 +1,5 @@
 #include "world.h"
+#include "rlgl.h"
 #include "worldio.h"
 #include "fmath.h"
 #include "raymath.h"
@@ -161,7 +162,7 @@ static const struct { const char *file; float scale; } gExtProp[PROP_COUNT] = {
  * La cella e' l'unita' del kit: qui vale BUILD_CELL metri. */
 static const char *BUILD_FILES[BUILD_PART_COUNT] = {
     [BUILD_WALL]        = "assets/models/town/wall.glb",
-    [BUILD_DOOR]        = "assets/models/town/wall-door.glb",
+    [BUILD_DOOR]        = "assets/models/town/wall-doorway-round.glb",
     [BUILD_WINDOW]      = "assets/models/town/wall-window-small.glb",
     [BUILD_ROOF]        = "assets/models/town/roof-gable.glb",
     [BUILD_FLOOR]       = "assets/models/town/planks.glb",
@@ -546,7 +547,8 @@ static void PlacePart(World *w, BuildPart part, Vector3 origin, float rotDeg,
 /* Casa: 3x2 celle, muri sul perimetro, una porta al centro della facciata,
  * finestre altrove, e un tetto a due falde allungato sulla profondita'.
  * I pezzi del kit stanno sul bordo +X della loro cella: per portarli sugli
- * altri lati si ruota di 90 gradi alla volta. */
+ * altri lati si ruota di 90 gradi alla volta. La porta e' un arco aperto, non
+ * un battente: ci si passa davvero, e da fuori si vede che si puo' entrare. */
 static void DrawHouse(World *w, Vector3 pos, float rotDeg, float s, Color tint)
 {
     const int NX = 3, NZ = 2;
@@ -576,9 +578,15 @@ static void DrawHouse(World *w, Vector3 pos, float rotDeg, float s, Color tint)
     /* Allungandolo in profondita' la falda si appiattisce: si alza il colmo
      * per riportare la pendenza a quella del pezzo originale. */
     Vector3 roofSc = { cell, cell * 1.6f, cell * NZ };
+
+    /* La falda e' un guscio sottile: da sotto se ne vedrebbe attraverso,
+     * perche' le facce interne vengono scartate. Dentro casa serve un
+     * soffitto, quindi per questi tre pezzi lo scarto si spegne. */
+    rlDisableBackfaceCulling();
     for (int ix = 0; ix < NX; ix++)
         PlacePart(w, BUILD_ROOF, pos, rotDeg,
                   (float)ix - (NX - 1) / 2.0f, 1.0f, 0.0f, 0.0f, cell, roofSc, tint);
+    rlEnableBackfaceCulling();
 }
 
 /* Torre: i pezzi del Castle Kit si impilano, uno per unita' di altezza. */
@@ -725,6 +733,96 @@ void WorldDrawWater(const World *w, Vector3 camPos, Color tint, float t)
 /*  INTERAZIONE                                                             */
 /* ------------------------------------------------------------------------ */
 
+/* --- Collisione degli edifici -------------------------------------------
+ * Una casa non e' un cilindro pieno: e' quattro muri con un vano di porta. Le
+ * misure vengono dalla stessa ricetta che la disegna (DrawHouse): il pannello
+ * del kit sta a 0,45 celle dal centro della sua cella, quindi su una pianta
+ * 3x2 i muri cadono a +-1,45 celle in X e +-0,95 in Z.
+ *
+ * Vale solo quando i pezzi ci sono: senza modelli la casa resta la scatola
+ * procedurale, e una scatola piena si aggira, non si attraversa. */
+#define HOUSE_HX      1.45f    /* semipianta in celle, asse X */
+#define HOUSE_HZ      0.95f    /* semipianta in celle, asse Z */
+#define HOUSE_WALL_T  0.15f    /* mezzo spessore del muro, in celle */
+#define HOUSE_DOOR_H  0.36f    /* mezza luce della porta, in celle */
+
+/* Porta il punto nel sistema della casa: l'inverso della rotazione che
+ * PlacePart() applica ai pezzi. */
+static void ToHouseLocal(const Prop *p, float wx, float wz, float *lx, float *lz)
+{
+    float a = p->rot * DEG2RAD, c = cosf(a), s = sinf(a);
+    float dx = wx - p->pos.x, dz = wz - p->pos.z;
+    *lx = dx * c - dz * s;
+    *lz = dx * s + dz * c;
+}
+
+/* Spinge fuori da un rettangolo allineato agli assi, in coordinate locali:
+ * si esce dal lato in cui si e' entrati meno. */
+static void PushOutRect(float *lx, float *lz, float radius,
+                        float cx, float cz, float hx, float hz)
+{
+    float px = hx + radius - fabsf(*lx - cx);
+    float pz = hz + radius - fabsf(*lz - cz);
+    if (px <= 0.0f || pz <= 0.0f) return;          /* fuori dal rettangolo */
+    if (px < pz) *lx += (*lx < cx) ? -px : px;
+    else         *lz += (*lz < cz) ? -pz : pz;
+}
+
+static void ResolveHouse(const Prop *p, Vector3 *pos, float radius)
+{
+    float cell = BUILD_CELL * p->scale;
+    float hx = HOUSE_HX * cell, hz = HOUSE_HZ * cell;
+    float t  = HOUSE_WALL_T * cell, dh = HOUSE_DOOR_H * cell;
+
+    float lx, lz;
+    ToHouseLocal(p, pos->x, pos->z, &lx, &lz);
+
+    /* Fuori dall'ingombro con un margine: niente da fare. */
+    if (fabsf(lx) > hx + t + radius || fabsf(lz) > hz + t + radius) return;
+
+    float lx0 = lx, lz0 = lz;
+
+    PushOutRect(&lx, &lz, radius,  hx, 0.0f, t, hz + t);   /* muro est   */
+    PushOutRect(&lx, &lz, radius, -hx, 0.0f, t, hz + t);   /* muro ovest */
+    PushOutRect(&lx, &lz, radius, 0.0f,  hz, hx, t);       /* muro nord  */
+    /* Facciata a sud, spezzata in due dal vano della porta. */
+    float side = (hx - dh) * 0.5f;
+    PushOutRect(&lx, &lz, radius,  dh + side, -hz, side, t);
+    PushOutRect(&lx, &lz, radius, -dh - side, -hz, side, t);
+
+    if (lx == lx0 && lz == lz0) return;
+
+    /* Rimette lo spostamento nel sistema del mondo. */
+    float a = p->rot * DEG2RAD, c = cosf(a), s = sinf(a);
+    float dx = lx - lx0, dz = lz - lz0;
+    pos->x += dx * c + dz * s;
+    pos->z += -dx * s + dz * c;
+}
+
+/* Serve alla camera: dentro casa non puo' restare arretrata di sei metri. */
+bool WorldInsideBuilding(const World *w, Vector3 pos)
+{
+    if (!w->hasBuildParts) return false;
+
+    for (int i = 0; i < MAX_LOADED_CHUNKS; i++) {
+        const Chunk *c = &w->chunks[i];
+        if (!c->active) continue;
+        /* le case stanno in pochi chunk: si saltano gli altri */
+        float cxm = (c->cx + 0.5f) * CHUNK_SIZE, czm = (c->cz + 0.5f) * CHUNK_SIZE;
+        if (fabsf(pos.x - cxm) > CHUNK_SIZE || fabsf(pos.z - czm) > CHUNK_SIZE) continue;
+        for (int k = 0; k < c->propCount; k++) {
+            const Prop *p = &c->props[k];
+            if (p->type != PROP_HOUSE) continue;
+            float cell = BUILD_CELL * p->scale;
+            float lx, lz;
+            ToHouseLocal(p, pos.x, pos.z, &lx, &lz);
+            if (fabsf(lx) < (HOUSE_HX - HOUSE_WALL_T) * cell &&
+                fabsf(lz) < (HOUSE_HZ - HOUSE_WALL_T) * cell) return true;
+        }
+    }
+    return false;
+}
+
 void WorldResolveCollision(World *w, Vector3 *pos, float radius)
 {
     for (int i = 0; i < MAX_LOADED_CHUNKS; i++) {
@@ -736,6 +834,14 @@ void WorldResolveCollision(World *w, Vector3 *pos, float radius)
 
         for (int k = 0; k < c->propCount; k++) {
             Prop *p = &c->props[k];
+
+            /* La casa, quando e' fatta di pezzi, si puo' attraversare dalla
+             * porta: la collisione e' sui muri, non su un cerchio. */
+            if (p->type == PROP_HOUSE && w->hasBuildParts) {
+                ResolveHouse(p, pos, radius);
+                continue;
+            }
+
             if (p->radius <= 0.0f) continue;
             float dx = pos->x - p->pos.x, dz = pos->z - p->pos.z;
             float d2 = dx * dx + dz * dz;

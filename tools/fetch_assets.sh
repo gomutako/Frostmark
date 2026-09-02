@@ -227,7 +227,7 @@ MODELS
     # ha lo stesso nome degli altri: cartelle separate.
     fetch_kit fantasy-town-kit "$TMP/town.zip"
     mkdir -p "$ASSETS/models/town/Textures"
-    for f in wall wall-door wall-window-small roof-gable planks; do
+    for f in wall wall-doorway-round wall-window-small roof-gable planks; do
         unzip -p "$TMP/town.zip" "Models/GLB format/$f.glb" > "$ASSETS/models/town/$f.glb"
     done
     unzip -p "$TMP/town.zip" "Models/GLB format/Textures/colormap.png" \

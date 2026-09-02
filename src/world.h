@@ -87,6 +87,9 @@ void    WorldDrawWater(const World *w, Vector3 camPos, Color tint, float t);
 
 /* Spinge fuori 'pos' dai prop solidi vicini (collisione a cerchi). */
 void    WorldResolveCollision(World *w, Vector3 *pos, float radius);
+/* true se il punto e' dentro le mura di una casa: la camera in terza persona
+ * si accorcia, altrimenti resterebbe fuori a inquadrare un muro. */
+bool    WorldInsideBuilding(const World *w, Vector3 pos);
 /* Ritorna il prop raccoglibile piu' vicino (o NULL). */
 Prop   *WorldNearestProp(World *w, Vector3 pos, float maxDist, PropType type);
 /* Punto sicuro (terra emersa) piu' vicino a (x,z). */

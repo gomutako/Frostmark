@@ -201,7 +201,31 @@ lati lo si ruota di 90 gradi alla volta (90 = lato -Z, 180 = -X, 270 = +Z).
 Il pezzo del tetto è un segmento a due falde largo **una** cella: affiancarne
 due lascia una valle in mezzo, quindi se ne allunga uno solo sulla profondità
 (`scale.z = 2`) e si alza il colmo (`scale.y = 1,6`) per non appiattire la
-pendenza.
+pendenza. La falda è un guscio sottile: da dentro se ne vedrebbe attraverso,
+quindi per quei tre pezzi si spegne lo scarto delle facce posteriori — dentro
+casa serve un soffitto.
+
+L'ingresso usa `wall-doorway-round`, un arco **aperto**, non `wall-door`, che è
+un battente chiuso: da fuori si deve vedere che si può entrare.
+
+### Nelle case si entra
+
+La collisione della casa non è più un cerchio pieno ma i suoi quattro muri, con
+il vano della porta lasciato libero (`ResolveHouse()` in `world.c`). Le misure
+vengono dalla stessa ricetta che la disegna, così non possono divergere: i muri
+cadono a ±1,45 celle in X e ±0,95 in Z, e la porta apre ±0,36 celle al centro
+della facciata — 1,87 m contro i 0,90 di raggio del giocatore.
+
+Vale solo quando i pezzi ci sono. Senza modelli la casa resta la scatola
+procedurale, e una scatola piena si aggira: la collisione seguirebbe un
+disegno che non c'è.
+
+In terza persona la camera si accorcia a `CAM_DIST_INDOOR` quando il giocatore
+è dentro, e i campioni lungo il braccio della camera si fermano se cambiano
+lato rispetto ai muri — così non esce dalla casa né entra in quella accanto.
+
+La torre e la cripta restano piene: i pezzi della torre non hanno una porta, e
+la cripta è un modello unico.
 
 I pezzi vengono da due kit diversi — Fantasy Town Kit per le case, Castle Kit
 per la torre — e ognuno porta il suo `Textures/colormap.png`: stanno quindi in
