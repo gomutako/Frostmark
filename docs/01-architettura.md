@@ -68,6 +68,15 @@ falso quasi sempre, quindi niente salto e niente parata. Ci si incolla solo per
 il dislivello che un passo può giustificare (`STEP_DOWN_SLOPE` in `config.h`):
 un salto nel vuoto resta una caduta, con il suo danno.
 
+Il giocatore cammina sulla **superficie che vede**: `WorldIoHeight()` legge la
+quota sui due triangoli del quadrato, con lo stesso taglio che usa
+`BuildChunkMesh()`, non su una superficie bilineare. Le due differiscono di
+pochi centimetri, ma la differenza cambia a ogni quadrato attraversato:
+misurata correndo in diagonale a 9 m/s, 2,3 cm di ampiezza a quasi quattro
+oscillazioni al secondo — un saltellio fine che si sentiva proprio correndo.
+Lungo un asse della griglia le due superfici coincidono, ed è per questo che il
+difetto spariva andando dritti a nord o a est.
+
 Le entità seguono la stessa fisica (`EntityFall()` in `entity.c`), che gira una
 volta per entità a fine aggiornamento, qualunque cosa abbia deciso l'IA: prima
 stava dentro il movimento, e un nemico fermo lasciato a mezz'aria non cadeva

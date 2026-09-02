@@ -458,7 +458,16 @@ float WorldIoHeight(const WorldIo *io, float x, float z)
     float h01 = WorldDecodeHeight(g[(size_t)z1 * io->gridW + x0]);
     float h11 = WorldDecodeHeight(g[(size_t)z1 * io->gridW + x1]);
 
-    return FmLerp(FmLerp(h00, h10, fx), FmLerp(h01, h11, fx), fz);
+    /* La quota si legge sui TRIANGOLI, non su una superficie bilineare: il
+     * terreno che si vede e' fatto di due triangoli per quadrato (vedi
+     * BuildChunkMesh, diagonale da (x1,z0) a (x0,z1)), e una bilineare passa
+     * altrove. La differenza e' di pochi centimetri, ma cambia a ogni quadrato
+     * attraversato: correndo in diagonale a 9 m/s misurava 2,3 cm di ampiezza
+     * a quasi quattro oscillazioni al secondo, ed e' il saltellio che si
+     * sentiva. Camminare sulla superficie che si vede lo toglie alla radice. */
+    if (fx + fz <= 1.0f)
+        return h00 + (h10 - h00) * fx + (h01 - h00) * fz;
+    return h11 + (h01 - h11) * (1.0f - fx) + (h10 - h11) * (1.0f - fz);
 }
 
 Biome WorldIoBiome(const WorldIo *io, float x, float z)
