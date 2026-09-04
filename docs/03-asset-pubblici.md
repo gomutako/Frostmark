@@ -97,15 +97,27 @@ tre decimi di millisecondo.
 Quello che rende inutilizzabile un asset non è quindi il conteggio in sé, ma
 quanto è *fuori scala* — e alcuni lo sono parecchio:
 
-| asset Poly Haven | triangoli | mesh | alfa | si usa? |
+| asset Poly Haven | triangoli | vertici/mesh | alfa | si usa? |
 |---|---|---|---|---|
-| `rock_07` | 14.844 | 1 | opaco | **sì, oggi** |
-| `nettle_plant` | 31.304 | 6 | MASK | serve alfa e multi-mesh |
-| `rock_moss_set_01` | 63.127 | 6 | opaco | serve multi-mesh |
-| `boulder_01` | 66.122 | 1 | opaco | **sì, oggi** |
-| `namaqualand_boulder_02` | 97.964 | 1 | opaco | sì |
-| `fir_sapling` | 433.021 | 3 | opaco | al limite |
-| `fir_tree_01` | **6.982.937** | 3 | BLEND | **no**: 478 MB di sola geometria |
+| `rock_07` | 14.844 | 7.914 | opaco | sì, ma è largo 32 cm |
+| `namaqualand_boulder_04` | 59.066 | 30.165 | opaco | **sì — è quello in uso** |
+| `namaqualand_boulder_02` | 97.964 | 53.437 | opaco | sì |
+| `boulder_01` | 66.122 | **67.042** | opaco | **no**: oltre il tetto dei 16 bit |
+| `nettle_plant` | 31.304 | — | MASK | serve una specie adatta al bioma |
+| `fir_sapling` | 433.021 | — | opaco | è una piantina, non un albero |
+| `fir_tree_01` | **6.982.937** | — | BLEND | **no**: 478 MB di sola geometria |
+
+**Il tetto vero non è il conteggio dei triangoli: è quello dei vertici.** Il
+`Mesh` di raylib 5.5 tiene gli indici in `unsigned short`, quindi oltre **65.535
+vertici per mesh** li tronca. Avvisa con una riga in mezzo a centinaia, e il
+risultato non è un errore ma un difetto visivo: gli indici si avvolgono e
+nascono triangoli che attraversano l'oggetto da parte a parte.
+
+`boulder_01` è la trappola perfetta — 66.122 triangoli sembrano innocui, ma
+sono 67.042 vertici, millecinquecento oltre il limite. `LoadExtProps()` ora
+scarta i modelli oltre il tetto con un avviso esplicito e torna alla primitiva
+procedurale: meglio una sfera onesta di un masso sfregiato. **Quando si sceglie
+un asset si guarda il conteggio dei vertici, non quello dei triangoli.**
 
 L'abete da solo è 59 volte l'intera scena attuale, alla risoluzione di texture
 più bassa. Non è un asset da decimare: ridurlo a qualcosa di usabile sarebbe
@@ -182,17 +194,24 @@ fa da sé):
 |---|---|---|
 | `tree.glb` | l'albero (cilindro + sfera) | 4.61 → 6.5 m |
 | `pine.glb` | il pino (cilindro + cono) | 3.97 → 6.8 m |
-| `rock.glb` | il sasso (sfera schiacciata) | 3.54 → 2.2 m di larghezza |
+| `rock.glb` o `rock.gltf` | il sasso (sfera schiacciata) | 2.2 m di larghezza |
 | `bush.glb` | il cespuglio (sfera) | 2.87 → 1.4 m di larghezza |
 | `herb.glb` | l'erba curativa della quest | 4.50 → 0.9 m |
 | `graveyard/crypt.glb` | la cripta (cubi + colonne) | 5.00 → 5 m |
 
-Le scale valgono per i file che scarica `fetch_assets.sh models`, e **vanno
-rifatte con un altro pacchetto**: `scale` = dimensione voluta / dimensione del
-modello. Le dimensioni si misurano dal `.glb`, ma vanno lette applicando le
-trasformazioni dei nodi, non solo i minimi e massimi degli accessori: un
-pacchetto che scala nel nodo radice farebbe sbagliare il conto di un fattore
-intero.
+**Le scale non si tarano più a mano.** La tabella `gExtProp` in `world.c`
+dichiara *quanto deve essere grande* l'oggetto in metri — 6,5 per l'albero, 2,2
+per il sasso — e `LoadExtProps()` ricava il moltiplicatore dall'ingombro vero
+del modello, con `GetModelBoundingBox()`. Sostituire un asset non richiede
+quindi di ricalcolare niente: il masso Poly Haven da 2,52 m entra a ×0,87, il
+sasso Kenney da 0,62 m a ×3,54, e nel mondo sono grandi uguale.
+
+Prima erano costanti scritte a mano, e un conto sbagliato lì non dava nessun
+avviso: dava un albero alto tre volte tanto.
+
+Il file può essere `.glb` o `.gltf`: i kit spediscono il primo, Poly Haven il
+secondo con il `.bin` e le texture accanto. `LoadExtProps()` prova quello
+dichiarato e poi l'altra estensione.
 
 Casa e torre non sono in questa tabella: non sono modelli singoli ma
 composizioni di pezzi, vedi più sotto.
