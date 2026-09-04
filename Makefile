@@ -59,6 +59,7 @@ ifdef RAYLIB_PATH
 else ifneq ($(wildcard $(RAYLIB_SRC)/raylib.h),)
   # Submodule presente: si linka la statica, ricompilandola se manca.
   CFLAGS_COMMON += -I$(RAYLIB_SRC)
+  RAYLIB_INC    := -I$(RAYLIB_SRC)
   RAYLIB_DEP    := $(RAYLIB_STATIC)
   LDLIBS        := $(RAYLIB_STATIC) $(LDLIBS)
   RAYLIB_GL_LIB := -lGL            # con la statica va linkata a mano
@@ -87,7 +88,7 @@ ifeq ($(OS),Windows_NT)
 endif
 
 .PHONY: all debug run clean dirs raylib raylib-clean mondo mondo-forza \
-        verifica-mondo valida
+        verifica-mondo valida prove
 
 # Sotto WSL si gioca con l'eseguibile Windows - li' il mouse funziona, vedi
 # src/rawmouse.h - quindi "make" costruisce anche quello: altrimenti si
@@ -119,6 +120,35 @@ run: all
 
 valida: all
 	./$(TARGET) --valida
+
+# ---- prove -----------------------------------------------------------------
+# Non c'e' un framework: ogni prova e' un eseguibile che stampa una riga per
+# controllo. Includono il .c che provano, perche' cio' che vale la pena provare
+# e' quasi sempre 'static' - quindi ognuna ha la sua riga di collegamento, e i
+# moduli che include NON vanno anche collegati o si duplicano i simboli.
+#
+# Vanno lanciate dalla radice del repo: caricano gli asset per percorso
+# relativo. Chi esce 77 non ha trovato un contesto OpenGL e viene contata come
+# saltata, non fallita.
+PROVE_DIR := $(BUILD_DIR)/prove
+PROVE_CF  := -std=gnu99 -Wall -Wextra -I$(TOOL_DIR)/prove -I$(SRC_DIR) \
+             -I$(TOOL_DIR) $(RAYLIB_INC) -O0
+
+prove: $(RAYLIB_DEP)
+	@mkdir -p $(PROVE_DIR)
+	$(CC) $(PROVE_CF) $(TOOL_DIR)/prove/scale.c \
+	      $(SRC_DIR)/fmath.c $(SRC_DIR)/light.c $(SRC_DIR)/worldio.c \
+	      $(SRC_DIR)/dataparse.c $(LDFLAGS) $(LDLIBS) -o $(PROVE_DIR)/scale
+	$(CC) $(PROVE_CF) $(TOOL_DIR)/prove/normalmap.c \
+	      $(SRC_DIR)/fmath.c $(LDFLAGS) $(LDLIBS) -o $(PROVE_DIR)/normalmap
+	@ok=1; for t in $(PROVE_DIR)/*; do \
+	    echo "== $$t"; \
+	    $$t; r=$$?; \
+	    if [ $$r = 77 ]; then echo "   (saltata)"; \
+	    elif [ $$r != 0 ]; then ok=0; fi; \
+	  done; \
+	  [ $$ok = 1 ] || { echo "==> PROVE FALLITE"; exit 1; }
+	@echo "==> prove passate"
 
 # ---- baker e mondo cotto ---------------------------------------------------
 # 'baker' e' il file, non un target finto: 'make baker' lo costruisce.
