@@ -143,6 +143,8 @@ prove: $(RAYLIB_DEP)
 	      $(SRC_DIR)/fmath.c $(LDFLAGS) $(LDLIBS) -o $(PROVE_DIR)/normalmap
 	$(CC) $(PROVE_CF) $(TOOL_DIR)/prove/luce.c \
 	      $(SRC_DIR)/fmath.c $(LDFLAGS) $(LDLIBS) -o $(PROVE_DIR)/luce
+	$(CC) $(PROVE_CF) $(TOOL_DIR)/prove/instancing.c \
+	      $(SRC_DIR)/fmath.c $(LDFLAGS) $(LDLIBS) -o $(PROVE_DIR)/instancing
 	@ok=1; for t in $(PROVE_DIR)/*; do \
 	    echo "== $$t"; \
 	    $$t; r=$$?; \
