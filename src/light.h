@@ -30,6 +30,17 @@ bool LightReady(void);
  * voleva instanziare torna a disegnare un oggetto per volta. */
 Shader LightInstShader(void);
 
+/* --- Ritaglio dell'alfa ---------------------------------------------------
+ * Le foglie non sono foglie: sono ritagli su quadrati, e il quadrato va fatto
+ * sparire dove la texture e' trasparente. Nel catalogo Poly Haven OGNI pianta
+ * e' cosi'.
+ *
+ * Raylib non legge 'alphaMode' dal glTF, quindi il motore non puo' sapere
+ * quali materiali vanno ritagliati: lo si deduce dal formato della texture
+ * diffusa. Se ha un canale alfa, quell'alfa e' li' per essere usata. */
+float LightAlphaCutFor(Material m);      /* 0 se il materiale e' opaco */
+void  LightSetAlphaCut(float cut);       /* su entrambi i programmi */
+
 /* Da applicare a ogni materiale che deve ricevere luce: terreno, prop,
  * personaggi. Senza, l'oggetto resta piatto come prima.
  *

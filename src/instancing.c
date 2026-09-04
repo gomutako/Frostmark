@@ -26,6 +26,7 @@ typedef struct {
 
 #define INST_CAP_INIZIALE 256
 
+
 struct InstBatch {
     Mesh     mesh;
     Material mat;
@@ -33,6 +34,8 @@ struct InstBatch {
     InstData *cpu;
     int count, cap;
     int elems;          /* indici da disegnare, 0 se la mesh non e' indicizzata */
+    int locAlphaCut;    /* -1 se lo shader non ha l'uniform */
+    float alphaCut;     /* 0 = niente ritaglio */
 };
 
 /* Aggancia il buffer d'istanza al VAO del lotto. Si rifa' identica quando il
@@ -64,6 +67,9 @@ InstBatch *InstCreate(Mesh mesh, Material mat)
     b->mat = mat;
     b->mat.shader = sh;
     b->elems = (mesh.indices != NULL) ? mesh.triangleCount * 3 : 0;
+
+    b->locAlphaCut = GetShaderLocation(sh, "alphaCut");
+    b->alphaCut = LightAlphaCutFor(b->mat);
 
     b->cap = INST_CAP_INIZIALE;
     b->cpu = (InstData *)MemAlloc((unsigned int)(b->cap * (int)sizeof(InstData)));
@@ -206,10 +212,21 @@ void InstFlush(InstBatch *b)
                      SHADER_UNIFORM_INT, 1);
     }
 
+    if (b->locAlphaCut != -1)
+        rlSetUniform(b->locAlphaCut, &b->alphaCut, SHADER_UNIFORM_FLOAT, 1);
+
     rlEnableVertexArray(b->vao);
     if (b->elems > 0) rlDrawVertexArrayElementsInstanced(0, b->elems, 0, b->count);
     else              rlDrawVertexArrayInstanced(0, b->mesh.vertexCount, b->count);
     rlDisableVertexArray();
+
+    /* Si rimette a zero prima di uscire: il prossimo lotto potrebbe essere
+     * opaco, e uno shader che si porta dietro una soglia altrui buca oggetti
+     * che non c'entrano niente. */
+    if (b->locAlphaCut != -1 && b->alphaCut != 0.0f) {
+        float spento = 0.0f;
+        rlSetUniform(b->locAlphaCut, &spento, SHADER_UNIFORM_FLOAT, 1);
+    }
 
     for (int k = 0; k < (int)(sizeof mappe / sizeof *mappe); k++) {
         int i = mappe[k];

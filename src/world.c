@@ -705,8 +705,18 @@ static void DrawProp(World *w, const Prop *p, Color tint, bool lod)
     if (w->hasExtProp[p->type]) {
         if (p->taken) return;
         float k = s * gExtProp[p->type].scale;
+
+        /* Ripiego non instanziato - si arriva qui solo se scene_inst.vs manca
+         * o un lotto non si e' creato. La soglia dell'alfa va messa a mano:
+         * chi instanzia ce l'ha per lotto, qui no. Senza, il fogliame
+         * tornerebbe a quadrati opachi proprio nella modalita' degradata. */
+        float cut = LightAlphaCutFor(w->extProp[p->type].materials[0]);
+        if (cut > 0.0f) LightSetAlphaCut(cut);
+
         DrawModelEx(w->extProp[p->type], pos, Y, p->rot, (Vector3){ k, k, k },
                     Shade(WHITE, tint));
+
+        if (cut > 0.0f) LightSetAlphaCut(0.0f);
         return;
     }
 

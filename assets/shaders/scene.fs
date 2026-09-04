@@ -13,6 +13,13 @@ uniform sampler2D texture0;   /* albedo   - raylib: MATERIAL_MAP_DIFFUSE */
 uniform sampler2D texture2;   /* normali  - raylib: MATERIAL_MAP_NORMAL  */
 uniform vec4 colDiffuse;
 
+/* Soglia sotto la quale il frammento sparisce. 0 spegne il ritaglio, ed e' il
+ * valore di riposo: la stragrande maggioranza delle superfici e' opaca e non
+ * deve pagare ne' il confronto ne' il 'discard', che su molte schede spegne il
+ * test di profondita' anticipato. Chi ne ha bisogno lo accende per il suo
+ * gruppo - vedi instancing.c. */
+uniform float alphaCut;
+
 uniform vec3  lightDir;      /* direzione VERSO il sole, normalizzata */
 uniform float sunAmount;     /* 1 a mezzogiorno, 0 di notte            */
 uniform int   depthOnly;     /* 1 durante il passaggio d'ombra         */
@@ -118,9 +125,16 @@ float ShadowFactor(vec3 n)
 
 void main()
 {
-    if (depthOnly == 1) { finalColor = vec4(1.0); return; }
-
     vec4 albedo = texture(texture0, fragTexCoord) * colDiffuse * fragColor;
+
+    /* Il ritaglio va PRIMA dell'uscita anticipata del passaggio d'ombra: le
+     * foglie sono ritagli su quadrati, e un frammento buttato via qui non
+     * scrive profondita'. Senza, l'ombra di una fronda sarebbe un rettangolo.
+     * Costa una lettura di texture anche nel passaggio di profondita', ed e'
+     * il prezzo obbligato per avere ombre che somiglino alla pianta. */
+    if (alphaCut > 0.0 && albedo.a < alphaCut) discard;
+
+    if (depthOnly == 1) { finalColor = vec4(1.0); return; }
 
     vec3  n    = SurfaceNormal();
     float diff = max(dot(n, lightDir), 0.0);

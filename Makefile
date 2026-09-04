@@ -146,6 +146,8 @@ prove: $(RAYLIB_DEP)
 	      $(SRC_DIR)/fmath.c $(LDFLAGS) $(LDLIBS) -o $(PROVE_DIR)/luce
 	$(CC) $(PROVE_CF) $(TOOL_DIR)/prove/instancing.c \
 	      $(SRC_DIR)/fmath.c $(LDFLAGS) $(LDLIBS) -o $(PROVE_DIR)/instancing
+	$(CC) $(PROVE_CF) $(TOOL_DIR)/prove/alfa.c \
+	      $(SRC_DIR)/fmath.c $(LDFLAGS) $(LDLIBS) -o $(PROVE_DIR)/alfa
 	@ok=1; for t in $(PROVE_DIR)/*; do \
 	    echo "== $$t"; \
 	    $$t; r=$$?; \

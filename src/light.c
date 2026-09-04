@@ -47,7 +47,7 @@ static int locLightDir[PROG_COUNT], locSunAmount[PROG_COUNT];
 static int locDepthOnly[PROG_COUNT], locShadowOn[PROG_COUNT], locShadowRes[PROG_COUNT];
 static int locLightVP[PROG_COUNT][SHADOW_CASCADES];
 static int locShadowMap[PROG_COUNT][SHADOW_CASCADES];
-static int locViewPos[PROG_COUNT], locSplit[PROG_COUNT];
+static int locViewPos[PROG_COUNT], locSplit[PROG_COUNT], locAlphaCut[PROG_COUNT];
 
 static Vector3 gSunDir  = { 0.0f, 1.0f, 0.0f };
 static float   gSunAmt  = 1.0f;
@@ -106,6 +106,7 @@ bool LightInit(void)
         locShadowMap[p][1] = GetShaderLocation(gProg[p], "shadowMap1");
         locViewPos[p]      = GetShaderLocation(gProg[p], "viewPos");
         locSplit[p]        = GetShaderLocation(gProg[p], "splitDist");
+        locAlphaCut[p]     = GetShaderLocation(gProg[p], "alphaCut");
     }
 
     for (int i = 0; i < SHADOW_CASCADES; i++) gMap[i] = LoadDepthFbo(SHADOW_RES, SHADOW_RES);
@@ -140,6 +141,43 @@ bool  LightReady(void)              { return gReady; }
 /* Il programma per il disegno a istanze. 'id' vale 0 se non e' stato caricato,
  * e allora chi voleva instanziare disegna come prima. */
 Shader LightInstShader(void)        { return gProg[PROG_ISTANZE]; }
+
+/* 0,5 e' l'alphaCutoff predefinito di glTF. */
+#define ALPHA_CUT 0.5f
+
+float LightAlphaCutFor(Material m)
+{
+    /* Una texture opaca salvata in RGBA accende il ritaglio senza motivo: non
+     * si vede niente di diverso, perche' con alfa a 255 non si scarta nulla,
+     * si paga solo il confronto. E' il verso giusto in cui sbagliare. */
+    switch (m.maps[MATERIAL_MAP_DIFFUSE].texture.format) {
+        case PIXELFORMAT_UNCOMPRESSED_GRAY_ALPHA:
+        case PIXELFORMAT_UNCOMPRESSED_R5G5B5A1:
+        case PIXELFORMAT_UNCOMPRESSED_R4G4B4A4:
+        case PIXELFORMAT_UNCOMPRESSED_R8G8B8A8:
+        case PIXELFORMAT_UNCOMPRESSED_R16G16B16A16:
+        case PIXELFORMAT_UNCOMPRESSED_R32G32B32A32:
+        case PIXELFORMAT_COMPRESSED_DXT1_RGBA:
+        case PIXELFORMAT_COMPRESSED_DXT3_RGBA:
+        case PIXELFORMAT_COMPRESSED_DXT5_RGBA:
+        case PIXELFORMAT_COMPRESSED_ETC2_EAC_RGBA:
+        case PIXELFORMAT_COMPRESSED_PVRT_RGBA:
+        case PIXELFORMAT_COMPRESSED_ASTC_4x4_RGBA:
+        case PIXELFORMAT_COMPRESSED_ASTC_8x8_RGBA: return ALPHA_CUT;
+        default: return 0.0f;
+    }
+}
+
+/* Serve al percorso NON instanziato - quello che resta se scene_inst.vs
+ * manca. Chi instanzia imposta la soglia da se', sul suo programma, perche'
+ * ce l'ha per lotto. */
+void LightSetAlphaCut(float cut)
+{
+    if (!gReady) return;
+    for (int p = 0; p < PROG_COUNT; p++)
+        if (gProg[p].id != 0)
+            SetShaderValue(gProg[p], locAlphaCut[p], &cut, SHADER_UNIFORM_FLOAT);
+}
 int   LightCascades(void)           { return SHADOW_CASCADES; }
 float LightShadowRadius(int cascade) { return cascade == 0 ? SHADOW_NEAR_R : SHADOW_FAR_R; }
 
