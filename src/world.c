@@ -196,6 +196,13 @@ static void LoadBuildParts(World *w)
             SetTextureFilter(w->buildPart[i].materials[k].maps[MATERIAL_MAP_DIFFUSE].texture,
                              TEXTURE_FILTER_POINT);
         LightApplyToModel(&w->buildPart[i]);
+
+        /* I pezzi del kit hanno una mesh sola. Se ne avessero piu' d'una il
+         * lotto non si crea e si torna al disegno normale: meglio lento che
+         * mezzo edificio. */
+        if (w->buildPart[i].meshCount == 1)
+            w->partBatch[i] = InstCreate(w->buildPart[i].meshes[0],
+                                         w->buildPart[i].materials[0]);
     }
     w->hasBuildParts = true;
     TraceLog(LOG_INFO, "WORLD: %d pezzi per gli edifici modulari", BUILD_PART_COUNT);
@@ -439,7 +446,11 @@ void WorldUnload(World *w)
         if (w->hasExtProp[t]) { UnloadModel(w->extProp[t]); w->hasExtProp[t] = false; }
     }
     if (w->hasBuildParts) {
-        for (int i = 0; i < BUILD_PART_COUNT; i++) UnloadModel(w->buildPart[i]);
+        for (int i = 0; i < BUILD_PART_COUNT; i++) {
+            /* Prima il lotto, poi il modello: il lotto punta ai suoi VBO. */
+            if (w->partBatch[i] != NULL) { InstFree(w->partBatch[i]); w->partBatch[i] = NULL; }
+            UnloadModel(w->buildPart[i]);
+        }
         w->hasBuildParts = false;
     }
 
@@ -569,8 +580,13 @@ static void PlacePart(World *w, BuildPart part, Vector3 origin, float rotDeg,
     Vector3 p = { origin.x + wx * c + wz * sn,
                   origin.y + ly * cell,
                   origin.z - wx * sn + wz * c };
-    DrawModelEx(w->buildPart[part], p, (Vector3){ 0.0f, 1.0f, 0.0f },
-                rotDeg + localRot, scale, tint);
+
+    /* Se il pezzo ha un lotto si accoda e basta: il disegno avviene alla fine
+     * del passaggio, tutte le istanze insieme. Altrimenti si disegna qui, come
+     * si e' sempre fatto. */
+    if (w->partBatch[part] != NULL) InstAdd(w->partBatch[part], p, rotDeg + localRot, scale);
+    else DrawModelEx(w->buildPart[part], p, (Vector3){ 0.0f, 1.0f, 0.0f },
+                     rotDeg + localRot, scale, tint);
 }
 
 /* Casa: 3x2 celle, muri sul perimetro, una porta al centro della facciata,
@@ -658,6 +674,11 @@ static void DrawHouse(World *w, const Prop *p, Vector3 pos, float rotDeg,
      * quindi per questi pezzi lo scarto delle facce posteriori si spegne -
      * dentro casa serve un soffitto. */
     Vector3 roofSc = { cell, cell * 1.6f, cell * sh.nz };
+    /* Lo scarto delle facce posteriori si spegne qui SOLO per il ripiego senza
+     * lotti, dove PlacePart disegna davvero. Quando i lotti ci sono, il disegno
+     * avviene a fine passaggio e questa coppia non lo tocca: ci pensa
+     * PartBatchFlush(), che svuota il tetto per conto suo. Dimenticarlo la'
+     * darebbe soffitti trasparenti, e da fuori non si vedrebbe. */
     rlDisableBackfaceCulling();
     for (int ix = 0; ix < sh.nx; ix++)
         PlacePart(w, BUILD_ROOF, pos, rotDeg, (float)ix - (sh.nx - 1) / 2.0f,
@@ -778,11 +799,28 @@ static void PropBatchBegin(World *w, Color tint)
          * tint, ed e' il conto che faceva DrawProp per i modelli esterni. */
         InstTint(w->propBatch[t], tint);
     }
+    for (int i = 0; i < BUILD_PART_COUNT; i++) {
+        if (w->partBatch[i] == NULL) continue;
+        InstBegin(w->partBatch[i]);
+        InstTint(w->partBatch[i], tint);
+    }
 }
 
 static void PropBatchFlush(World *w)
 {
     for (int t = 0; t < PROP_COUNT; t++) InstFlush(w->propBatch[t]);
+
+    /* I pezzi d'edificio. Il tetto per ultimo e da solo: e' un guscio sottile,
+     * e da dentro casa se ne vedrebbe attraverso, quindi va disegnato con lo
+     * scarto delle facce posteriori spento. */
+    for (int i = 0; i < BUILD_PART_COUNT; i++)
+        if (i != BUILD_ROOF) InstFlush(w->partBatch[i]);
+
+    if (w->partBatch[BUILD_ROOF] != NULL) {
+        rlDisableBackfaceCulling();
+        InstFlush(w->partBatch[BUILD_ROOF]);
+        rlEnableBackfaceCulling();
+    }
 }
 
 /* Accoda il prop al suo lotto. Torna false se il lotto non c'e' - modello
@@ -836,6 +874,17 @@ void WorldDrawShadowCasters(World *w, Vector3 center, float radius)
 {
     float r2 = radius * radius;
 
+    /* I lotti vanno svuotati e riempiti anche QUI, e non e' un dettaglio: i
+     * pezzi d'edificio passano da PlacePart, che accoda invece di disegnare.
+     * Senza questo giro le case accodate nel passaggio d'ombra verrebbero
+     * buttate via dall'InstBegin del passaggio principale, che gira dopo - e
+     * gli edifici smetterebbero di proiettare ombra. Misurato mentre
+     * succedeva: le chiamate del passaggio d'ombra erano crollate da 399 a
+     * 126, e sembrava un guadagno.
+     *
+     * Nel passaggio d'ombra la tinta non serve, si scrive solo profondita'. */
+    PropBatchBegin(w, WHITE);
+
     for (int i = 0; i < MAX_LOADED_CHUNKS; i++) {
         Chunk *c = &w->chunks[i];
         if (!c->active) continue;
@@ -859,6 +908,8 @@ void WorldDrawShadowCasters(World *w, Vector3 center, float radius)
             DrawProp(w, p, WHITE, false);
         }
     }
+
+    PropBatchFlush(w);
 }
 
 void WorldDrawWater(const World *w, Vector3 camPos, Color tint, float t)

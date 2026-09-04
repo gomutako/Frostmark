@@ -64,6 +64,9 @@ typedef struct {
      * non esistono come modello unico nei kit CC0, si compongono. */
     Model  buildPart[BUILD_PART_COUNT];
     bool   hasBuildParts;
+    /* Un lotto per tipo di pezzo: una casa bassa costa 19 chiamate, una alta
+     * 45, e i tipi di pezzo sono dieci. NULL vuol dire disegno normale. */
+    InstBatch *partBatch[BUILD_PART_COUNT];
 } World;
 
 /* Carica il mondo cotto da 'dir' e prepara le risorse grafiche. false se il
