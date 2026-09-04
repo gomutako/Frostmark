@@ -141,6 +141,8 @@ prove: $(RAYLIB_DEP)
 	      $(SRC_DIR)/dataparse.c $(LDFLAGS) $(LDLIBS) -o $(PROVE_DIR)/scale
 	$(CC) $(PROVE_CF) $(TOOL_DIR)/prove/normalmap.c \
 	      $(SRC_DIR)/fmath.c $(LDFLAGS) $(LDLIBS) -o $(PROVE_DIR)/normalmap
+	$(CC) $(PROVE_CF) $(TOOL_DIR)/prove/luce.c \
+	      $(SRC_DIR)/fmath.c $(LDFLAGS) $(LDLIBS) -o $(PROVE_DIR)/luce
 	@ok=1; for t in $(PROVE_DIR)/*; do \
 	    echo "== $$t"; \
 	    $$t; r=$$?; \

@@ -20,13 +20,34 @@
 #define SHADOW_DEPTH      180.0f
 #define SHADOW_CASCADES   2
 
-static Shader   gShader;
+/* DUE programmi, non uno. Il disegno a istanze non puo' condividere il vertex
+ * shader con quello normale: DrawMesh() manda la matrice del modello come
+ * uniform, il disegno a istanze la manda come attributo di vertice, e uno
+ * stesso shader non puo' avere la stessa cosa in tutti e due i modi. Il
+ * fragment invece e' lo stesso file: la luce vive in un posto solo.
+ *
+ * Essendo due glProgram distinti, hanno LOCATION DIVERSE per la stessa
+ * uniform. Da qui gli insiemi paralleli: impostare un valore sulla location
+ * dell'altro programma non da' nessun errore, scrive solo nel posto sbagliato,
+ * ed e' il tipo di guaio che si scopre guardando una scena storta senza
+ * capire perche'. */
+#define PROG_NORMALE  0
+#define PROG_ISTANZE  1
+#define PROG_COUNT    2
+
+static Shader   gProg[PROG_COUNT];
 static bool     gReady;
 static RenderTexture2D gMap[SHADOW_CASCADES];
 
-static int locLightDir, locSunAmount, locDepthOnly, locShadowOn, locShadowRes;
-static int locLightVP[SHADOW_CASCADES], locShadowMap[SHADOW_CASCADES];
-static int locViewPos, locSplit;
+/* gShader e' il programma normale: l'alias tiene leggibile il resto del file,
+ * che di programmi ne conosce uno solo. */
+#define gShader gProg[PROG_NORMALE]
+
+static int locLightDir[PROG_COUNT], locSunAmount[PROG_COUNT];
+static int locDepthOnly[PROG_COUNT], locShadowOn[PROG_COUNT], locShadowRes[PROG_COUNT];
+static int locLightVP[PROG_COUNT][SHADOW_CASCADES];
+static int locShadowMap[PROG_COUNT][SHADOW_CASCADES];
+static int locViewPos[PROG_COUNT], locSplit[PROG_COUNT];
 
 static Vector3 gSunDir  = { 0.0f, 1.0f, 0.0f };
 static float   gSunAmt  = 1.0f;
@@ -65,23 +86,35 @@ bool LightInit(void)
     gShader = LoadShader("assets/shaders/scene.vs", "assets/shaders/scene.fs");
     if (gShader.id == 0) { TraceLog(LOG_WARNING, "LUCE: shader non compilato"); return false; }
 
-    locLightDir  = GetShaderLocation(gShader, "lightDir");
-    locSunAmount = GetShaderLocation(gShader, "sunAmount");
-    locDepthOnly = GetShaderLocation(gShader, "depthOnly");
-    locShadowOn  = GetShaderLocation(gShader, "shadowOn");
-    locShadowRes = GetShaderLocation(gShader, "shadowRes");
-    locLightVP[0]   = GetShaderLocation(gShader, "lightVP0");
-    locLightVP[1]   = GetShaderLocation(gShader, "lightVP1");
-    locShadowMap[0] = GetShaderLocation(gShader, "shadowMap0");
-    locShadowMap[1] = GetShaderLocation(gShader, "shadowMap1");
-    locViewPos      = GetShaderLocation(gShader, "viewPos");
-    locSplit        = GetShaderLocation(gShader, "splitDist");
+    /* Il secondo programma: vertex diverso, STESSO fragment. Se il file manca
+     * resta a zero, LightInstShader() lo dice a chi lo chiede, e quello
+     * disegna come prima - l'assenza di un file non e' un errore. */
+    if (FileExists("assets/shaders/scene_inst.vs"))
+        gProg[PROG_ISTANZE] = LoadShader("assets/shaders/scene_inst.vs",
+                                         "assets/shaders/scene.fs");
+
+    for (int p = 0; p < PROG_COUNT; p++) {
+        if (gProg[p].id == 0) continue;
+        locLightDir[p]     = GetShaderLocation(gProg[p], "lightDir");
+        locSunAmount[p]    = GetShaderLocation(gProg[p], "sunAmount");
+        locDepthOnly[p]    = GetShaderLocation(gProg[p], "depthOnly");
+        locShadowOn[p]     = GetShaderLocation(gProg[p], "shadowOn");
+        locShadowRes[p]    = GetShaderLocation(gProg[p], "shadowRes");
+        locLightVP[p][0]   = GetShaderLocation(gProg[p], "lightVP0");
+        locLightVP[p][1]   = GetShaderLocation(gProg[p], "lightVP1");
+        locShadowMap[p][0] = GetShaderLocation(gProg[p], "shadowMap0");
+        locShadowMap[p][1] = GetShaderLocation(gProg[p], "shadowMap1");
+        locViewPos[p]      = GetShaderLocation(gProg[p], "viewPos");
+        locSplit[p]        = GetShaderLocation(gProg[p], "splitDist");
+    }
 
     for (int i = 0; i < SHADOW_CASCADES; i++) gMap[i] = LoadDepthFbo(SHADOW_RES, SHADOW_RES);
     gReady = true;
 
     int res = SHADOW_RES;
-    SetShaderValue(gShader, locShadowRes, &res, SHADER_UNIFORM_INT);
+    for (int p = 0; p < PROG_COUNT; p++)
+        if (gProg[p].id != 0)
+            SetShaderValue(gProg[p], locShadowRes[p], &res, SHADER_UNIFORM_INT);
     TraceLog(LOG_INFO, "LUCE: sole e ombre attive, due mappe %dx%d: "
                        "vicina %.0f m (%.1f cm/texel), lontana %.0f m (%.1f cm/texel)",
              SHADOW_RES, SHADOW_RES, SHADOW_NEAR_R * 2.0f,
@@ -97,11 +130,16 @@ void LightUnload(void)
         if (gMap[i].depth.id > 0) rlUnloadTexture(gMap[i].depth.id);
         if (gMap[i].id > 0)       rlUnloadFramebuffer(gMap[i].id);
     }
-    UnloadShader(gShader);
+    for (int p = 0; p < PROG_COUNT; p++)
+        if (gProg[p].id != 0) UnloadShader(gProg[p]);
     gReady = false;
 }
 
 bool  LightReady(void)              { return gReady; }
+
+/* Il programma per il disegno a istanze. 'id' vale 0 se non e' stato caricato,
+ * e allora chi voleva instanziare disegna come prima. */
+Shader LightInstShader(void)        { return gProg[PROG_ISTANZE]; }
 int   LightCascades(void)           { return SHADOW_CASCADES; }
 float LightShadowRadius(int cascade) { return cascade == 0 ? SHADOW_NEAR_R : SHADOW_FAR_R; }
 
@@ -319,8 +357,13 @@ void LightShadowBegin(Vector3 base, int cascade)
     BeginMode3D(lightCam);
     gLightVP[cascade] = MatrixMultiply(rlGetMatrixModelview(), rlGetMatrixProjection());
 
+    /* Su ENTRAMBI i programmi: nel passaggio d'ombra si disegna sia con
+     * l'uno sia con l'altro, e chi restasse a zero scriverebbe colore invece
+     * di sola profondita'. */
     int one = 1;
-    SetShaderValue(gShader, locDepthOnly, &one, SHADER_UNIFORM_INT);
+    for (int p = 0; p < PROG_COUNT; p++)
+        if (gProg[p].id != 0)
+            SetShaderValue(gProg[p], locDepthOnly[p], &one, SHADER_UNIFORM_INT);
 }
 
 void LightShadowEnd(void)
@@ -331,7 +374,9 @@ void LightShadowEnd(void)
     EndTextureMode();
 
     int zero = 0;
-    SetShaderValue(gShader, locDepthOnly, &zero, SHADER_UNIFORM_INT);
+    for (int p = 0; p < PROG_COUNT; p++)
+        if (gProg[p].id != 0)
+            SetShaderValue(gProg[p], locDepthOnly[p], &zero, SHADER_UNIFORM_INT);
 }
 
 void LightFrame(Camera3D cam)
@@ -339,24 +384,31 @@ void LightFrame(Camera3D cam)
     if (!gReady) return;
     (void)cam;
 
-    SetShaderValue(gShader, locLightDir,  &gSunDir, SHADER_UNIFORM_VEC3);
-    SetShaderValue(gShader, locSunAmount, &gSunAmt, SHADER_UNIFORM_FLOAT);
-    SetShaderValue(gShader, locViewPos,   &cam.position, SHADER_UNIFORM_VEC3);
     float split = SHADOW_SPLIT;
-    SetShaderValue(gShader, locSplit, &split, SHADER_UNIFORM_FLOAT);
-
-    for (int i = 0; i < SHADOW_CASCADES; i++)
-        SetShaderValueMatrix(gShader, locLightVP[i], gLightVP[i]);
-
-    int on = (gMap[0].depth.id > 0) ? 1 : 0;
-    SetShaderValue(gShader, locShadowOn, &on, SHADER_UNIFORM_INT);
+    int   on    = (gMap[0].depth.id > 0) ? 1 : 0;
 
     /* Le mappe vivono in slot alti: i bassi servono alle texture del
-     * materiale, e raylib li riassegna a ogni DrawMesh. */
+     * materiale, e raylib li riassegna a ogni DrawMesh. Le texture si legano
+     * una volta sola - lo slot e' stato globale, non del programma - ma il
+     * NUMERO dello slot va detto a ciascun programma, sulla sua location. */
     for (int i = 0; i < SHADOW_CASCADES; i++) {
         rlActiveTextureSlot(10 + i);
         rlEnableTexture(gMap[i].depth.id);
-        int slot = 10 + i;
-        SetShaderValue(gShader, locShadowMap[i], &slot, SHADER_UNIFORM_INT);
+    }
+
+    for (int p = 0; p < PROG_COUNT; p++) {
+        if (gProg[p].id == 0) continue;
+
+        SetShaderValue(gProg[p], locLightDir[p],  &gSunDir, SHADER_UNIFORM_VEC3);
+        SetShaderValue(gProg[p], locSunAmount[p], &gSunAmt, SHADER_UNIFORM_FLOAT);
+        SetShaderValue(gProg[p], locViewPos[p],   &cam.position, SHADER_UNIFORM_VEC3);
+        SetShaderValue(gProg[p], locSplit[p],     &split, SHADER_UNIFORM_FLOAT);
+        SetShaderValue(gProg[p], locShadowOn[p],  &on, SHADER_UNIFORM_INT);
+
+        for (int i = 0; i < SHADOW_CASCADES; i++) {
+            SetShaderValueMatrix(gProg[p], locLightVP[p][i], gLightVP[i]);
+            int slot = 10 + i;
+            SetShaderValue(gProg[p], locShadowMap[p][i], &slot, SHADER_UNIFORM_INT);
+        }
     }
 }

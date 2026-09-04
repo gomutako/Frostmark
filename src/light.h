@@ -24,6 +24,12 @@ bool LightInit(void);
 void LightUnload(void);
 bool LightReady(void);
 
+/* Il programma per il disegno a istanze: stesso fragment di quello normale,
+ * vertex shader che prende la trasformazione per istanza invece che per
+ * disegno. 'id' vale 0 se assets/shaders/scene_inst.vs manca, e allora chi
+ * voleva instanziare torna a disegnare un oggetto per volta. */
+Shader LightInstShader(void);
+
 /* Da applicare a ogni materiale che deve ricevere luce: terreno, prop,
  * personaggi. Senza, l'oggetto resta piatto come prima.
  *
