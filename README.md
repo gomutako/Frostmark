@@ -346,6 +346,9 @@ stata abbandonata e cosa si è guadagnato.
   esterne** prodotte con QGIS/GDAL, Blender o GIMP (ora si passano al baker)
 - `docs/03-asset-pubblici.md` — dove prendere asset CC0 e come innestarli
 - `docs/04-esercizi.md` — 12 esercizi progressivi, dal più semplice al più tosto
+- `docs/05-piano-dati-esterni-e-motore.md` — il piano che ha portato al mondo cotto
+- **`docs/06-stato-e-prossimi-passi.md` — dove siamo arrivati e cosa resta
+  aperto. Se riprendi il lavoro dopo una pausa, comincia da qui.**
 
 ---
 
