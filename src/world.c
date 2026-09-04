@@ -905,7 +905,8 @@ void WorldDrawShadowCasters(World *w, Vector3 center, float radius)
             if (p->type == PROP_HERB || p->type == PROP_BUSH) continue;
             float dx = p->pos.x - center.x, dz = p->pos.z - center.z;
             if (dx * dx + dz * dz > r2) continue;
-            DrawProp(w, p, WHITE, false);
+
+            if (!PropBatchAdd(w, p)) DrawProp(w, p, WHITE, false);
         }
     }
 
