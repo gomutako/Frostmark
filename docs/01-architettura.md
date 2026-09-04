@@ -170,6 +170,87 @@ le tangenti. Un personaggio animato con una normal map avrà quindi tangenti
 ferme alla posa di riposo. Sui personaggi attuali, che una normal map non ce
 l'hanno, non si vede; va risolto se ne arriverà uno che ce l'ha.
 
+### Instancing
+
+Prima i prop si disegnavano uno per volta: una `DrawModelEx()` per albero, per
+tre passaggi — quello principale e le due cascate d'ombra. Misurato su un
+percorso di 75 secondi, a visuale rotante: **~4,4 µs per chiamata** nel
+passaggio principale, con mesh da un centinaio di triangoli. Non erano i
+triangoli, erano le chiamate.
+
+Ora `src/instancing.c` tiene un **lotto** per coppia (mesh, materiale). Il ciclo
+di culling non è cambiato: dove chiamava `DrawProp()` ora chiama `InstAdd()`, e
+a fine passaggio un `InstFlush()` disegna tutto insieme.
+
+I numeri, stesso percorso:
+
+| | prima | dopo |
+|---|---|---|
+| chiamate di disegno, picco | 1.766 | **144** |
+| passaggio principale, peggiore | 6,0 ms | **2,0 ms** |
+| chiamate nel passaggio d'ombra | 399 | **63** |
+| scena, peggiore | 12,1 ms | **~6,7 ms** |
+
+Quattro cose che non si ricostruiscono a memoria:
+
+- **Il dato d'istanza è di 32 byte, non 100.** La soluzione ovvia manda una
+  `mat4` per il modello più una `mat3` per le normali. Qui non serve: in questo
+  gioco non esistono rotazioni libere, ogni prop è posizione, imbardata e scala.
+  Il vertex shader ricostruisce entrambe le matrici da `vec4(pos, sin)` e
+  `vec4(scala, cos)`. Seno e coseno si calcolano sulla CPU, una volta per
+  istanza invece che una per vertice.
+- **Il VAO è del lotto, non della mesh**, e non è pignoleria.
+  `DrawMeshInstanced()` di raylib attacca gli attributi d'istanza al VAO della
+  mesh e alla fine cancella il buffer **senza spegnere i divisor**: la stessa
+  mesh, disegnata poi senza istanze, legge un buffer che non esiste più. Con tre
+  passaggi per fotogramma il caso non è teorico. Il VAO separato punta ai VBO
+  della mesh più il buffer d'istanza, e i due percorsi non si vedono nemmeno.
+- **La normale si divide per la scala, la tangente si moltiplica.** La normale
+  vuole l'inversa trasposta, che per scala più rotazione attorno a Y vuol dire
+  dividere; la tangente giace sulla superficie e segue la matrice del modello.
+  Con scala uniforme la differenza non si vede: si vede sulla falda del tetto,
+  che è `(cella, cella·1,6, cella·nz)`.
+- **Il tetto si svuota da solo**, con lo scarto delle facce posteriori spento.
+  La coppia `rlDisableBackfaceCulling()` attorno al ciclo in `DrawHouse()` non
+  basta più, perché lì ora si accoda soltanto e il disegno avviene dopo.
+  Dimenticarlo dà soffitti trasparenti, e da fuori non si vede.
+
+Due errori sono stati commessi e presi da una misura, e vale la pena ricordarli.
+
+**Il passaggio d'ombra ha bisogno del suo giro di `Begin`/`Flush`.** Anche lui
+passa da `PlacePart()`. Senza, le case accodate lì venivano buttate via
+dall'`InstBegin` del passaggio principale, che gira dopo, e gli edifici
+smettevano di proiettare ombra — mentre le chiamate del passaggio d'ombra
+crollavano da 399 a 126 e sembrava un guadagno.
+
+**E il costo del passaggio d'ombra non era dove sembrava.** Tolto l'84% delle
+chiamate, il tempo è calato del 10%. Le ipotesi sono state misurate una per una:
+non è il riempimento (2048 contro 1024 texel non cambia nulla), non sono le
+chiamate, non è il terreno (togliendolo restava a 3,45 ms). Sono i
+**personaggi**: il blocco d'ombra contiene anche `EntitiesDraw()` e
+`PlayerDraw()`, animati e disegnati una volta per cascata, ed escludendoli il
+passaggio scende a **0,26 ms**. La geometria del mondo nel passaggio d'ombra
+costava ~0,7 ms e ora ne costa 0,26; tutto il resto sono sempre stati i
+personaggi, che ora sono il costo dominante dell'intero fotogramma.
+
+### Le prove
+
+`make prove` compila ed esegue ogni file in `tools/prove/`. Non c'è un
+framework: una prova è un eseguibile che stampa una riga per controllo ed esce
+non-zero se qualcosa non torna. Includono il `.c` che provano, perché ciò che
+vale la pena provare è quasi sempre `static`. Chi esce 77 non ha trovato un
+contesto OpenGL e viene contata come saltata, non fallita.
+
+Una prova che non prende niente è peggio di nessuna prova, quindi vanno
+verificate anche loro. Quella dell'instancing confronta pixel a pixel lo stesso
+oggetto disegnato nei due modi — zero pixel diversi su 25.600 — ed è stata
+provata sabotando lo shader di proposito. Da cui una scoperta che sta scritta
+nel file: invertendo il verso della rotazione la prendono entrambe le mesh, ma
+moltiplicando la normale per la scala invece di dividerla **il cubo non se ne
+accorge**, perché le sue normali sono versori sugli assi e `(1,0,0)` diviso o
+moltiplicato per `(1, 2.5, 0.7)` resta `(1,0,0)`. Serve la sfera: con il solo
+cubo la prova darebbe falsa sicurezza proprio sull'errore più facile da fare.
+
 Giocatore ed entità non si attraversano: `EntitiesPushPlayer()` in `entity.c`
 li separa come due cerchi sul piano, dopo che tutti si sono mossi — sta lì e
 non in `PlayerUpdate()` perché il giocatore non conosce le entità. Lo
