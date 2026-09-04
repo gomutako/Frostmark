@@ -129,6 +129,47 @@ Tre decisioni che si vedono:
   colline sarebbero scure due volte. Senza `assets/shaders/` il gioco torna
   esattamente a com'era: l'assenza di un file non è un errore.
 
+### Normal map
+
+La normale del vertice descrive la forma grossa di un oggetto. Il rilievo fine
+— la corteccia, la fuga fra due pietre — sta in una **normal map**, ed è metà di
+ciò che fa sembrare realistico un asset. Lo shader la legge da `texture2`, che è
+dove raylib lega `MATERIAL_MAP_NORMAL`; le mappe d'ombra vivono negli slot 10 e
+11, apposta per non stare fra i piedi alle texture del materiale.
+
+La mappa è espressa **in spazio tangente**, cioè relativa alla superficie: per
+usarla serve la terna tangente/bitangente/normale. Tre trappole, tutte trovate
+scrivendola:
+
+- **Raylib lega `texture2` solo se il materiale ha davvero una normal map.**
+  Senza, l'uniform resta a zero — cioè allo stesso slot dell'albedo — e lo
+  shader leggerebbe il *colore* come rilievo: ogni asset senza normal map, cioè
+  tutti quelli di oggi, si illuminerebbe a caso. Perciò `LightApplyToMaterial()`
+  installa su chi non ce l'ha una normale **piatta**, un pixel `(128,128,255)`
+  che vale `(0,0,1)` e significa "non piegare niente". Una copia per materiale e
+  non una condivisa: `UnloadMaterial()` libera le texture delle mappe, e una
+  texture sola liberata due volte è un guaio che si paga lontano da dove è stato
+  commesso. Un pixel per materiale non si misura.
+- **Quando la mesh non porta tangenti raylib passa `{0,0,0,0}`.** Un
+  Gram-Schmidt su un vettore nullo dà NaN, quindi il fragment controlla prima di
+  costruire la terna e in quel caso resta alla normale del vertice.
+- **`GenMeshTangents()` di raylib 5.5 ignora `mesh->indices`**: legge i vertici
+  a gruppi di tre come se la mesh non fosse indicizzata, e le mesh glTF lo sono
+  quasi sempre. Su quelle costruirebbe triangoli che non esistono. `light.c` ha
+  quindi il suo `BuildTangents()`, che segue gli indici e accumula sui vertici
+  condivisi, così la tangente non si spezza sui bordi.
+
+Il risultato è che **con gli asset di oggi non cambia un pixel** — misurato: un
+piano grigio illuminato da un sole a `(0.6, 0.8, 0)` dà 113 sul canale rosso
+prima e dopo — e un asset con normal map la usa da subito. Piegando la normale
+di 30° verso il sole lo stesso piano passa a 129, e piegandola dall'altra parte
+a 78: i valori che il conto prevede.
+
+**Limite noto:** `UpdateModelAnimation()` aggiorna posizioni e normali ma **non**
+le tangenti. Un personaggio animato con una normal map avrà quindi tangenti
+ferme alla posa di riposo. Sui personaggi attuali, che una normal map non ce
+l'hanno, non si vede; va risolto se ne arriverà uno che ce l'ha.
+
 Giocatore ed entità non si attraversano: `EntitiesPushPlayer()` in `entity.c`
 li separa come due cerchi sul piano, dopo che tutti si sono mossi — sta lì e
 non in `PlayerUpdate()` perché il giocatore non conosce le entità. Lo

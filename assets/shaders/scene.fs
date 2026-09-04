@@ -7,8 +7,10 @@ in vec3 fragPosition;
 in vec2 fragTexCoord;
 in vec4 fragColor;
 in vec3 fragNormal;
+in vec4 fragTangent;
 
-uniform sampler2D texture0;
+uniform sampler2D texture0;   /* albedo   - raylib: MATERIAL_MAP_DIFFUSE */
+uniform sampler2D texture2;   /* normali  - raylib: MATERIAL_MAP_NORMAL  */
 uniform vec4 colDiffuse;
 
 uniform vec3  lightDir;      /* direzione VERSO il sole, normalizzata */
@@ -47,6 +49,35 @@ float Pcf(sampler2D map, vec3 proj, float bias)
             sum += (proj.z - bias > d) ? 0.0 : 1.0;
         }
     return sum / 16.0;
+}
+
+/* La normale del frammento. Quella del vertice descrive la forma grossa; la
+ * normal map aggiunge il rilievo che la mesh non ha - la corteccia, la fuga fra
+ * due pietre - ed e' meta' di cio' che fa sembrare realistico un asset.
+ *
+ * La mappa e' in spazio tangente, cioe' relativa alla superficie: per usarla
+ * serve la terna (tangente, bitangente, normale). La tangente si raddrizza
+ * rispetto alla normale (Gram-Schmidt) perche' interpolare fra vertici le
+ * sfasa, e la bitangente si ricava dal prodotto vettore con il segno che il
+ * .glb porta in w - i due versi esistono entrambi, e sbagliarlo ribalta il
+ * rilievo.
+ *
+ * Se la mesh non porta tangenti raylib passa un vettore nullo: normalizzarlo
+ * darebbe NaN, quindi in quel caso si resta alla normale del vertice. E i
+ * materiali senza normal map ne ricevono una piatta da light.c, cosi' qui non
+ * serve sapere se ce n'e' una vera: il conto e' sempre lo stesso. */
+vec3 SurfaceNormal()
+{
+    vec3 n = normalize(fragNormal);
+    if (dot(fragTangent.xyz, fragTangent.xyz) < 1e-8) return n;
+
+    vec3 t = fragTangent.xyz - n * dot(n, fragTangent.xyz);
+    if (dot(t, t) < 1e-8) return n;          /* tangente parallela alla normale */
+    t = normalize(t);
+
+    vec3 b  = cross(n, t) * fragTangent.w;
+    vec3 ts = texture(texture2, fragTexCoord).rgb * 2.0 - 1.0;
+    return normalize(mat3(t, b, n) * ts);
 }
 
 float ShadowFactor(vec3 n)
@@ -91,7 +122,7 @@ void main()
 
     vec4 albedo = texture(texture0, fragTexCoord) * colDiffuse * fragColor;
 
-    vec3  n    = normalize(fragNormal);
+    vec3  n    = SurfaceNormal();
     float diff = max(dot(n, lightDir), 0.0);
     float light = AMBIENT + SUN * diff * ShadowFactor(n) * sunAmount;
 

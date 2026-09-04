@@ -25,7 +25,13 @@ void LightUnload(void);
 bool LightReady(void);
 
 /* Da applicare a ogni materiale che deve ricevere luce: terreno, prop,
- * personaggi. Senza, l'oggetto resta piatto come prima. */
+ * personaggi. Senza, l'oggetto resta piatto come prima.
+ *
+ * Fanno anche il lavoro che serve alle normal map: chi non ne ha una ne riceve
+ * una piatta (raylib altrimenti non legherebbe l'unita' di texture, e lo
+ * shader leggerebbe l'albedo come rilievo), e le mesh che hanno una normal map
+ * vera ma non le tangenti se le vedono calcolare. Va chiamata DOPO
+ * LoadModel(), una volta sola. */
 void LightApplyToMaterial(Material *m);
 void LightApplyToModel(Model *m);
 
