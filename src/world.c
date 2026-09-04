@@ -224,8 +224,16 @@ static void LoadExtProps(World *w)
         LightApplyToModel(&m);
         w->extProp[t]    = m;
         w->hasExtProp[t] = true;
-        TraceLog(LOG_INFO, "WORLD: modello esterno %s (%d mesh)",
-                 gExtProp[t].file, m.meshCount);
+
+        /* Un lotto per disegnarli tutti in una chiamata. Solo se il modello ha
+         * una mesh sola: con piu' mesh servirebbe un lotto per mesh, e qui si
+         * preferisce tornare al disegno normale che disegnare mezzo albero. */
+        if (m.meshCount == 1)
+            w->propBatch[t] = InstCreate(m.meshes[0], m.materials[0]);
+
+        TraceLog(LOG_INFO, "WORLD: modello esterno %s (%d mesh)%s",
+                 gExtProp[t].file, m.meshCount,
+                 w->propBatch[t] ? ", a lotti" : "");
     }
 }
 
@@ -425,8 +433,11 @@ void WorldUnload(World *w)
         UnloadModel(w->mSphere);
         UnloadModel(w->mCube);
     }
-    for (int t = 0; t < PROP_COUNT; t++)
+    for (int t = 0; t < PROP_COUNT; t++) {
+        /* Prima il lotto, poi il modello: il lotto punta ai VBO della mesh. */
+        if (w->propBatch[t] != NULL) { InstFree(w->propBatch[t]); w->propBatch[t] = NULL; }
         if (w->hasExtProp[t]) { UnloadModel(w->extProp[t]); w->hasExtProp[t] = false; }
+    }
     if (w->hasBuildParts) {
         for (int i = 0; i < BUILD_PART_COUNT; i++) UnloadModel(w->buildPart[i]);
         w->hasBuildParts = false;
@@ -754,12 +765,47 @@ static void DrawProp(World *w, const Prop *p, Color tint, bool lod)
     }
 }
 
+/* Svuota le liste dei lotti dei prop. Si fa per PASSAGGIO e non per
+ * fotogramma: il passaggio principale culla a cono, quello d'ombra a raggio,
+ * quindi le liste sono diverse. */
+static void PropBatchBegin(World *w, Color tint)
+{
+    for (int t = 0; t < PROP_COUNT; t++) {
+        if (w->propBatch[t] == NULL) continue;
+        InstBegin(w->propBatch[t]);
+        /* La tinta del ciclo giorno/notte moltiplica l'albedo, ed e' uguale
+         * per tutti: e' del lotto, non dell'istanza. Shade(WHITE, tint) vale
+         * tint, ed e' il conto che faceva DrawProp per i modelli esterni. */
+        InstTint(w->propBatch[t], tint);
+    }
+}
+
+static void PropBatchFlush(World *w)
+{
+    for (int t = 0; t < PROP_COUNT; t++) InstFlush(w->propBatch[t]);
+}
+
+/* Accoda il prop al suo lotto. Torna false se il lotto non c'e' - modello
+ * assente, piu' di una mesh, shader instanziato mancante - e allora il
+ * chiamante disegna un oggetto per volta come si e' sempre fatto. */
+static bool PropBatchAdd(World *w, const Prop *p)
+{
+    InstBatch *b = w->propBatch[p->type];
+    if (b == NULL || p->taken) return false;
+
+    float k = p->scale * gExtProp[p->type].scale;
+    InstAdd(b, p->pos, p->rot, (Vector3){ k, k, k });
+    return true;
+}
+
 void WorldDrawProps(World *w, Camera3D cam, Color tint)
 {
     /* La direzione della camera si normalizzava una volta per prop: con 6000
      * props sono 6000 radici quadrate buttate. Si calcola qui, una volta. */
     Vector3 fwd = Vector3Normalize(Vector3Subtract(cam.target, cam.position));
     float lodD2 = PROP_LOD_DIST * PROP_LOD_DIST;
+
+    PropBatchBegin(w, tint);
 
     for (int i = 0; i < MAX_LOADED_CHUNKS; i++) {
         Chunk *c = &w->chunks[i];
@@ -776,9 +822,11 @@ void WorldDrawProps(World *w, Camera3D cam, Color tint)
             if (d2 > 144.0f &&
                 Vector3DotProduct(rel, fwd) < 0.30f * sqrtf(d2)) continue;
 
-            DrawProp(w, p, tint, d2 > lodD2);
+            if (!PropBatchAdd(w, p)) DrawProp(w, p, tint, d2 > lodD2);
         }
     }
+
+    PropBatchFlush(w);
 }
 
 /* Cio' che proietta ombra attorno al giocatore. Non usa il cono visivo: il

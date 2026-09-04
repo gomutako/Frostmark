@@ -16,6 +16,7 @@
 
 #include "raylib.h"
 #include "config.h"
+#include "instancing.h"
 #include "worldtypes.h"
 #include "worldio.h"
 #include <stdbool.h>
@@ -55,6 +56,9 @@ typedef struct {
      * Vedi docs/03-asset-pubblici.md. */
     Model  extProp[PROP_COUNT];
     bool   hasExtProp[PROP_COUNT];
+    /* Un lotto per tipo, quando il modello esterno c'e' ed e' fatto di una
+     * mesh sola. NULL vuol dire "disegna un oggetto per volta, come prima". */
+    InstBatch *propBatch[PROP_COUNT];
 
     /* Pezzi modulari degli edifici: vedi BUILD_FILES in world.c. Casa e torre
      * non esistono come modello unico nei kit CC0, si compongono. */

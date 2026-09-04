@@ -137,8 +137,9 @@ PROVE_CF  := -std=gnu99 -Wall -Wextra -I$(TOOL_DIR)/prove -I$(SRC_DIR) \
 prove: $(RAYLIB_DEP)
 	@mkdir -p $(PROVE_DIR)
 	$(CC) $(PROVE_CF) $(TOOL_DIR)/prove/scale.c \
-	      $(SRC_DIR)/fmath.c $(SRC_DIR)/light.c $(SRC_DIR)/worldio.c \
-	      $(SRC_DIR)/dataparse.c $(LDFLAGS) $(LDLIBS) -o $(PROVE_DIR)/scale
+	      $(SRC_DIR)/fmath.c $(SRC_DIR)/light.c $(SRC_DIR)/instancing.c \
+	      $(SRC_DIR)/worldio.c $(SRC_DIR)/dataparse.c \
+	      $(LDFLAGS) $(LDLIBS) -o $(PROVE_DIR)/scale
 	$(CC) $(PROVE_CF) $(TOOL_DIR)/prove/normalmap.c \
 	      $(SRC_DIR)/fmath.c $(LDFLAGS) $(LDLIBS) -o $(PROVE_DIR)/normalmap
 	$(CC) $(PROVE_CF) $(TOOL_DIR)/prove/luce.c \
