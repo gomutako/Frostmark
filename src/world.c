@@ -592,6 +592,16 @@ static HouseShape HouseShapeOf(const Prop *p)
 static float HouseHalfX(const HouseShape *s) { return s->nx * 0.5f - 0.05f; }
 static float HouseHalfZ(const HouseShape *s) { return s->nz * 0.5f - 0.05f; }
 
+/* Quota della rampa dentro la cella della scala, in celle: sale da 0 a 1
+ * lungo +X, e fuori dalla cella resta agganciata agli estremi. La usano sia
+ * chi ci cammina sopra sia chi ci sbatte contro: un conto solo, cosi' la
+ * superficie calpestabile e il volume solido non possono divergere. */
+static float StairTop(const HouseShape *s, float lx)
+{
+    float edge = (float)s->stairX - s->nx * 0.5f;   /* bordo basso, in celle */
+    return FmClamp(lx - edge, 0.0f, 1.0f);
+}
+
 static void DrawHouse(World *w, const Prop *p, Vector3 pos, float rotDeg,
                      float s, Color tint)
 {
@@ -889,6 +899,23 @@ static void ResolveHouse(const Prop *p, Vector3 *pos, float radius)
         PushOutRect(&lx, &lz, radius, (left - hx) * 0.5f, -hz, (left + hx) * 0.5f, t);
     }
 
+    /* La scala e' un volume, non solo una superficie su cui posare i piedi.
+     * Finche' esisteva solo come quota calpestabile la si attraversava: da
+     * sopra e di fianco la rampa e' piu' alta di un gradino, WorldSupportHeight
+     * la scartava, e si passava dentro al modello. Qui la cella della scala
+     * respinge come un muro, ma solo dove la rampa sta piu' in alto di un
+     * gradino sopra i piedi: la parte bassa resta aperta, ed e' da li' che si
+     * sale. Chi e' gia' sulla rampa ha i piedi alla sua quota e non viene
+     * toccato, e dal piano di sopra la tromba resta libera per scendere. */
+    if (sh.floors > 1) {
+        float top = StairTop(&sh, lx / cell) * cell;
+        if (top > (pos->y - p->pos.y) + STEP_UP_REACH) {
+            float scx = ((float)sh.stairX - (sh.nx - 1) / 2.0f) * cell;
+            float scz = ((float)sh.stairZ - (sh.nz - 1) / 2.0f) * cell;
+            PushOutRect(&lx, &lz, radius, scx, scz, 0.5f * cell, 0.5f * cell);
+        }
+    }
+
     if (lx == lx0 && lz == lz0) return;
 
     /* Rimette lo spostamento nel sistema del mondo. */
@@ -1096,9 +1123,7 @@ float WorldSupportHeight(const World *w, Vector3 pos, float reach)
             if (ix == sh.stairX && iz == sh.stairZ) {
                 /* La rampa sale lungo +X dentro la sua cella: l'altezza e' la
                  * frazione di cella percorsa. */
-                float edge = (float)sh.stairX - sh.nx * 0.5f;
-                float t = FmClamp(lx - edge, 0.0f, 1.0f);
-                surf = p->pos.y + t * cell;
+                surf = p->pos.y + StairTop(&sh, lx) * cell;
             } else {
                 surf = p->pos.y + cell;           /* solaio del primo piano */
             }

@@ -76,6 +76,16 @@ quindi stando al piano terra il solaio di sopra non risucchia in alto, e
 salendo la rampa ci si alza davvero. Misurato salendo: +1,37 m a metà rampa,
 +2,60 in cima, che è l'altezza esatta di un piano.
 
+La rampa però non è solo una quota su cui posare i piedi: è anche un volume.
+Finché è stata solo una superficie la si attraversava, perché di fianco e da
+sopra sta più in alto di un gradino e `WorldSupportHeight()` la scartava.
+`ResolveHouse()` respinge quindi dalla cella della scala dove la rampa supera i
+piedi di più di `STEP_UP_REACH`: il piede della rampa resta aperto — è da lì
+che si sale — chi ci sta già sopra ha i piedi alla quota giusta e non viene
+toccato, e dal piano di sopra la tromba resta libera per scendere. Disegno,
+quota calpestabile e volume solido leggono la stessa `StairTop()`: se
+divergessero si sbatterebbe contro un gradino che non si vede.
+
 Il giocatore cammina sulla **superficie che vede**: `WorldIoHeight()` legge la
 quota sui due triangoli del quadrato, con lo stesso taglio che usa
 `BuildChunkMesh()`, non su una superficie bilineare. Le due differiscono di
