@@ -112,6 +112,68 @@ static int LivelliDiversi(Image im)
  * escludere il caso in cui le normali non vengono trasformate affatto: allora
  * l'oggetto esce di un colore piatto, e la prova d'equivalenza passerebbe
  * ugualmente perche' le due immagini sarebbero sbagliate allo stesso modo. */
+/* --- Modelli a piu' mesh --------------------------------------------------
+ * Un modello del catalogo Poly Haven ha spesso 3, 6, anche 17 mesh, e devono
+ * muoversi insieme come un oggetto solo. Qui se ne costruisce uno a due mesh
+ * con ORIGINI DIVERSE: se InstModelAdd sbagliasse ad applicare la stessa
+ * trasformazione a tutte, o se raylib non fondesse le trasformazioni dei nodi,
+ * le due meta' si separerebbero e il confronto lo vedrebbe. */
+static Model DueMesh(void)
+{
+    Mesh a = GenMeshCube(1.0f, 1.0f, 1.0f);
+    Mesh b = GenMeshSphere(0.45f, 10, 12);
+
+    /* La sfera si sposta di un'unita' in Y e mezza in X: due pezzi distinti. */
+    for (int i = 0; i < b.vertexCount; i++) {
+        b.vertices[i*3 + 0] += 0.5f;
+        b.vertices[i*3 + 1] += 1.0f;
+    }
+    UpdateMeshBuffer(b, 0, b.vertices, b.vertexCount * 3 * (int)sizeof(float), 0);
+
+    Model m = { 0 };
+    m.transform = MatrixIdentity();
+    m.meshCount = 2;
+    m.meshes = (Mesh *)MemAlloc(2 * (unsigned int)sizeof(Mesh));
+    m.meshes[0] = a; m.meshes[1] = b;
+    m.materialCount = 1;
+    m.materials = (Material *)MemAlloc((unsigned int)sizeof(Material));
+    m.materials[0] = LoadMaterialDefault();
+    m.materials[0].maps[MATERIAL_MAP_DIFFUSE].color = (Color){ 200, 200, 200, 255 };
+    LightApplyToMaterial(&m.materials[0]);
+    m.meshMaterial = (int *)MemAlloc(2 * (unsigned int)sizeof(int));
+    m.meshMaterial[0] = 0; m.meshMaterial[1] = 0;
+    return m;
+}
+
+static Image RendiModelloConLotti(RenderTexture2D rt, InstModel *im)
+{
+    BeginTextureMode(rt);
+        ClearBackground(BLACK);
+        BeginMode3D(Vista());
+            InstModelBegin(im, (Color){ 200, 200, 200, 255 });
+            InstModelAdd(im, POS, YAW, SCALA);
+            InstModelFlush(im);
+        EndMode3D();
+    EndTextureMode();
+    return LoadImageFromTexture(rt.texture);
+}
+
+static Image RendiModelloNormale(RenderTexture2D rt, Model m)
+{
+    Matrix t = MatrixMultiply(MatrixMultiply(
+                   MatrixScale(SCALA.x, SCALA.y, SCALA.z),
+                   MatrixRotate((Vector3){ 0.0f, 1.0f, 0.0f }, YAW * DEG2RAD)),
+                   MatrixTranslate(POS.x, POS.y, POS.z));
+    BeginTextureMode(rt);
+        ClearBackground(BLACK);
+        BeginMode3D(Vista());
+            for (int i = 0; i < m.meshCount; i++)
+                DrawMesh(m.meshes[i], m.materials[m.meshMaterial[i]], t);
+        EndMode3D();
+    EndTextureMode();
+    return LoadImageFromTexture(rt.texture);
+}
+
 static void ProvaMesh(const char *nome, Mesh m, RenderTexture2D rt, int livelliMin)
 {
     char msg[128];
@@ -206,6 +268,25 @@ int main(void)
      * facile da fare. */
     ProvaMesh("cubo",  cubo,  rt, 2);
     ProvaMesh("sfera", sfera, rt, 20);
+
+    /* --- modello a due mesh, con origini diverse ------------------------- */
+    Model due = DueMesh();
+    InstModel im;
+    Ok("modello a due mesh: i lotti si creano", InstModelCreate(&im, due));
+    Ok("e ce n'e' uno per mesh", im.n == 2);
+
+    if (InstModelReady(&im)) {
+        Image ia = RendiModelloConLotti(rt, &im);
+        Image ib = RendiModelloNormale(rt, due);
+        int accesi = PixelAccesi(ib);
+        int diversi = PixelDiversi(ia, ib, 2);
+        printf("  due mesh: %d pixel diversi su %d, %d accesi\n",
+               diversi, ia.width * ia.height, accesi);
+        Ok("due mesh: qualcosa e' stato disegnato", accesi > 400);
+        Ok("due mesh: instanziato = non instanziato", diversi == 0);
+        UnloadImage(ia); UnloadImage(ib);
+        InstModelFree(&im);
+    }
 
     CloseWindow();
     return ProveEsito();

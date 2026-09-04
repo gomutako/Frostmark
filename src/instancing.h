@@ -26,6 +26,7 @@
 #define INSTANCING_H
 
 #include "raylib.h"
+#include <stdbool.h>
 
 typedef struct InstBatch InstBatch;
 
@@ -54,5 +55,29 @@ void InstFlush(InstBatch *b);
 /* Il colore che moltiplica l'albedo: e' la tinta del ciclo giorno/notte, ed e'
  * per LOTTO, non per istanza. */
 void InstTint(InstBatch *b, Color tint);
+
+/* --- Un modello intero ----------------------------------------------------
+ * Un lotto tiene UNA mesh, ma un modello ne ha spesso molte: nel catalogo
+ * Poly Haven la mesh singola e' l'eccezione - nettle_plant ne ha 6,
+ * grass_medium_01 diciassette, e un abete tre mesh con dodici primitive e sei
+ * materiali. InstModel raggruppa un lotto per ogni mesh e li muove insieme.
+ *
+ * Funziona perche' raylib, caricando un glTF, FONDE le trasformazioni dei nodi
+ * dentro i vertici (rmodels.c, cgltf_node_transform_world): tutte le mesh di
+ * un modello condividono un'origine, quindi una sola trasformazione d'istanza
+ * vale per tutte. Se raylib non lo facesse, un modello a diciassette mesh
+ * andrebbe in pezzi. */
+typedef struct { InstBatch **b; int n; } InstModel;
+
+/* Tutto o niente: se anche un solo lotto non si crea, si liberano gli altri e
+ * si torna a false. Il chiamante disegna allora il modello come prima - meglio
+ * lento che mezzo albero. */
+bool InstModelCreate(InstModel *im, Model m);
+void InstModelFree(InstModel *im);
+
+bool InstModelReady(const InstModel *im);
+void InstModelBegin(InstModel *im, Color tint);
+void InstModelAdd(InstModel *im, Vector3 pos, float yawDeg, Vector3 scale);
+void InstModelFlush(InstModel *im);
 
 #endif /* INSTANCING_H */

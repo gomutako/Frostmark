@@ -197,12 +197,7 @@ static void LoadBuildParts(World *w)
                              TEXTURE_FILTER_POINT);
         LightApplyToModel(&w->buildPart[i]);
 
-        /* I pezzi del kit hanno una mesh sola. Se ne avessero piu' d'una il
-         * lotto non si crea e si torna al disegno normale: meglio lento che
-         * mezzo edificio. */
-        if (w->buildPart[i].meshCount == 1)
-            w->partBatch[i] = InstCreate(w->buildPart[i].meshes[0],
-                                         w->buildPart[i].materials[0]);
+        InstModelCreate(&w->partBatch[i], w->buildPart[i]);
     }
     w->hasBuildParts = true;
     TraceLog(LOG_INFO, "WORLD: %d pezzi per gli edifici modulari", BUILD_PART_COUNT);
@@ -232,15 +227,14 @@ static void LoadExtProps(World *w)
         w->extProp[t]    = m;
         w->hasExtProp[t] = true;
 
-        /* Un lotto per disegnarli tutti in una chiamata. Solo se il modello ha
-         * una mesh sola: con piu' mesh servirebbe un lotto per mesh, e qui si
-         * preferisce tornare al disegno normale che disegnare mezzo albero. */
-        if (m.meshCount == 1)
-            w->propBatch[t] = InstCreate(m.meshes[0], m.materials[0]);
+        /* Un lotto per ogni mesh, cosi' anche i modelli composti - nel
+         * catalogo Poly Haven la mesh singola e' l'eccezione - si disegnano a
+         * gruppi invece che uno alla volta. */
+        InstModelCreate(&w->propBatch[t], m);
 
         TraceLog(LOG_INFO, "WORLD: modello esterno %s (%d mesh)%s",
                  gExtProp[t].file, m.meshCount,
-                 w->propBatch[t] ? ", a lotti" : "");
+                 InstModelReady(&w->propBatch[t]) ? ", a lotti" : "");
     }
 }
 
@@ -442,13 +436,13 @@ void WorldUnload(World *w)
     }
     for (int t = 0; t < PROP_COUNT; t++) {
         /* Prima il lotto, poi il modello: il lotto punta ai VBO della mesh. */
-        if (w->propBatch[t] != NULL) { InstFree(w->propBatch[t]); w->propBatch[t] = NULL; }
+        InstModelFree(&w->propBatch[t]);
         if (w->hasExtProp[t]) { UnloadModel(w->extProp[t]); w->hasExtProp[t] = false; }
     }
     if (w->hasBuildParts) {
         for (int i = 0; i < BUILD_PART_COUNT; i++) {
-            /* Prima il lotto, poi il modello: il lotto punta ai suoi VBO. */
-            if (w->partBatch[i] != NULL) { InstFree(w->partBatch[i]); w->partBatch[i] = NULL; }
+            /* Prima i lotti, poi il modello: i lotti puntano ai suoi VBO. */
+            InstModelFree(&w->partBatch[i]);
             UnloadModel(w->buildPart[i]);
         }
         w->hasBuildParts = false;
@@ -584,7 +578,8 @@ static void PlacePart(World *w, BuildPart part, Vector3 origin, float rotDeg,
     /* Se il pezzo ha un lotto si accoda e basta: il disegno avviene alla fine
      * del passaggio, tutte le istanze insieme. Altrimenti si disegna qui, come
      * si e' sempre fatto. */
-    if (w->partBatch[part] != NULL) InstAdd(w->partBatch[part], p, rotDeg + localRot, scale);
+    if (InstModelReady(&w->partBatch[part]))
+        InstModelAdd(&w->partBatch[part], p, rotDeg + localRot, scale);
     else DrawModelEx(w->buildPart[part], p, (Vector3){ 0.0f, 1.0f, 0.0f },
                      rotDeg + localRot, scale, tint);
 }
@@ -791,34 +786,26 @@ static void DrawProp(World *w, const Prop *p, Color tint, bool lod)
  * quindi le liste sono diverse. */
 static void PropBatchBegin(World *w, Color tint)
 {
-    for (int t = 0; t < PROP_COUNT; t++) {
-        if (w->propBatch[t] == NULL) continue;
-        InstBegin(w->propBatch[t]);
-        /* La tinta del ciclo giorno/notte moltiplica l'albedo, ed e' uguale
-         * per tutti: e' del lotto, non dell'istanza. Shade(WHITE, tint) vale
-         * tint, ed e' il conto che faceva DrawProp per i modelli esterni. */
-        InstTint(w->propBatch[t], tint);
-    }
-    for (int i = 0; i < BUILD_PART_COUNT; i++) {
-        if (w->partBatch[i] == NULL) continue;
-        InstBegin(w->partBatch[i]);
-        InstTint(w->partBatch[i], tint);
-    }
+    /* La tinta del ciclo giorno/notte moltiplica l'albedo, ed e' uguale per
+     * tutti: e' del lotto, non dell'istanza. Shade(WHITE, tint) vale tint, ed
+     * e' il conto che faceva DrawProp per i modelli esterni. */
+    for (int t = 0; t < PROP_COUNT; t++)      InstModelBegin(&w->propBatch[t], tint);
+    for (int i = 0; i < BUILD_PART_COUNT; i++) InstModelBegin(&w->partBatch[i], tint);
 }
 
 static void PropBatchFlush(World *w)
 {
-    for (int t = 0; t < PROP_COUNT; t++) InstFlush(w->propBatch[t]);
+    for (int t = 0; t < PROP_COUNT; t++) InstModelFlush(&w->propBatch[t]);
 
     /* I pezzi d'edificio. Il tetto per ultimo e da solo: e' un guscio sottile,
      * e da dentro casa se ne vedrebbe attraverso, quindi va disegnato con lo
      * scarto delle facce posteriori spento. */
     for (int i = 0; i < BUILD_PART_COUNT; i++)
-        if (i != BUILD_ROOF) InstFlush(w->partBatch[i]);
+        if (i != BUILD_ROOF) InstModelFlush(&w->partBatch[i]);
 
-    if (w->partBatch[BUILD_ROOF] != NULL) {
+    if (InstModelReady(&w->partBatch[BUILD_ROOF])) {
         rlDisableBackfaceCulling();
-        InstFlush(w->partBatch[BUILD_ROOF]);
+        InstModelFlush(&w->partBatch[BUILD_ROOF]);
         rlEnableBackfaceCulling();
     }
 }
@@ -828,11 +815,11 @@ static void PropBatchFlush(World *w)
  * chiamante disegna un oggetto per volta come si e' sempre fatto. */
 static bool PropBatchAdd(World *w, const Prop *p)
 {
-    InstBatch *b = w->propBatch[p->type];
-    if (b == NULL || p->taken) return false;
+    InstModel *im = &w->propBatch[p->type];
+    if (!InstModelReady(im) || p->taken) return false;
 
     float k = p->scale * gExtProp[p->type].scale;
-    InstAdd(b, p->pos, p->rot, (Vector3){ k, k, k });
+    InstModelAdd(im, p->pos, p->rot, (Vector3){ k, k, k });
     return true;
 }
 

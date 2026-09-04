@@ -56,17 +56,17 @@ typedef struct {
      * Vedi docs/03-asset-pubblici.md. */
     Model  extProp[PROP_COUNT];
     bool   hasExtProp[PROP_COUNT];
-    /* Un lotto per tipo, quando il modello esterno c'e' ed e' fatto di una
-     * mesh sola. NULL vuol dire "disegna un oggetto per volta, come prima". */
-    InstBatch *propBatch[PROP_COUNT];
+    /* Un gruppo di lotti per tipo, uno per mesh del modello. Vuoto vuol dire
+     * "disegna un oggetto per volta, come prima". */
+    InstModel propBatch[PROP_COUNT];
 
     /* Pezzi modulari degli edifici: vedi BUILD_FILES in world.c. Casa e torre
      * non esistono come modello unico nei kit CC0, si compongono. */
     Model  buildPart[BUILD_PART_COUNT];
     bool   hasBuildParts;
-    /* Un lotto per tipo di pezzo: una casa bassa costa 19 chiamate, una alta
-     * 45, e i tipi di pezzo sono dieci. NULL vuol dire disegno normale. */
-    InstBatch *partBatch[BUILD_PART_COUNT];
+    /* Un gruppo per tipo di pezzo: una casa bassa costa 19 chiamate, una alta
+     * 45, e i tipi di pezzo sono dieci. */
+    InstModel partBatch[BUILD_PART_COUNT];
 } World;
 
 /* Carica il mondo cotto da 'dir' e prepara le risorse grafiche. false se il

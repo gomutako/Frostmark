@@ -219,3 +219,56 @@ void InstFlush(InstBatch *b)
     }
     rlDisableShader();
 }
+
+/* --- Un modello intero --------------------------------------------------- */
+
+bool InstModelCreate(InstModel *im, Model m)
+{
+    im->b = NULL;
+    im->n = 0;
+    if (m.meshCount <= 0) return false;
+
+    im->b = (InstBatch **)MemAlloc((unsigned int)(m.meshCount * (int)sizeof(InstBatch *)));
+    if (im->b == NULL) return false;
+
+    for (int i = 0; i < m.meshCount; i++) {
+        int mat = (m.meshMaterial != NULL) ? m.meshMaterial[i] : 0;
+        if (mat < 0 || mat >= m.materialCount) mat = 0;
+        im->b[i] = InstCreate(m.meshes[i], m.materials[mat]);
+        if (im->b[i] == NULL) {          /* tutto o niente */
+            im->n = i;
+            InstModelFree(im);
+            return false;
+        }
+    }
+    im->n = m.meshCount;
+    return true;
+}
+
+void InstModelFree(InstModel *im)
+{
+    for (int i = 0; i < im->n; i++) InstFree(im->b[i]);
+    MemFree(im->b);
+    im->b = NULL;
+    im->n = 0;
+}
+
+bool InstModelReady(const InstModel *im) { return im->n > 0; }
+
+void InstModelBegin(InstModel *im, Color tint)
+{
+    for (int i = 0; i < im->n; i++) { InstBegin(im->b[i]); InstTint(im->b[i], tint); }
+}
+
+void InstModelAdd(InstModel *im, Vector3 pos, float yawDeg, Vector3 scale)
+{
+    /* La STESSA trasformazione su tutte le mesh: le loro origini sono gia'
+     * allineate, perche' raylib ha fuso le trasformazioni dei nodi. */
+    for (int i = 0; i < im->n; i++) InstAdd(im->b[i], pos, yawDeg, scale);
+}
+
+void InstModelFlush(InstModel *im)
+{
+    for (int i = 0; i < im->n; i++) InstFlush(im->b[i]);
+}
+
