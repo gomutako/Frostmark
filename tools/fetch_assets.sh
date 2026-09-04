@@ -15,6 +15,7 @@
 #        ./tools/fetch_assets.sh heightmap  genera anche una heightmap di prova
 #        ./tools/fetch_assets.sh models     scarica i modelli CC0 di Kenney
 #        ./tools/fetch_assets.sh rocce      scarica un masso fotogrammetrico CC0
+#        ./tools/fetch_assets.sh polyhaven <asset> <nome>   un asset CC0 qualsiasi
 #        ./tools/fetch_assets.sh player     scarica il personaggio animato CC0
 #        ./tools/fetch_assets.sh npc        scarica i personaggi animati degli NPC
 #        ./tools/fetch_assets.sh font       scarica i font dell'interfaccia (OFL)
@@ -39,50 +40,59 @@ EOF
 echo "creato assets/CREDITS.md"
 fi
 
-# ---- rocce fotogrammetriche (Poly Haven) ----------------------------------
-#  Un masso vero al posto della sfera schiacciata del kit. Poly Haven e' CC0 su
-#  tutto il catalogo e ha un'API, quindi gli URL si leggono invece di
-#  inchiodarli: cambiano a ogni ricottura degli asset.
+# ---- asset fotogrammetrici (Poly Haven) -----------------------------------
+#  Poly Haven e' CC0 su tutto il catalogo e ha un'API, quindi gli URL si
+#  leggono invece di inchiodarli: cambiano a ogni ricottura degli asset.
 #
-#  namaqualand_boulder_04, e la scelta e' stata due volte controintuitiva.
-#  Non rock_07, che e' un sasso da 32 cm: portarlo a 2,2 metri gonfierebbe la
-#  texture di sette volte. E non boulder_01, che e' della taglia giusta ma ha
-#  67.042 vertici - raylib ne indirizza 65.535 e la mesh esce sfregiata.
-#  namaqualand_boulder_04 e' largo 2,52 m e ne ha 30.165, meta' del limite.
-#  I 59.000 triangoli a questo motore non costano niente: misurato.
+#      ./tools/fetch_assets.sh polyhaven <asset> <nome>
 #
-#  Il gioco vuole il file in assets/models/rock.gltf: LoadExtProps prova .glb e
-#  poi .gltf, e la scala se la calcola dall'ingombro. Il .bin e le texture
-#  tengono i loro nomi, perche' il .gltf li cerca cosi'.
-if [ "${1:-}" = "rocce" ]; then
+#  <nome> e' come lo cerca il gioco: rock, bush, herb, tree, pine. Il file del
+#  kit che sta gia' li' viene spostato di lato, non cancellato.
+#
+#  COME SI SCEGLIE UN ASSET. Non dal conteggio dei triangoli - a questo motore
+#  non costano niente, misurato - ma dai VERTICI PER PRIMITIVA: raylib li
+#  indirizza a 16 bit, e oltre 65.535 la mesh esce sfregiata. Il gioco scarta
+#  da se' i modelli oltre il tetto, ma meglio saperlo prima di scaricare mezzo
+#  giga. E dalla TAGLIA: Poly Haven e' a scala reale, e gonfiare un sasso da 32
+#  cm fino a due metri si vede.
+#
+#  Cio' che il catalogo NON ha: un albero. Tutti sfondano il tetto - il piu'
+#  vicino, quiver_tree_01, di 3.787 vertici. Gli alberi restano quelli del kit.
+if [ "${1:-}" = "polyhaven" ] || [ "${1:-}" = "rocce" ]; then
     for cmd in curl python3; do
         command -v "$cmd" >/dev/null 2>&1 || { echo "serve $cmd"; exit 1; }
     done
 
-    ASSET="${2:-namaqualand_boulder_04}"
+    if [ "${1:-}" = "rocce" ]; then
+        ASSET="${2:-namaqualand_boulder_04}"; DEST="rock"
+    else
+        ASSET="${2:-}"; DEST="${3:-}"
+        [ -n "$ASSET" ] && [ -n "$DEST" ] || {
+            echo "uso: $0 polyhaven <asset> <nome>"; exit 1; }
+    fi
+
     echo "cerco $ASSET su polyhaven.com..."
     curl -sSL "https://api.polyhaven.com/files/$ASSET" -o "$ASSETS/.ph.json"
-
-    python3 "$ROOT/tools/polyhaven_get.py" "$ASSETS/.ph.json" "$ASSETS/models" rock.gltf
+    python3 "$ROOT/tools/polyhaven_get.py" "$ASSETS/.ph.json" "$ASSETS/models" "$DEST.gltf"
     rm -f "$ASSETS/.ph.json"
 
     # LoadExtProps prova PRIMA il .glb dichiarato nella tabella, quindi finche'
-    # rock.glb c'e' vince lui. Si sposta di lato invece di cancellarlo: e' un
+    # quello c'e' vince lui. Si sposta di lato invece di cancellarlo: e' un
     # file dell'utente, e si torna indietro con un mv.
-    if [ -f "$ASSETS/models/rock.glb" ]; then
-        mv "$ASSETS/models/rock.glb" "$ASSETS/models/rock.glb.kit"
-        echo "  rock.glb del kit spostato in rock.glb.kit"
+    if [ -f "$ASSETS/models/$DEST.glb" ]; then
+        mv "$ASSETS/models/$DEST.glb" "$ASSETS/models/$DEST.glb.kit"
+        echo "  $DEST.glb del kit spostato in $DEST.glb.kit"
     fi
 
-    if ! grep -q "assets/models/rock.gltf" "$ASSETS/CREDITS.md" 2>/dev/null; then
-        printf '| assets/models/rock.gltf | Poly Haven | https://polyhaven.com/a/%s | CC0 | %s |\n' \
-            "$ASSET" "$(date +%Y-%m-%d)" >> "$ASSETS/CREDITS.md"
+    if ! grep -q "assets/models/$DEST.gltf" "$ASSETS/CREDITS.md" 2>/dev/null; then
+        printf '| assets/models/%s.gltf | Poly Haven | https://polyhaven.com/a/%s | CC0 | %s |\n' \
+            "$DEST" "$ASSET" "$(date +%Y-%m-%d)" >> "$ASSETS/CREDITS.md"
         echo "  aggiunta la riga in assets/CREDITS.md"
     fi
 
     echo
-    echo "fatto. Per tornare al sasso del kit:"
-    echo "  rm assets/models/rock.gltf && mv assets/models/rock.glb.kit assets/models/rock.glb"
+    echo "fatto. Per tornare all'asset del kit:"
+    echo "  rm assets/models/$DEST.gltf && mv assets/models/$DEST.glb.kit assets/models/$DEST.glb"
     exit 0
 fi
 
