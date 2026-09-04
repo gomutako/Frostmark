@@ -84,12 +84,42 @@ cambia a ogni aggiornamento del pacchetto, quindi viene letto dalla pagina.
 
 ![Modelli Kenney in gioco](img/04-modelli-kenney.png)
 
-**Perché Kenney e non Poly Haven.** Frostmark disegna centinaia di prop per
-frame con `DrawModelEx`, senza LOD né instancing. I modelli di Kenney stanno tra
-78 e 114 triangoli; su Poly Haven — pure CC0, ma fotogrammetria — l'albero più
-leggero è `jacaranda_tree` a 312.000 triangoli e `pine_tree_01` arriva a 17
-milioni. Sono ottimi per una scena renderizzata, inutilizzabili per una foresta
-in tempo reale con questo renderer. Poly Haven resta utile per le **texture**.
+**Perché Kenney e non Poly Haven.** La ragione era che Frostmark disegnava
+centinaia di prop per frame con `DrawModelEx`, uno alla volta. **Non è più
+vera**: da settembre 2026 i prop si disegnano a lotti (vedi *Instancing* in
+`docs/01`), e i triangoli hanno smesso di essere il problema.
+
+Misurato sostituendo *tutti* i prop con `rock_07` di Poly Haven, 14.844
+triangoli l'uno: il carico passa da ~118.000 a **7,3 milioni di triangoli per
+fotogramma** e la scena da 4,6-5,1 a 5,0-5,3 ms. Sessantadue volte i triangoli,
+tre decimi di millisecondo.
+
+Quello che rende inutilizzabile un asset non è quindi il conteggio in sé, ma
+quanto è *fuori scala* — e alcuni lo sono parecchio:
+
+| asset Poly Haven | triangoli | mesh | alfa | si usa? |
+|---|---|---|---|---|
+| `rock_07` | 14.844 | 1 | opaco | **sì, oggi** |
+| `nettle_plant` | 31.304 | 6 | MASK | serve alfa e multi-mesh |
+| `rock_moss_set_01` | 63.127 | 6 | opaco | serve multi-mesh |
+| `boulder_01` | 66.122 | 1 | opaco | **sì, oggi** |
+| `namaqualand_boulder_02` | 97.964 | 1 | opaco | sì |
+| `fir_sapling` | 433.021 | 3 | opaco | al limite |
+| `fir_tree_01` | **6.982.937** | 3 | BLEND | **no**: 478 MB di sola geometria |
+
+L'abete da solo è 59 volte l'intera scena attuale, alla risoluzione di texture
+più bassa. Non è un asset da decimare: ridurlo a qualcosa di usabile sarebbe
+rifarlo.
+
+Due cose bloccano oggi la vegetazione, e nessuna è di prestazioni. **L'alfa**:
+ogni pianta del catalogo è `MASK` o `BLEND` — le foglie sono ritagli su
+quadrati — e `scene.fs` non gestisce l'alfa. **Le mesh multiple**: un lotto si
+crea solo per i modelli a mesh singola, e nel catalogo sono l'eccezione. I
+sassi, che sono opachi e a mesh singola, funzionano già.
+
+**Nessun asset del catalogo porta le tangenti nel file.** Le calcola
+`BuildTangents()` al caricamento — 1 ms per il sasso — e senza, ogni normal map
+illuminerebbe storto. Poly Haven resta utile anche per le **texture**.
 
 **Attenzione ai .glb di Kenney: vanno riparati.** I kit sono esportati con
 UniGLTF (Unity), che indica come radice della scena un nodo che ha già un

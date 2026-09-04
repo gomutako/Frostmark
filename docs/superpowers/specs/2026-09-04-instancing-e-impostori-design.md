@@ -196,3 +196,58 @@ non si danno per fatte.
   buffer — ma si misura prima.
 - Il percorso procedurale senza asset (primitive `GenMesh*`) resta non
   instanziato. È la modalità degradata: funziona, non è veloce.
+
+---
+
+## Esito, 5 settembre 2026: la tappa 4 è cancellata
+
+Le tappe 1-3 sono state fatte. Lo spec diceva che ogni tappa si misura prima
+della successiva, e che se i numeri avessero detto che bastava, le altre si
+sarebbero **discusse** invece di darle per fatte. È andata così.
+
+**Risultato delle tappe 1-3:**
+
+| | baseline | dopo |
+|---|---|---|
+| chiamate di disegno, picco | 1.766 | 144 |
+| passaggio principale, peggiore | 6,0 ms | 2,0 ms |
+| chiamate nel passaggio d'ombra | 399 | 63 |
+| scena, peggiore | 12,1 ms | ~6,7 ms |
+
+**La tappa 4 — impostori e LOD — non si fa.** Non per prudenza: perché è stata
+misurata. Sostituendo *tutti* i prop con un asset Poly Haven vero
+(`rock_07`, 14.844 triangoli) il carico passa da ~118.000 a **7,3 milioni di
+triangoli per fotogramma**, e la scena da 4,6-5,1 a 5,0-5,3 ms. Sessantadue
+volte i triangoli, tre decimi di millisecondo. A questa scala i triangoli sono
+gratis: il collo di bottiglia erano le chiamate, e l'instancing le ha tolte.
+
+Cade con la tappa 4 anche la ragione per cui erano stati scelti gli impostori
+al posto di un decimatore. Nessuno dei due serve.
+
+**Il costo dominante del fotogramma sono ora i personaggi.** Il blocco d'ombra
+contiene `EntitiesDraw()` e `PlayerDraw()`, animati e disegnati una volta per
+cascata: escludendoli il passaggio scende da 3,3 a **0,26 ms**. Erano fuori
+ambito qui e restano il posto giusto dove guardare per il prossimo margine.
+
+### Quello che blocca davvero la fase 3
+
+Misurato sul catalogo Poly Haven, e non sono prestazioni:
+
+1. **L'alfa.** Ogni pianta ha `alphaMode` `MASK` o `BLEND` — le foglie sono
+   ritagli su quadrati. `scene.fs` non gestisce l'alfa, né nel passaggio
+   principale né in quello di profondità. È un blocco duro per qualunque
+   vegetazione. I sassi sono `OPAQUE` e funzionano già oggi.
+2. **Le mesh multiple.** `InstCreate()` viene usato solo quando il modello ha
+   una mesh sola. Nel catalogo è l'eccezione: `nettle_plant` ne ha 6,
+   `grass_medium_01` 17, `fir_tree_01` 3 mesh con 12 primitive e 6 materiali.
+   Serve un lotto per coppia (mesh, materiale).
+3. **Il catalogo va filtrato per conteggio.** `rock_07` 14.844 triangoli,
+   `nettle_plant` 31.304, `boulder_01` 66.122, `fir_sapling` 433.021,
+   `fir_tree_01` **6.982.937** con 478 MB di sola geometria. L'ultimo da solo è
+   59 volte l'intera scena attuale: non è un asset da decimare, ridurlo
+   sarebbe rifarlo.
+
+Nessun asset del catalogo porta le tangenti nel file, il che rende
+`BuildTangents()` della fase 1 obbligatorio e non un di più: le calcola in 1 ms
+per il sasso.
+
