@@ -56,6 +56,9 @@ typedef struct {
      * Vedi docs/03-asset-pubblici.md. */
     Model  extProp[PROP_COUNT];
     bool   hasExtProp[PROP_COUNT];
+    /* Calcolata al caricamento dall'ingombro del modello, non da una costante:
+     * vedi gExtProp in world.c. */
+    float  extPropScale[PROP_COUNT];
     /* Un gruppo di lotti per tipo, uno per mesh del modello. Vuoto vuol dire
      * "disegna un oggetto per volta, come prima". */
     InstModel propBatch[PROP_COUNT];

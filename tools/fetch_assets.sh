@@ -14,6 +14,7 @@
 #  Uso:  ./tools/fetch_assets.sh            solo struttura + istruzioni
 #        ./tools/fetch_assets.sh heightmap  genera anche una heightmap di prova
 #        ./tools/fetch_assets.sh models     scarica i modelli CC0 di Kenney
+#        ./tools/fetch_assets.sh rocce      scarica un masso fotogrammetrico CC0
 #        ./tools/fetch_assets.sh player     scarica il personaggio animato CC0
 #        ./tools/fetch_assets.sh npc        scarica i personaggi animati degli NPC
 #        ./tools/fetch_assets.sh font       scarica i font dell'interfaccia (OFL)
@@ -36,6 +37,53 @@ richiedono attribuzione: serve a dimostrare la provenienza in caso di dubbi.
 |---|---|---|---|---|
 EOF
 echo "creato assets/CREDITS.md"
+fi
+
+# ---- rocce fotogrammetriche (Poly Haven) ----------------------------------
+#  Un masso vero al posto della sfera schiacciata del kit. Poly Haven e' CC0 su
+#  tutto il catalogo e ha un'API, quindi gli URL si leggono invece di
+#  inchiodarli: cambiano a ogni ricottura degli asset.
+#
+#  namaqualand_boulder_04, e la scelta e' stata due volte controintuitiva.
+#  Non rock_07, che e' un sasso da 32 cm: portarlo a 2,2 metri gonfierebbe la
+#  texture di sette volte. E non boulder_01, che e' della taglia giusta ma ha
+#  67.042 vertici - raylib ne indirizza 65.535 e la mesh esce sfregiata.
+#  namaqualand_boulder_04 e' largo 2,52 m e ne ha 30.165, meta' del limite.
+#  I 59.000 triangoli a questo motore non costano niente: misurato.
+#
+#  Il gioco vuole il file in assets/models/rock.gltf: LoadExtProps prova .glb e
+#  poi .gltf, e la scala se la calcola dall'ingombro. Il .bin e le texture
+#  tengono i loro nomi, perche' il .gltf li cerca cosi'.
+if [ "${1:-}" = "rocce" ]; then
+    for cmd in curl python3; do
+        command -v "$cmd" >/dev/null 2>&1 || { echo "serve $cmd"; exit 1; }
+    done
+
+    ASSET="${2:-namaqualand_boulder_04}"
+    echo "cerco $ASSET su polyhaven.com..."
+    curl -sSL "https://api.polyhaven.com/files/$ASSET" -o "$ASSETS/.ph.json"
+
+    python3 "$ROOT/tools/polyhaven_get.py" "$ASSETS/.ph.json" "$ASSETS/models" rock.gltf
+    rm -f "$ASSETS/.ph.json"
+
+    # LoadExtProps prova PRIMA il .glb dichiarato nella tabella, quindi finche'
+    # rock.glb c'e' vince lui. Si sposta di lato invece di cancellarlo: e' un
+    # file dell'utente, e si torna indietro con un mv.
+    if [ -f "$ASSETS/models/rock.glb" ]; then
+        mv "$ASSETS/models/rock.glb" "$ASSETS/models/rock.glb.kit"
+        echo "  rock.glb del kit spostato in rock.glb.kit"
+    fi
+
+    if ! grep -q "assets/models/rock.gltf" "$ASSETS/CREDITS.md" 2>/dev/null; then
+        printf '| assets/models/rock.gltf | Poly Haven | https://polyhaven.com/a/%s | CC0 | %s |\n' \
+            "$ASSET" "$(date +%Y-%m-%d)" >> "$ASSETS/CREDITS.md"
+        echo "  aggiunta la riga in assets/CREDITS.md"
+    fi
+
+    echo
+    echo "fatto. Per tornare al sasso del kit:"
+    echo "  rm assets/models/rock.gltf && mv assets/models/rock.glb.kit assets/models/rock.glb"
+    exit 0
 fi
 
 # ---- personaggi animati per gli NPC (KayKit) ------------------------------

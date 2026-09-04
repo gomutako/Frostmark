@@ -148,14 +148,41 @@ static Texture2D LoadTerrainTexture(const char *worldDir)
  * I tipi non elencati (casa e torre) restano procedurali: nei kit CC0 di
  * Kenney gli edifici medievali sono modulari - muri, tetti, angoli - e
  * andrebbero composti, non solo caricati. */
-static const struct { const char *file; float scale; } gExtProp[PROP_COUNT] = {
-    [PROP_TREE] = { "assets/models/tree.glb", 4.61f },  /* h 1.41 -> 6.5 m */
-    [PROP_PINE] = { "assets/models/pine.glb", 3.97f },  /* h 1.71 -> 6.8 m */
-    [PROP_ROCK] = { "assets/models/rock.glb", 3.54f },  /* l 0.62 -> 2.2 m */
-    [PROP_BUSH] = { "assets/models/bush.glb", 2.87f },  /* l 0.49 -> 1.4 m */
-    [PROP_HERB] = { "assets/models/herb.glb", 4.50f },  /* h 0.19 -> 0.9 m */
-    [PROP_CRYPT]= { "assets/models/graveyard/crypt.glb", 5.0f }, /* h 1.0 -> 5 m */
+/* La tabella dichiara QUANTO DEVE ESSERE GRANDE l'oggetto in metri, non di
+ * quanto va moltiplicato il file. La scala si ricava al caricamento
+ * dall'ingombro vero del modello.
+ *
+ * Prima erano costanti tarate a mano sul pacchetto Kenney - 3,54 perche' quel
+ * sasso e' largo 0,62 m - e cambiare pacchetto voleva dire rifare i conti a
+ * mano, con un errore che non da' nessun avviso: un albero alto tre volte
+ * tanto o un masso che sprofonda. Le misure di riferimento restano quelle di
+ * prima, e con i file di Kenney escono le stesse scale.
+ *
+ * 'perAltezza' dice quale dimensione conta: un albero si misura in altezza,
+ * un sasso in larghezza. */
+static const struct { const char *file; float voluto; bool perAltezza; }
+gExtProp[PROP_COUNT] = {
+    [PROP_TREE] = { "assets/models/tree.glb",            6.5f, true  },
+    [PROP_PINE] = { "assets/models/pine.glb",            6.8f, true  },
+    [PROP_ROCK] = { "assets/models/rock.glb",            2.2f, false },
+    [PROP_BUSH] = { "assets/models/bush.glb",            1.4f, false },
+    [PROP_HERB] = { "assets/models/herb.glb",            0.9f, true  },
+    [PROP_CRYPT]= { "assets/models/graveyard/crypt.glb", 5.0f, true  },
 };
+
+/* Il file puo' essere .glb o .gltf: i kit spediscono il primo, Poly Haven il
+ * secondo con il .bin e le texture accanto. Si prova quello dichiarato e poi
+ * l'altra estensione, cosi' sostituire un asset non richiede di ricompilare. */
+static const char *TrovaModello(const char *file, char *buf, int n)
+{
+    if (FileExists(file)) return file;
+
+    const char *punto = strrchr(file, '.');
+    if (punto == NULL) return NULL;
+    const char *altra = (strcmp(punto, ".glb") == 0) ? ".gltf" : ".glb";
+    snprintf(buf, (size_t)n, "%.*s%s", (int)(punto - file), file, altra);
+    return FileExists(buf) ? buf : NULL;
+}
 
 /* --- Edifici modulari ----------------------------------------------------
  * I pezzi vengono da due kit diversi, quindi da due cartelle: ognuno porta il
@@ -203,17 +230,44 @@ static void LoadBuildParts(World *w)
     TraceLog(LOG_INFO, "WORLD: %d pezzi per gli edifici modulari", BUILD_PART_COUNT);
 }
 
+/* Raylib 5.5 tiene gli indici di una mesh in 'unsigned short': oltre 65.535
+ * vertici li tronca, e lo dice con un avviso fra le centinaia di righe del
+ * log. Il risultato non e' un errore ma un DIFETTO VISIVO - gli indici si
+ * avvolgono e nascono triangoli che attraversano l'oggetto da parte a parte -
+ * quindi qui si rifiuta il modello e si torna alla primitiva procedurale, che
+ * almeno e' giusta. Meglio una sfera onesta di un masso sfregiato.
+ *
+ * Preso su boulder_01 di Poly Haven: 67.042 vertici, milleseicento oltre il
+ * limite, e nessun modo di accorgersene senza guardare l'oggetto da vicino. */
+static bool TroppiVertici(const Model *m, const char *file)
+{
+    for (int i = 0; i < m->meshCount; i++) {
+        if (m->meshes[i].vertexCount <= 65535) continue;
+        TraceLog(LOG_WARNING,
+                 "WORLD: %s ha una mesh da %d vertici: raylib ne indirizza al "
+                 "massimo 65535 e la romperebbe. Modello scartato.",
+                 file, m->meshes[i].vertexCount);
+        return true;
+    }
+    return false;
+}
+
 static void LoadExtProps(World *w)
 {
     for (int t = 0; t < PROP_COUNT; t++) {
-        if (gExtProp[t].file == NULL || !FileExists(gExtProp[t].file)) continue;
+        if (gExtProp[t].file == NULL) continue;
+        char alt[256];
+        const char *file = TrovaModello(gExtProp[t].file, alt, (int)sizeof alt);
+        if (file == NULL) continue;
 
-        Model m = LoadModel(gExtProp[t].file);
+        Model m = LoadModel(file);
         if (m.meshCount == 0) {          /* formato non supportato o file rotto */
-            TraceLog(LOG_WARNING, "WORLD: %s non caricato", gExtProp[t].file);
+            TraceLog(LOG_WARNING, "WORLD: %s non caricato", file);
             UnloadModel(m);
             continue;
         }
+        if (TroppiVertici(&m, file)) { UnloadModel(m); continue; }
+
         /* L'atlante di Kenney e' una tavolozza: ogni materiale campiona una
          * cella di colore pieno larga pochi pixel. Con i mipmap, da lontano le
          * celle vicine si mescolano. Il filtro a punti lo evita - qui non ho
@@ -227,13 +281,22 @@ static void LoadExtProps(World *w)
         w->extProp[t]    = m;
         w->hasExtProp[t] = true;
 
+        /* La scala esce dall'ingombro vero: cosi' un asset scambiato entra
+         * nel mondo con la taglia giusta senza ritoccare nessuna costante. */
+        BoundingBox bb = GetModelBoundingBox(m);
+        float ha = gExtProp[t].perAltezza
+                   ? bb.max.y - bb.min.y
+                   : fmaxf(bb.max.x - bb.min.x, bb.max.z - bb.min.z);
+        w->extPropScale[t] = (ha > 1e-4f) ? gExtProp[t].voluto / ha : 1.0f;
+
         /* Un lotto per ogni mesh, cosi' anche i modelli composti - nel
          * catalogo Poly Haven la mesh singola e' l'eccezione - si disegnano a
          * gruppi invece che uno alla volta. */
         InstModelCreate(&w->propBatch[t], m);
 
-        TraceLog(LOG_INFO, "WORLD: modello esterno %s (%d mesh)%s",
-                 gExtProp[t].file, m.meshCount,
+        TraceLog(LOG_INFO, "WORLD: modello esterno %s (%d mesh, x%.2f -> %.1f m)%s",
+                 file, m.meshCount, (double)w->extPropScale[t],
+                 (double)gExtProp[t].voluto,
                  InstModelReady(&w->propBatch[t]) ? ", a lotti" : "");
     }
 }
@@ -704,7 +767,7 @@ static void DrawProp(World *w, const Prop *p, Color tint, bool lod)
      * il ciclo giorno/notte: un tint diverso da WHITE li scurirebbe due volte. */
     if (w->hasExtProp[p->type]) {
         if (p->taken) return;
-        float k = s * gExtProp[p->type].scale;
+        float k = s * w->extPropScale[p->type];
 
         /* Ripiego non instanziato - si arriva qui solo se scene_inst.vs manca
          * o un lotto non si e' creato. La soglia dell'alfa va messa a mano:
@@ -828,7 +891,7 @@ static bool PropBatchAdd(World *w, const Prop *p)
     InstModel *im = &w->propBatch[p->type];
     if (!InstModelReady(im) || p->taken) return false;
 
-    float k = p->scale * gExtProp[p->type].scale;
+    float k = p->scale * w->extPropScale[p->type];
     InstModelAdd(im, p->pos, p->rot, (Vector3){ k, k, k });
     return true;
 }
