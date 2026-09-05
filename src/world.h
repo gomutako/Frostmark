@@ -17,6 +17,7 @@
 #include "raylib.h"
 #include "config.h"
 #include "instancing.h"
+#include "meshgroup.h"
 #include "worldtypes.h"
 #include "worldio.h"
 #include <stdbool.h>
@@ -30,6 +31,17 @@ typedef struct {
     Prop   props[MAX_PROPS_PER_CHUNK];
     int    propCount;
 } Chunk;
+
+/* Le varianti di un tipo di prop: un asset esterno puo' contenere piu'
+ * individui affiancati (meta' del catalogo vegetale Poly Haven e' fatta
+ * cosi'), e ognuno ha il suo gruppo di lotti, la sua scala e le sue mesh. */
+typedef struct {
+    InstModel *batch;     /* un gruppo di lotti per variante */
+    float     *scala;     /* moltiplicatore per variante     */
+    int       *meshIdx;   /* indici delle mesh, raggruppati  */
+    MeshGroup *gruppo;    /* first/count dentro meshIdx      */
+    int        n;
+} PropVariants;
 
 typedef struct {
     /* Il mondo cotto: quote, biomi, prop, villaggi. Tutto cio' che segue e'
@@ -56,12 +68,13 @@ typedef struct {
      * Vedi docs/03-asset-pubblici.md. */
     Model  extProp[PROP_COUNT];
     bool   hasExtProp[PROP_COUNT];
-    /* Calcolata al caricamento dall'ingombro del modello, non da una costante:
-     * vedi gExtProp in world.c. */
-    float  extPropScale[PROP_COUNT];
-    /* Un gruppo di lotti per tipo, uno per mesh del modello. Vuoto vuol dire
-     * "disegna un oggetto per volta, come prima". */
-    InstModel propBatch[PROP_COUNT];
+    /* Un asset puo' contenere piu' individui affiancati: meta' del catalogo
+     * vegetale Poly Haven e' fatta cosi'. Ogni variante ha il suo gruppo di
+     * lotti, la sua scala - tarata sul PROPRIO ingombro fino alla dimensione
+     * dichiarata in gExtProp, cosi' il raggio di collisione cotto nel mondo
+     * resta valido - e le sue mesh, che servono al ripiego non instanziato.
+     * n == 0 vuol dire nessun modello esterno per questo tipo. */
+    PropVariants propVar[PROP_COUNT];
 
     /* Pezzi modulari degli edifici: vedi BUILD_FILES in world.c. Casa e torre
      * non esistono come modello unico nei kit CC0, si compongono. */

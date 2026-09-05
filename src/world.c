@@ -252,6 +252,19 @@ static bool TroppiVertici(const Model *m, const char *file)
     return false;
 }
 
+/* Prima i lotti, poi gli array: i lotti puntano ai VBO delle mesh, e il
+ * modello si scarica dopo di loro. */
+static void FreePropVariants(PropVariants *pv)
+{
+    for (int g = 0; g < pv->n; g++) InstModelFree(&pv->batch[g]);
+    MemFree(pv->batch);
+    MemFree(pv->scala);
+    MemFree(pv->meshIdx);
+    MemFree(pv->gruppo);
+    pv->batch = NULL; pv->scala = NULL; pv->meshIdx = NULL; pv->gruppo = NULL;
+    pv->n = 0;
+}
+
 static void LoadExtProps(World *w)
 {
     for (int t = 0; t < PROP_COUNT; t++) {
@@ -281,23 +294,68 @@ static void LoadExtProps(World *w)
         w->extProp[t]    = m;
         w->hasExtProp[t] = true;
 
-        /* La scala esce dall'ingombro vero: cosi' un asset scambiato entra
-         * nel mondo con la taglia giusta senza ritoccare nessuna costante. */
-        BoundingBox bb = GetModelBoundingBox(m);
-        float ha = gExtProp[t].perAltezza
-                   ? bb.max.y - bb.min.y
-                   : fmaxf(bb.max.x - bb.min.x, bb.max.z - bb.min.z);
-        w->extPropScale[t] = (ha > 1e-4f) ? gExtProp[t].voluto / ha : 1.0f;
+        /* Le varianti: mesh che si toccano in XZ sono lo stesso individuo. */
+        int nm = m.meshCount;
+        BoundingBox *bb = (BoundingBox *)MemAlloc((unsigned int)(nm * (int)sizeof(BoundingBox)));
+        PropVariants *pv = &w->propVar[t];
+        pv->meshIdx = (int *)MemAlloc((unsigned int)(nm * (int)sizeof(int)));
+        pv->gruppo  = (MeshGroup *)MemAlloc((unsigned int)(nm * (int)sizeof(MeshGroup)));
+        if (bb == NULL || pv->meshIdx == NULL || pv->gruppo == NULL) {
+            MemFree(bb); FreePropVariants(pv); UnloadModel(m);
+            w->hasExtProp[t] = false;
+            continue;
+        }
 
-        /* Un lotto per ogni mesh, cosi' anche i modelli composti - nel
-         * catalogo Poly Haven la mesh singola e' l'eccezione - si disegnano a
-         * gruppi invece che uno alla volta. */
-        InstModelCreate(&w->propBatch[t], m);
+        for (int i = 0; i < nm; i++) bb[i] = GetMeshBoundingBox(m.meshes[i]);
+        int ng = MeshGroupSplit(bb, nm, pv->meshIdx, pv->gruppo, nm);
+        MemFree(bb);
 
-        TraceLog(LOG_INFO, "WORLD: modello esterno %s (%d mesh, x%.2f -> %.1f m)%s",
-                 file, m.meshCount, (double)w->extPropScale[t],
+        /* Oltre MESHGROUP_MAX mesh il raggruppamento si arrende: si torna a
+         * trattare il modello come un individuo solo, che e' il comportamento
+         * di prima delle varianti. */
+        if (ng == 0) {
+            for (int i = 0; i < nm; i++) pv->meshIdx[i] = i;
+            pv->gruppo[0].first = 0;
+            pv->gruppo[0].count = nm;
+            pv->gruppo[0].box   = GetModelBoundingBox(m);
+            ng = 1;
+        }
+
+        pv->batch = (InstModel *)MemAlloc((unsigned int)(ng * (int)sizeof(InstModel)));
+        pv->scala = (float *)MemAlloc((unsigned int)(ng * (int)sizeof(float)));
+        if (pv->batch == NULL || pv->scala == NULL) {
+            FreePropVariants(pv); UnloadModel(m);
+            w->hasExtProp[t] = false;
+            continue;
+        }
+        pv->n = ng;
+
+        for (int g = 0; g < ng; g++) {
+            /* raylib fonde le trasformazioni dei nodi dentro i vertici, quindi
+             * la seconda variante porta cucito l'offset che la mette in fila:
+             * si toglie qui, una volta, invece che a ogni fotogramma. */
+            Vector3 o = MeshGroupOrigin(&pv->gruppo[g]);
+            for (int k = 0; k < pv->gruppo[g].count; k++) {
+                Mesh *me = &m.meshes[pv->meshIdx[pv->gruppo[g].first + k]];
+                MeshGroupRecenter(me->vertices, me->vertexCount, o);
+                UpdateMeshBuffer(*me, 0, me->vertices,
+                                 me->vertexCount * 3 * (int)sizeof(float), 0);
+            }
+
+            /* Ogni variante alla stessa taglia, partendo dal proprio ingombro. */
+            pv->scala[g] = MeshGroupScale(&pv->gruppo[g], gExtProp[t].voluto,
+                                          gExtProp[t].perAltezza);
+
+            InstModelCreateSubset(&pv->batch[g], m,
+                                  pv->meshIdx + pv->gruppo[g].first,
+                                  pv->gruppo[g].count);
+        }
+
+        TraceLog(LOG_INFO, "WORLD: modello esterno %s (%d mesh, %d variant%s, "
+                 "x%.2f -> %.1f m)%s",
+                 file, nm, ng, (ng == 1) ? "e" : "i", (double)pv->scala[0],
                  (double)gExtProp[t].voluto,
-                 InstModelReady(&w->propBatch[t]) ? ", a lotti" : "");
+                 InstModelReady(&pv->batch[0]) ? ", a lotti" : "");
     }
 }
 
@@ -499,7 +557,7 @@ void WorldUnload(World *w)
     }
     for (int t = 0; t < PROP_COUNT; t++) {
         /* Prima il lotto, poi il modello: il lotto punta ai VBO della mesh. */
-        InstModelFree(&w->propBatch[t]);
+        FreePropVariants(&w->propVar[t]);
         if (w->hasExtProp[t]) { UnloadModel(w->extProp[t]); w->hasExtProp[t] = false; }
     }
     if (w->hasBuildParts) {
@@ -756,6 +814,21 @@ static void DrawTower(World *w, Vector3 pos, float rotDeg, float s, Color tint)
     PlacePart(w, BUILD_TOWER_ROOF, pos, rotDeg, 0.0f, 3.3f, 0.0f, 0.0f, cell, sc, tint);
 }
 
+/* Quale individuo del set tocca a questo prop. E' una FUNZIONE della
+ * posizione, non un dato: il mondo cotto non cambia, e disegno, passaggio
+ * d'ombra e collisione arrivano tutti allo stesso numero.
+ *
+ * Il sale 91 la tiene indipendente dalle altre decisioni prese dalla
+ * posizione: la variante di un cespuglio non deve correlare con la forma
+ * delle case, che usa 77. */
+static int PropVariantOf(const Prop *p, int n)
+{
+    if (n <= 1) return 0;
+    float h = FmHash01((unsigned int)(p->pos.x * 4.0f), (int)(p->pos.z * 4.0f), 91);
+    int v = (int)(h * (float)n);
+    return (v >= n) ? n - 1 : v;      /* h == 1 non deve uscire dall'array */
+}
+
 static void DrawProp(World *w, const Prop *p, Color tint, bool lod)
 {
     const Vector3 Y = { 0.0f, 1.0f, 0.0f };
@@ -765,19 +838,39 @@ static void DrawProp(World *w, const Prop *p, Color tint, bool lod)
     /* Modello esterno al posto delle primitive, se e' stato scaricato.
      * Shade(WHITE, tint) lascia passare i colori del modello e ci applica solo
      * il ciclo giorno/notte: un tint diverso da WHITE li scurirebbe due volte. */
-    if (w->hasExtProp[p->type]) {
+    if (w->hasExtProp[p->type] && w->propVar[p->type].n > 0) {
         if (p->taken) return;
-        float k = s * w->extPropScale[p->type];
+
+        PropVariants *pv = &w->propVar[p->type];
+        int v = PropVariantOf(p, pv->n);
+        float k = s * pv->scala[v];
 
         /* Ripiego non instanziato - si arriva qui solo se scene_inst.vs manca
          * o un lotto non si e' creato. La soglia dell'alfa va messa a mano:
          * chi instanzia ce l'ha per lotto, qui no. Senza, il fogliame
          * tornerebbe a quadrati opachi proprio nella modalita' degradata. */
-        float cut = LightAlphaCutFor(w->extProp[p->type].materials[0]);
+        Model *mo = &w->extProp[p->type];
+        float cut = LightAlphaCutFor(mo->materials[0]);
         if (cut > 0.0f) LightSetAlphaCut(cut);
 
-        DrawModelEx(w->extProp[p->type], pos, Y, p->rot, (Vector3){ k, k, k },
-                    Shade(WHITE, tint));
+        /* Una mesh per volta, e solo quelle della variante scelta: le altre
+         * varianti sono ricentrate sulla stessa origine e si accavallerebbero. */
+        Matrix mt = MatrixMultiply(
+                        MatrixMultiply(MatrixScale(k, k, k),
+                                       MatrixRotateY(p->rot * DEG2RAD)),
+                        MatrixTranslate(pos.x, pos.y, pos.z));
+
+        for (int j = 0; j < pv->gruppo[v].count; j++) {
+            int mi  = pv->meshIdx[pv->gruppo[v].first + j];
+            int mat = (mo->meshMaterial != NULL) ? mo->meshMaterial[mi] : 0;
+            if (mat < 0 || mat >= mo->materialCount) mat = 0;
+
+            /* Il materiale e' una copia: si tinge questa, non quella del
+             * modello, o la tinta del ciclo giorno/notte si accumulerebbe. */
+            Material mm = mo->materials[mat];
+            mm.maps[MATERIAL_MAP_DIFFUSE].color = Shade(WHITE, tint);
+            DrawMesh(mo->meshes[mi], mm, mt);
+        }
 
         if (cut > 0.0f) LightSetAlphaCut(0.0f);
         return;
@@ -862,13 +955,17 @@ static void PropBatchBegin(World *w, Color tint)
     /* La tinta del ciclo giorno/notte moltiplica l'albedo, ed e' uguale per
      * tutti: e' del lotto, non dell'istanza. Shade(WHITE, tint) vale tint, ed
      * e' il conto che faceva DrawProp per i modelli esterni. */
-    for (int t = 0; t < PROP_COUNT; t++)      InstModelBegin(&w->propBatch[t], tint);
+    for (int t = 0; t < PROP_COUNT; t++)
+        for (int g = 0; g < w->propVar[t].n; g++)
+            InstModelBegin(&w->propVar[t].batch[g], tint);
     for (int i = 0; i < BUILD_PART_COUNT; i++) InstModelBegin(&w->partBatch[i], tint);
 }
 
 static void PropBatchFlush(World *w)
 {
-    for (int t = 0; t < PROP_COUNT; t++) InstModelFlush(&w->propBatch[t]);
+    for (int t = 0; t < PROP_COUNT; t++)
+        for (int g = 0; g < w->propVar[t].n; g++)
+            InstModelFlush(&w->propVar[t].batch[g]);
 
     /* I pezzi d'edificio. Il tetto per ultimo e da solo: e' un guscio sottile,
      * e da dentro casa se ne vedrebbe attraverso, quindi va disegnato con lo
@@ -888,11 +985,14 @@ static void PropBatchFlush(World *w)
  * chiamante disegna un oggetto per volta come si e' sempre fatto. */
 static bool PropBatchAdd(World *w, const Prop *p)
 {
-    InstModel *im = &w->propBatch[p->type];
-    if (!InstModelReady(im) || p->taken) return false;
+    PropVariants *pv = &w->propVar[p->type];
+    if (pv->n == 0 || p->taken) return false;
 
-    float k = p->scale * w->extPropScale[p->type];
-    InstModelAdd(im, p->pos, p->rot, (Vector3){ k, k, k });
+    int v = PropVariantOf(p, pv->n);
+    if (!InstModelReady(&pv->batch[v])) return false;
+
+    float k = p->scale * pv->scala[v];
+    InstModelAdd(&pv->batch[v], p->pos, p->rot, (Vector3){ k, k, k });
     return true;
 }
 

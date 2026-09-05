@@ -12,6 +12,7 @@
  * chiede un contesto grafico gira anche dove le altre escono 77.
  * ========================================================================== */
 #include "../../src/meshgroup.c"
+#include "../../src/world.c"
 #include "prova.h"
 
 /* Ingombri deliberatamente ASIMMETRICI: un ingombro cubico non si accorge se
@@ -145,6 +146,34 @@ int main(void)
     MeshGroup gn = { 0, 1, nullo };
     Ok("un ingombro degenere non divide per zero",
        fabsf(MeshGroupScale(&gn, 1.4f, true) - 1.0f) < 1e-4f);
+
+    /* --- La scelta della variante -----------------------------------------
+     * Funzione PURA della posizione, come HouseShapeOf: disegno, ombra e
+     * collisione la richiamano e non possono divergere, e il mondo cotto non
+     * cambia di un byte. */
+    Prop q;
+    memset(&q, 0, sizeof q);
+    q.type = PROP_BUSH;
+    q.scale = 1.0f;
+    q.pos = (Vector3){ 12.5f, 0.0f, 41.25f };
+    Ok("la stessa posizione da' sempre la stessa variante",
+       PropVariantOf(&q, 4) == PropVariantOf(&q, 4));
+    Ok("un modello a una variante sceglie sempre la prima",
+       PropVariantOf(&q, 1) == 0);
+
+    /* Tutte le varianti devono comparire, o meta' dell'asset e' peso morto. */
+    int conta[4] = { 0, 0, 0, 0 }, fuoriRange = 0;
+    for (int i = 0; i < 2000; i++) {
+        q.pos = (Vector3){ (float)i * 1.37f, 0.0f, (float)(i % 53) * 2.11f };
+        int v = PropVariantOf(&q, 4);
+        if (v < 0 || v >= 4) fuoriRange++;
+        else conta[v]++;
+    }
+    Ok("la variante resta dentro l'array", fuoriRange == 0);
+    Ok("su 2000 posizioni compaiono tutte e quattro le varianti",
+       conta[0] > 0 && conta[1] > 0 && conta[2] > 0 && conta[3] > 0);
+    Ok("nessuna variante si prende piu' di meta' del bosco",
+       conta[0] < 1000 && conta[1] < 1000 && conta[2] < 1000 && conta[3] < 1000);
 
     return ProveEsito();
 }
