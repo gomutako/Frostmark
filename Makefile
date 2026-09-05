@@ -148,6 +148,8 @@ prove: $(RAYLIB_DEP)
 	      $(SRC_DIR)/fmath.c $(LDFLAGS) $(LDLIBS) -o $(PROVE_DIR)/instancing
 	$(CC) $(PROVE_CF) $(TOOL_DIR)/prove/alfa.c \
 	      $(SRC_DIR)/fmath.c $(LDFLAGS) $(LDLIBS) -o $(PROVE_DIR)/alfa
+	$(CC) $(PROVE_CF) $(TOOL_DIR)/prove/varianti.c \
+	      $(LDFLAGS) $(LDLIBS) -o $(PROVE_DIR)/varianti
 	@ok=1; for t in $(PROVE_DIR)/*; do \
 	    echo "== $$t"; \
 	    $$t; r=$$?; \
