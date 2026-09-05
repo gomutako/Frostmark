@@ -104,3 +104,30 @@ int MeshGroupSplit(const BoundingBox *box, int n, int *idx,
     for (int k = 0; k < ng; k++) out[k] = ord[k];
     return ng;
 }
+
+Vector3 MeshGroupOrigin(const MeshGroup *g)
+{
+    Vector3 o;
+    o.x = (g->box.min.x + g->box.max.x) * 0.5f;
+    o.y = g->box.min.y;
+    o.z = (g->box.min.z + g->box.max.z) * 0.5f;
+    return o;
+}
+
+void MeshGroupRecenter(float *v, int vertexCount, Vector3 o)
+{
+    if (v == NULL) return;
+    for (int i = 0; i < vertexCount; i++) {
+        v[i * 3 + 0] -= o.x;
+        v[i * 3 + 1] -= o.y;
+        v[i * 3 + 2] -= o.z;
+    }
+}
+
+float MeshGroupScale(const MeshGroup *g, float voluto, bool perAltezza)
+{
+    float dim = perAltezza
+                ? g->box.max.y - g->box.min.y
+                : fmaxf(g->box.max.x - g->box.min.x, g->box.max.z - g->box.min.z);
+    return (dim > 1e-4f) ? voluto / dim : 1.0f;
+}

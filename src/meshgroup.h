@@ -47,4 +47,18 @@ typedef struct {
 int MeshGroupSplit(const BoundingBox *box, int n, int *idx,
                    MeshGroup *out, int maxGroups);
 
+/* L'origine da portare a zero: centro XZ dell'ingombro e MINIMO Y. Il centro
+ * in Y metterebbe mezza pianta sottoterra: le piante stanno appoggiate. */
+Vector3 MeshGroupOrigin(const MeshGroup *g);
+
+/* Sposta i vertici di -o. 'v' e' l'array di raylib: 3 float per vertice.
+ * Si fa una volta al caricamento e non per fotogramma - l'alternativa era un
+ * uniform per lotto e una sottrazione per vertice a ogni disegno. */
+void MeshGroupRecenter(float *v, int vertexCount, Vector3 o);
+
+/* Il moltiplicatore che porta il gruppo alla dimensione voluta in metri:
+ * sull'altezza se perAltezza, altrimenti sul lato XZ maggiore. Torna 1 se
+ * l'ingombro e' degenere. */
+float MeshGroupScale(const MeshGroup *g, float voluto, bool perAltezza);
+
 #endif /* MESHGROUP_H */

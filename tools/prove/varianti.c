@@ -93,5 +93,58 @@ int main(void)
     for (int i = 0; i < 4; i++) if (visto[i] != 1) tutte = 0;
     Ok("ogni mesh sta in un gruppo e in uno solo", tutte);
 
+    /* --- Ricentrare -------------------------------------------------------
+     * raylib fonde le trasformazioni dei nodi dentro i vertici, quindi la
+     * seconda variante di shrub_02 porta cucito l'offset che la mette in fila.
+     * Senza toglierlo, il cespuglio comparirebbe due metri di lato. */
+    n = MeshGroupSplit(fila, 4, idx, gr, 4);
+    Vector3 o = MeshGroupOrigin(&gr[1]);
+    Ok("l'origine e' il centro XZ della variante",
+       n == 4 && fabsf(o.x - 2.0f) < 1e-4f && fabsf(o.z) < 1e-4f);
+    Ok("l'origine e' il MINIMO Y, non il centro: la pianta sta a terra",
+       fabsf(o.y) < 1e-4f);
+
+    /* Box() appoggia ogni ingombro a terra (min.y = 0.0f), quindi o.y qui
+     * sopra e' sempre zero: un secondo sabotaggio che sottraesse o.y due
+     * volte (invece che una) resterebbe invisibile, perche' il doppio di
+     * zero e' zero. Da qui in poi si forza o.y a un valore diverso da zero,
+     * come capiterebbe con un modello gia' sollevato da terra, cosi' la
+     * prova puo' distinguere "una volta" da "due volte". */
+    o.y = 0.4f;
+
+    /* Un triangolo dove sta la seconda variante: x attorno a 2, y da 0,4 a 1,8 */
+    float v[9] = { 1.6f, 0.4f, -0.3f,
+                   2.4f, 0.4f,  0.3f,
+                   2.0f, 1.8f,  0.0f };
+    MeshGroupRecenter(v, 3, o);
+    Ok("dopo il ricentraggio la variante sta sull'origine",
+       fabsf((v[0] + v[3] + v[6]) / 3.0f) < 1e-4f &&
+       fabsf((v[2] + v[5] + v[8]) / 3.0f) < 1e-4f);
+    Ok("il ricentraggio non schiaccia la variante a terra",
+       fabsf(v[7] - 1.4f) < 1e-4f);
+
+    /* --- La taglia --------------------------------------------------------
+     * Ogni variante si scala dal PROPRIO ingombro fino alla dimensione
+     * dichiarata: le varianti cambiano forma, non misura, e il raggio di
+     * collisione cotto nel mondo resta valido. */
+    n = MeshGroupSplit(fila, 4, idx, gr, 4);
+    float k0 = MeshGroupScale(&gr[0], 1.4f, true);   /* alta 1,1 */
+    float k3 = MeshGroupScale(&gr[3], 1.4f, true);   /* alta 1,6 */
+    float h0 = (gr[0].box.max.y - gr[0].box.min.y) * k0;
+    float h3 = (gr[3].box.max.y - gr[3].box.min.y) * k3;
+    Ok("varianti di altezza diversa arrivano alla stessa taglia",
+       fabsf(h0 - 1.4f) < 1e-4f && fabsf(h3 - 1.4f) < 1e-4f);
+    Ok("varianti diverse hanno moltiplicatori diversi", fabsf(k0 - k3) > 1e-3f);
+
+    /* perAltezza falso guarda il lato XZ maggiore: e' il caso dei massi, larghi
+     * e bassi, dove tarare sull'altezza darebbe un sasso gigante. */
+    float kl = MeshGroupScale(&gr[3], 2.0f, false);  /* lati 1,0 x 0,8 */
+    Ok("senza perAltezza si tara sul lato XZ maggiore", fabsf(kl - 2.0f) < 1e-4f);
+
+    BoundingBox nullo = Box(0.0f, 0.0f, 0.0f, 0.0f, 0.0f);
+    MeshGroup gn = { 0, 1, nullo };
+    Ok("un ingombro degenere non divide per zero",
+       fabsf(MeshGroupScale(&gn, 1.4f, true) - 1.0f) < 1e-4f);
+
     return ProveEsito();
 }
