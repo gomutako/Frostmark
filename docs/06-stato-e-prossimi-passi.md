@@ -1,11 +1,11 @@
 # 06 — Stato del lavoro e prossimi passi
 
 > **Se stai riprendendo il lavoro, parti da qui.** Questo file dice dove siamo
-> arrivati, cosa è stato deciso e perché, e quali sono le tre domande ancora
+> arrivati, cosa è stato deciso e perché, e quali sono le due domande ancora
 > aperte. Gli altri documenti spiegano *come funziona* il gioco; questo dice
 > *a che punto siamo*.
 
-**Ultimo aggiornamento:** 5 settembre 2026, commit `b92f7a2`.
+**Ultimo aggiornamento:** 5 settembre 2026, commit `2dcb99c`.
 
 ---
 
@@ -18,7 +18,7 @@ asset 3D realistici al posto dei kit stilizzati:
 |---|---|---|
 | **1** | normal map nello shader | **fatta** |
 | **2** | instancing e LOD | **fatta**, e la tappa LOD è stata *cancellata* dopo averla misurata |
-| **3** | il gioco usa asset realistici | **iniziata**: motore pronto, un asset in gioco |
+| **3** | il gioco usa asset realistici | **in corso**: masso e cespuglio veri in gioco, gli alberi no |
 
 ### Fase 1 — normal map
 
@@ -61,7 +61,10 @@ Fatto:
 - `LoadExtProps()` accetta `.glb` **e** `.gltf`;
 - `fetch_assets.sh polyhaven <asset> <nome>` scarica dal catalogo leggendo gli
   URL dall'API;
-- **in gioco c'è un masso vero**: `namaqualand_boulder_04`.
+- **in gioco c'è un masso vero**: `namaqualand_boulder_04`;
+- **e un set di cespugli veri**: `shrub_02`, quattro individui in un file, uno
+  per prop. Il motore riconosce gli individui dal contatto degli ingombri XZ e
+  sceglie la variante dalla posizione — vedi *Varianti* in `docs/01`.
 
 ---
 
@@ -85,23 +88,34 @@ caricabile**. Gli alberi restano quelli del kit.
 
 **3. Metà del catalogo vegetale è fatto di *set di varianti*.** `shrub_02` sono
 quattro cespugli diversi in fila su sei metri; `periwinkle_plant` sei piante
-affiancate su 1,2. Il gioco li carica come un oggetto unico, quindi dove va un
-cespuglio ne compaiono quattro in miniatura, allineati. Provato e rimosso.
+affiancate su 1,2. Era un ostacolo — caricati come un oggetto unico, dove
+andava un cespuglio ne comparivano quattro in miniatura — e non lo è più: il
+motore separa gli individui dal contatto degli ingombri XZ, li ricentra al
+caricamento e ne disegna uno per prop. `shrub_02` entra in gioco come *4 mesh,
+4 varianti*, e i quattro ingombri sono separati da 0,23, 0,27 e 0,29 m senza
+bisogno di nessuna tolleranza. **Il vincolo si è rovesciato in un vantaggio**:
+un set è quello che serve a un bosco.
 
 ---
 
-## Le tre domande aperte
+## Le domande aperte
 
-### A. La scelta delle varianti (consigliata)
+### A. La scelta delle varianti — **CHIUSA**
 
-I set di varianti non sono un ostacolo: sono **quello che serve a un bosco** —
-quattro cespugli diversi invece dello stesso ripetuto cinquemila volte. Il
-motore ha già i pezzi, perché ogni variante finisce nel suo lotto; manca
-scegliere quale disegnare per ogni istanza, **dalla posizione**, con lo stesso
-trucco che `HouseShapeOf()` usa già per decidere se una casa è alta.
+Fatta. `src/meshgroup.c` riconosce gli individui dentro un modello dal contatto
+degli ingombri XZ, `LoadExtProps()` li ricentra e fa un gruppo di lotti per
+variante, `PropVariantOf()` sceglie quale disegnare dalla posizione del prop.
+In gioco c'è `shrub_02`: *4 mesh, 4 varianti, ×0,85 → 1,4 m, a lotti*, e su
+otto cespugli vicini compaiono tutte e quattro le forme. Il mondo cotto non è
+stato toccato, come previsto.
 
-Sbloccherebbe metà del catalogo e regalerebbe varietà al sottobosco. È una
-funzione piccola, ma è un design nuovo e va discusso prima di scriverlo.
+Restano fuori, e restano YAGNI finché non si vede il bisogno guardando il
+bosco: i **pesi per variante** (una comune, tre rare) e le varianti dichiarate
+a mano.
+
+Il design è in
+`docs/superpowers/specs/2026-09-05-varianti-prop-design.md`; il funzionamento in
+`docs/01-architettura.md`, sezione *Varianti*.
 
 ### B. Spezzare le mesh oltre il tetto
 
@@ -153,8 +167,11 @@ lì, sempre dallo stesso percorso.
 
 ## Documenti collegati
 
-- `docs/01-architettura.md` — sezioni *Normal map*, *Instancing* e *Le prove*
+- `docs/01-architettura.md` — sezioni *Normal map*, *Instancing*, *Varianti* e
+  *Le prove*
 - `docs/03-asset-pubblici.md` — il catalogo misurato e come si sceglie un asset
 - `docs/superpowers/specs/2026-09-04-instancing-e-impostori-design.md` — il
   perché della fase 2, con le misure che hanno deciso il piano
 - `docs/superpowers/plans/2026-09-04-instancing.md` — il piano eseguito
+- `docs/superpowers/specs/2026-09-05-varianti-prop-design.md` — il design della
+  domanda A, e `docs/superpowers/plans/2026-09-05-varianti-prop.md` il piano

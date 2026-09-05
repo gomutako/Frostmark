@@ -233,6 +233,63 @@ passaggio scende a **0,26 ms**. La geometria del mondo nel passaggio d'ombra
 costava ~0,7 ms e ora ne costa 0,26; tutto il resto sono sempre stati i
 personaggi, che ora sono il costo dominante dell'intero fotogramma.
 
+### Varianti
+
+Metà del catalogo vegetale di Poly Haven non è un oggetto ma un **set**:
+`shrub_02` sono quattro cespugli diversi in fila su sei metri. Caricato com'era,
+dove andava un cespuglio ne comparivano quattro in miniatura. Ora il motore
+riconosce gli individui dentro un modello e ne disegna **uno per prop**; è quel
+che serve a un bosco, perché quattro forme girate a caso non si leggono come
+quattro.
+
+**Chi è un individuo.** `Mesh` di raylib 5.5 non porta il nome, quindi dopo
+`LoadModel()` resta solo la geometria. La regola, in `src/meshgroup.c`, è una:
+*due mesh sono lo stesso individuo se i loro ingombri XZ si toccano*, e il
+contatto è transitivo. Nessuna tolleranza aggiunta, e su un caso vero non
+serve: i quattro ingombri di `shrub_02`, con le rotazioni dei nodi già fuse nei
+vertici, si succedono lungo X separati da 0,23, 0,27 e 0,29 m di vuoto. La
+stessa regola tiene insieme le sei mesh di `nettle_plant`, che sono i materiali
+di una pianta sola e stanno una dentro l'altra. I gruppi si ordinano per X
+crescente, e a parità di X per Z: l'ordine decide quale indice tocca a quale
+variante, e deve uscire uguale a ogni esecuzione, o lo stesso mondo salvato
+mostrerebbe cespugli diversi.
+
+**Ricentrare, una volta al caricamento.** raylib fonde le trasformazioni dei
+nodi dentro i vertici, ed è la proprietà su cui poggia `InstModel`: tutte le
+mesh condividono un'origine, quindi una sola trasformazione d'istanza vale per
+tutte. È anche il motivo per cui i set non funzionavano — la seconda variante
+porta cucito l'offset che la mette in fila. Per ogni gruppo si sottrae dai
+vertici il centro XZ e il minimo Y (il centro in Y metterebbe mezza pianta
+sottoterra) e si rifà l'upload con `UpdateMeshBuffer()`, prima di creare i
+lotti. L'alternativa era un uniform per lotto e una sottrazione per vertice a
+ogni fotogramma.
+
+**La taglia è per variante, non per set.** Ogni gruppo si scala dal proprio
+ingombro fino alla dimensione dichiarata in `gExtProp`: i quattro cespugli,
+larghi 1,64, 1,28, 2,29 e 1,10 m, entrano a ×0,85, ×1,09, ×0,61 e ×1,28 e nel
+mondo sono tutti larghi 1,4 m. Cambia la forma, non la misura — e il raggio di
+collisione cotto nel file del mondo resta valido senza rigenerare niente.
+
+**La scelta è una funzione della posizione**, non un dato: `PropVariantOf()`
+usa `FmHash01` sulla posizione del prop con il sale 91, come `HouseShapeOf()`
+fa con 77 per decidere se una casa è alta. Disegno, passaggio d'ombra e
+collisione la richiamano e non possono divergere; il mondo cotto non cambia di
+un byte e nel salvataggio non entra niente di nuovo. Il sale diverso serve a
+non far correlare la variante di un cespuglio con la forma delle case.
+(Del cespuglio, per la verità, l'ombra non si vede comunque:
+`WorldDrawShadowCasters()` salta erba e cespugli, che nel bosco sono la
+maggioranza dei prop e non proiettano niente che qualcuno noterebbe. La
+coerenza fra ombra e disegno vale quindi per il masso e per la cripta.)
+
+**Il ripiego non instanziato è cambiato di conseguenza.** Disegnava il modello
+intero con `DrawModelEx()`; ricentrate, le varianti si accavallerebbero tutte
+sull'origine. Ora è un giro di `DrawMesh()` sulle sole mesh del gruppo scelto,
+con la matrice composta a mano e la soglia dell'alfa impostata a mano — chi
+instanzia ce l'ha per lotto. Non è codice morto: gira quando `assets/shaders/`
+manca, e nessuna prova lo copre perché nessuna prova gira senza shader. Si
+verifica rinominando `assets/shaders/scene_inst.vs` e riavviando: confrontate a
+pixel, le due strade danno la stessa immagine.
+
 ### Le prove
 
 `make prove` compila ed esegue ogni file in `tools/prove/`. Non c'è un

@@ -37,7 +37,7 @@ attribuzione obbligatoria (resta comunque buona educazione citare l'autore).
 |---|---|---|
 | **kenney.nl/assets** | modelli low-poly (78-114 triangoli), icone UI, font, suoni — download diretto, l'unica sorgente davvero adatta a questo progetto | CC0 |
 | **ambientcg.com** | texture PBR tileable (erba, roccia, neve, legno, pietra) | CC0 |
-| **polyhaven.com** | texture, HDRI, modelli fotogrammetrici — **troppo pesanti per i prop**, vedi sotto | CC0 |
+| **polyhaven.com** | texture, HDRI, modelli fotogrammetrici — il masso e il cespuglio in gioco vengono da qui; il vincolo è nei vertici per mesh, vedi sotto | CC0 |
 | **quaternius.com** | modelli low-poly stilizzati: alberi, edifici, personaggi animati — download via Google Drive, non automatizzabile | CC0 |
 | **opengameart.org** | archivio misto — **filtrare per CC0**, molti asset sono CC-BY o GPL | varia |
 | **freesound.org** | suoni ambientali — **filtrare per CC0** | varia |
@@ -103,6 +103,7 @@ quanto è *fuori scala* — e alcuni lo sono parecchio:
 | `namaqualand_boulder_04` | 59.066 | 30.165 | opaco | **sì — è quello in uso** |
 | `namaqualand_boulder_02` | 97.964 | 53.437 | opaco | sì |
 | `boulder_01` | 66.122 | **67.042** | opaco | **no**: oltre il tetto dei 16 bit |
+| `shrub_02` | 27.254 | 6.346 | MASK | **sì — è il cespuglio in uso**, ed è un set di quattro |
 | `nettle_plant` | 31.304 | — | MASK | serve una specie adatta al bioma |
 | `fir_sapling` | 433.021 | — | opaco | è una piantina, non un albero |
 | `fir_tree_01` | **6.982.937** | — | BLEND | **no**: 478 MB di sola geometria |
@@ -123,11 +124,43 @@ L'abete da solo è 59 volte l'intera scena attuale, alla risoluzione di texture
 più bassa. Non è un asset da decimare: ridurlo a qualcosa di usabile sarebbe
 rifarlo.
 
-Due cose bloccano oggi la vegetazione, e nessuna è di prestazioni. **L'alfa**:
-ogni pianta del catalogo è `MASK` o `BLEND` — le foglie sono ritagli su
-quadrati — e `scene.fs` non gestisce l'alfa. **Le mesh multiple**: un lotto si
-crea solo per i modelli a mesh singola, e nel catalogo sono l'eccezione. I
-sassi, che sono opachi e a mesh singola, funzionano già.
+Tre cose bloccavano la vegetazione, e nessuna era di prestazioni; nessuna
+blocca più. **L'alfa**: ogni pianta del catalogo è `MASK` o `BLEND` — le foglie
+sono ritagli su quadrati — e `scene.fs` la ritaglia, nel passaggio d'ombra
+compreso. **Le mesh multiple**: il lotto si crea per ogni coppia (mesh,
+materiale), non più solo per i modelli a mesh singola. **I set di varianti**:
+sono la sezione qui sotto, e sono diventati un vantaggio.
+
+### I set di varianti
+
+Metà del catalogo vegetale non è un oggetto: è un **set**. `shrub_02` sono
+quattro cespugli diversi in fila su sei metri, `periwinkle_plant` sei piante
+affiancate su 1,2. Caricato come un oggetto unico, dove va un cespuglio ne
+compaiono quattro in miniatura, allineati.
+
+Il motore li riconosce da sé e ne disegna **uno per prop**. La regola sta in
+`src/meshgroup.c` ed è una sola: *due mesh sono lo stesso individuo se i loro
+ingombri XZ si toccano*, transitivamente. Su `shrub_02` dà quattro gruppi — i
+quattro ingombri sono separati da 0,23, 0,27 e 0,29 m di vuoto, e non serve
+nessuna tolleranza; su `nettle_plant`, che sono sei materiali della stessa
+pianta, ne darebbe uno. Quale variante tocchi a un prop lo decide la sua
+posizione (`PropVariantOf()` in `world.c`), come per la forma delle case: il
+mondo cotto non contiene niente di nuovo. Il dettaglio sta in *Varianti*,
+`docs/01`.
+
+**Come si riconosce un set prima di scaricarlo.** Sulla pagina di Poly Haven si
+vedono più individui affiancati nell'anteprima, e il glTF ha un nodo per
+individuo con nomi in sequenza — `shrub_02_a`, `_b`, `_c`, `_d` — ognuno con la
+sua traslazione lungo X. Il set non costa niente in più: il tetto dei 65.535
+vertici vale per mesh, e le quattro mesh di `shrub_02` ne hanno 6.346 al
+massimo pur sommando 27.254 triangoli.
+
+Un set si scarica come qualunque altro asset, e il file del kit che sta già lì
+viene spostato di lato dallo script:
+
+```bash
+./tools/fetch_assets.sh polyhaven shrub_02 bush
+```
 
 **Nessun asset del catalogo porta le tangenti nel file.** Le calcola
 `BuildTangents()` al caricamento — 1 ms per il sasso — e senza, ogni normal map
@@ -195,7 +228,7 @@ fa da sé):
 | `tree.glb` | l'albero (cilindro + sfera) | 4.61 → 6.5 m |
 | `pine.glb` | il pino (cilindro + cono) | 3.97 → 6.8 m |
 | `rock.glb` o `rock.gltf` | il sasso (sfera schiacciata) | 2.2 m di larghezza |
-| `bush.glb` | il cespuglio (sfera) | 2.87 → 1.4 m di larghezza |
+| `bush.glb` o `bush.gltf` | il cespuglio (sfera) | 1.4 m di larghezza |
 | `herb.glb` | l'erba curativa della quest | 4.50 → 0.9 m |
 | `graveyard/crypt.glb` | la cripta (cubi + colonne) | 5.00 → 5 m |
 
@@ -205,6 +238,12 @@ per il sasso — e `LoadExtProps()` ricava il moltiplicatore dall'ingombro vero
 del modello, con `GetModelBoundingBox()`. Sostituire un asset non richiede
 quindi di ricalcolare niente: il masso Poly Haven da 2,52 m entra a ×0,87, il
 sasso Kenney da 0,62 m a ×3,54, e nel mondo sono grandi uguale.
+
+Con un set di varianti il moltiplicatore è **uno per variante**, ricavato
+dall'ingombro di quella e non del set intero: i quattro cespugli di `shrub_02`
+sono larghi 1,64, 1,28, 2,29 e 1,10 m ed entrano a ×0,85, ×1,09, ×0,61 e ×1,28.
+Cambia la forma, non la misura — e il raggio di collisione cotto nel mondo resta
+valido.
 
 Prima erano costanti scritte a mano, e un conto sbagliato lì non dava nessun
 avviso: dava un albero alto tre volte tanto.
@@ -324,9 +363,10 @@ si torna alle primitive per tutti: mezza casa è peggio di una scatola.
 Nei kit CC0 di Kenney non esiste un cespuglio vero: Survival e Mini Forest
 hanno solo ciuffi d'erba, e il `plant_bushLarge` del Nature Kit ha la forma
 giusta ma è **turchese** (43, 166, 170) e stona sul verde del terreno. Il
-cespuglio usa quindi un ciuffo texturizzato ingrandito; l'erba curativa usa il
-fiore giallo del Nature Kit, a colori per vertice, perché una quest ha bisogno
-che si distingua da un cespuglio.
+cespuglio viene quindi da Poly Haven — `shrub_02`, il set di quattro — e il
+ciuffo del kit resta in `assets/models/bush.glb.kit`, a un `mv` di distanza.
+L'erba curativa usa il fiore giallo del Nature Kit, a colori per vertice,
+perché una quest ha bisogno che si distingua da un cespuglio.
 
 `LoadExtProps()` in `world.c` li cerca all'avvio; `DrawProp()` usa il modello
 quando c'è e ricade sulle primitive quando manca. raylib carica `.glb`/`.gltf`,
