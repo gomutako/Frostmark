@@ -288,6 +288,27 @@ int main(void)
         InstModelFree(&im);
     }
 
+    /* --- Un sottoinsieme di mesh ------------------------------------------
+     * Un set di varianti e' un modello solo: le mesh di una variante vanno in
+     * un gruppo di lotti, quelle delle altre no. Se il sottoinsieme venisse
+     * ignorato, il gioco disegnerebbe tutte le varianti insieme - che e'
+     * esattamente il difetto da togliere. */
+    Model insieme = LoadModelFromMesh(GenMeshCube(1.0f, 1.0f, 1.0f));
+    InstModel sub;
+    int uno[1] = { 0 };
+    Ok("un sottoinsieme di una mesh si crea",
+       InstModelCreateSubset(&sub, insieme, uno, 1) && sub.n == 1);
+    InstModelFree(&sub);
+
+    int fuori[1] = { 7 };
+    Ok("un indice fuori dal modello non si crea, e non e' un crollo",
+       !InstModelCreateSubset(&sub, insieme, fuori, 1) && sub.n == 0);
+
+    int vuoto[1] = { 0 };
+    Ok("un sottoinsieme vuoto non si crea",
+       !InstModelCreateSubset(&sub, insieme, vuoto, 0) && sub.n == 0);
+    UnloadModel(insieme);
+
     CloseWindow();
     return ProveEsito();
 }

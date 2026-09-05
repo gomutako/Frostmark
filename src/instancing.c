@@ -239,27 +239,46 @@ void InstFlush(InstBatch *b)
 
 /* --- Un modello intero --------------------------------------------------- */
 
+bool InstModelCreateSubset(InstModel *im, Model m, const int *meshIdx, int n)
+{
+    im->b = NULL;
+    im->n = 0;
+    if (meshIdx == NULL || n <= 0) return false;
+
+    im->b = (InstBatch **)MemAlloc((unsigned int)(n * (int)sizeof(InstBatch *)));
+    if (im->b == NULL) return false;
+
+    for (int k = 0; k < n; k++) {
+        int i = meshIdx[k];
+        if (i < 0 || i >= m.meshCount) { im->n = k; InstModelFree(im); return false; }
+
+        int mat = (m.meshMaterial != NULL) ? m.meshMaterial[i] : 0;
+        if (mat < 0 || mat >= m.materialCount) mat = 0;
+
+        im->b[k] = InstCreate(m.meshes[i], m.materials[mat]);
+        if (im->b[k] == NULL) {          /* tutto o niente */
+            im->n = k;
+            InstModelFree(im);
+            return false;
+        }
+    }
+    im->n = n;
+    return true;
+}
+
 bool InstModelCreate(InstModel *im, Model m)
 {
     im->b = NULL;
     im->n = 0;
     if (m.meshCount <= 0) return false;
 
-    im->b = (InstBatch **)MemAlloc((unsigned int)(m.meshCount * (int)sizeof(InstBatch *)));
-    if (im->b == NULL) return false;
+    int *idx = (int *)MemAlloc((unsigned int)(m.meshCount * (int)sizeof(int)));
+    if (idx == NULL) return false;
+    for (int i = 0; i < m.meshCount; i++) idx[i] = i;
 
-    for (int i = 0; i < m.meshCount; i++) {
-        int mat = (m.meshMaterial != NULL) ? m.meshMaterial[i] : 0;
-        if (mat < 0 || mat >= m.materialCount) mat = 0;
-        im->b[i] = InstCreate(m.meshes[i], m.materials[mat]);
-        if (im->b[i] == NULL) {          /* tutto o niente */
-            im->n = i;
-            InstModelFree(im);
-            return false;
-        }
-    }
-    im->n = m.meshCount;
-    return true;
+    bool ok = InstModelCreateSubset(im, m, idx, m.meshCount);
+    MemFree(idx);
+    return ok;
 }
 
 void InstModelFree(InstModel *im)

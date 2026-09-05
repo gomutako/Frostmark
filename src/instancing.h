@@ -66,13 +66,25 @@ void InstTint(InstBatch *b, Color tint);
  * dentro i vertici (rmodels.c, cgltf_node_transform_world): tutte le mesh di
  * un modello condividono un'origine, quindi una sola trasformazione d'istanza
  * vale per tutte. Se raylib non lo facesse, un modello a diciassette mesh
- * andrebbe in pezzi. */
+ * andrebbe in pezzi.
+ *
+ * Un modello puo' anche contenere piu' individui affiancati - i set di
+ * varianti del catalogo, dove shrub_02 e' una mesh sola con quattro cespugli
+ * dentro. In quel caso non tutte le mesh vanno raggruppate insieme:
+ * InstModelCreateSubset prende solo quelle di un individuo, e il ragionamento
+ * sull'origine comune vale lo stesso perche' riguarda le mesh scelte, non
+ * tutte quelle del modello. */
 typedef struct { InstBatch **b; int n; } InstModel;
 
 /* Tutto o niente: se anche un solo lotto non si crea, si liberano gli altri e
  * si torna a false. Il chiamante disegna allora il modello come prima - meglio
  * lento che mezzo albero. */
 bool InstModelCreate(InstModel *im, Model m);
+
+/* Come InstModelCreate, ma solo per le mesh elencate in meshIdx: serve ai set
+ * di varianti, dove un modello contiene piu' individui affiancati e se ne
+ * disegna uno solo. Vale lo stesso tutto-o-niente. */
+bool InstModelCreateSubset(InstModel *im, Model m, const int *meshIdx, int n);
 void InstModelFree(InstModel *im);
 
 bool InstModelReady(const InstModel *im);
