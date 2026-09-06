@@ -250,15 +250,26 @@ int main(void)
 
     /* --- 4. due istanze in posizioni diverse ricevono fasi diverse ------- */
     /* Senza sfalsamento, trenta case avrebbero la venatura identica nello
-     * stesso punto del proprio corpo. Si legge il rosso al CENTROIDE del
-     * quadrato in ciascuna immagine, non a un punto calcolato a mano: cosi'
-     * la prova non deve indovinare da che parte lo schermo si sposta quando
-     * l'istanza si sposta nel mondo - che dipende dal verso della camera, non
-     * dal motore. */
+     * stesso punto del proprio corpo. Si trova il CENTROIDE del quadrato in
+     * ciascuna immagine, non un punto calcolato a mano: cosi' la prova non
+     * deve indovinare da che parte lo schermo si sposta quando l'istanza si
+     * sposta nel mondo - che dipende dal verso della camera, non dal motore. */
     Image imP = Rendi(rt, b, 0.0f);              /* istanza all'origine */
     int cxP, cyP;
     CentroQuadrato(imP, &cxP, &cyP);
-    int rossoOrigine = GetImageColor(imP, cxP, cyP).r;
+
+    /* Non al centro del corpo: senza sfalsamento il centro da' u = 0, cioe'
+     * esattamente la cucitura della rampa, e un arrotondamento sub-pixel
+     * manderebbe il campione da una parte o dall'altra - la differenza
+     * risulterebbe grande anche con lo sfalsamento spento, e il controllo non
+     * proverebbe niente. Di fianco al centro la u sta in mezzo a un periodo in
+     * tutti e due i casi: 0,65 m senza sfalsamento, 1,15 con.
+     *
+     * I 15 pixel valgono per entrambe le rese perche' le due istanze sono solo
+     * traslate, non ruotate: lo stesso scarto dal loro centroide e' lo stesso
+     * punto del loro corpo, comunque sia orientata la camera. */
+    static const int SCARTO = 15;
+    int rossoOrigine = GetImageColor(imP, cxP + SCARTO, cyP).r;
 
     BeginTextureMode(rt);
         ClearBackground(BLACK);
@@ -278,9 +289,9 @@ int main(void)
 
     int cxQ, cyQ;
     CentroQuadrato(imQ, &cxQ, &cyQ);
-    int rossoSpostato = GetImageColor(imQ, cxQ, cyQ).r;
+    int rossoSpostato = GetImageColor(imQ, cxQ + SCARTO, cyQ).r;
 
-    printf("  rosso al centro del corpo: all'origine %d, spostata %d\n",
+    printf("  rosso di fianco al centro del corpo: all'origine %d, spostata %d\n",
            rossoOrigine, rossoSpostato);
     Ok("lo sfalsamento cambia la fase fra istanze in posizioni diverse",
        abs(rossoOrigine - rossoSpostato) > 60);
