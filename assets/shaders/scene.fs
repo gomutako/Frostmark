@@ -149,6 +149,39 @@ vec3 SurfaceNormal()
     return normalize(mat3(t, b, n) * ts);
 }
 
+/* Sotto proiezione la tangente del vertice non serve: la terna si costruisce
+ * dagli ASSI DELLA PROIEZIONE, che sono gli assi dell'oggetto. La normale
+ * perturbata nasce quindi in spazio oggetto e va riportata in mondo con la
+ * stessa regola che il vertex shader usa per le normali: dividere per la scala
+ * e ruotare attorno a Y. Dividere, non moltiplicare: su una scala non uniforme
+ * moltiplicare darebbe normali storte. */
+vec3 RuotaYFrag(vec3 v)
+{
+    float s = fragYawSC.x, c = fragYawSC.y;
+    return vec3(c * v.x + s * v.z, v.y, -s * v.x + c * v.z);
+}
+
+vec3 NormaleProiettata()
+{
+    int asse = AsseDominante(fragLocalNormal);
+    vec3 n = normalize(fragLocalNormal);
+
+    /* La tangente e' l'asse lungo cui corre la U della proiezione. */
+    vec3 t = (asse == 1) ? vec3(0.0, 0.0, 1.0)
+           : (asse == 2) ? vec3(1.0, 0.0, 0.0)
+                         : vec3(1.0, 0.0, 0.0);
+    t = normalize(t - n * dot(n, t));
+    if (dot(t, t) < 1e-8) return normalize(RuotaYFrag(n * fragInvScale));
+
+    vec3 b  = cross(n, t);
+    vec2 uv = (projMode == 2) ? ProiettaUV(fragLocal, asse) / max(projTile, 1e-4)
+                              : CoordProiettata();
+    vec3 ts = texture(texture2, uv).rgb * 2.0 - 1.0;
+
+    vec3 nObj = normalize(mat3(t, b, n) * ts);
+    return normalize(RuotaYFrag(nObj * fragInvScale));
+}
+
 float ShadowFactor(vec3 n)
 {
     if (shadowOn == 0) return 1.0;
@@ -201,7 +234,7 @@ void main()
 
     if (depthOnly == 1) { finalColor = vec4(1.0); return; }
 
-    vec3  n    = SurfaceNormal();
+    vec3  n    = (projMode == 0) ? SurfaceNormal() : NormaleProiettata();
     float diff = max(dot(n, lightDir), 0.0);
     float light = AMBIENT + SUN * diff * ShadowFactor(n) * sunAmount;
 

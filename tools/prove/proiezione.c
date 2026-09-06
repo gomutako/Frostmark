@@ -198,6 +198,31 @@ static int PixelDiversi(Image a, Image b)
     return n;
 }
 
+/* Normal map costante che inclina la normale verso +U di circa 30 gradi.
+ * In spazio tangente il vettore (0.5, 0, 0.87) codificato in RGB e'
+ * (191, 128, 222): il rosso e' la componente lungo la tangente. */
+static Texture2D NormaleInclinata(void)
+{
+    Image im = GenImageColor(4, 4, (Color){ 191, 128, 222, 255 });
+    Texture2D t = LoadTextureFromImage(im);
+    SetTextureFilter(t, TEXTURE_FILTER_POINT);
+    UnloadImage(im);
+    return t;
+}
+
+/* Luminosita' media dei pixel accesi. */
+static float Luminosita(Image im)
+{
+    double s = 0.0; int n = 0;
+    for (int y = 0; y < im.height; y++)
+        for (int x = 0; x < im.width; x++) {
+            Color c = GetImageColor(im, x, y);
+            if (c.r + c.g + c.b < 12) continue;
+            s += c.r + c.g + c.b; n++;
+        }
+    return (n > 0) ? (float)(s / (3.0 * n)) : 0.0f;
+}
+
 int main(void)
 {
     if (access("/dev/dxg", F_OK) == 0) setenv("GALLIUM_DRIVER", "d3d12", 0);
@@ -378,6 +403,33 @@ int main(void)
     UnloadImage(im0); UnloadImage(im1); UnloadImage(im90);
     UnloadImage(imP); UnloadImage(imQ);
     InstFree(b);
+
+    /* --- 6. la normal map segue l'oggetto -------------------------------- */
+    /* Sole radente lungo +X: con la normale inclinata verso la tangente, il
+     * quadrato e' piu' chiaro quando l'inclinazione punta verso il sole. */
+    LightSetSun((Vector3){ 0.94f, 0.34f, 0.0f }, 1.0f);
+    LightFrame(nulla);
+
+    Material rilievo = LoadMaterialDefault();
+    LightApplyToMaterial(&rilievo);
+    rilievo.maps[MATERIAL_MAP_DIFFUSE].texture = Rampa();
+    rilievo.maps[MATERIAL_MAP_NORMAL].texture  = NormaleInclinata();
+
+    InstBatch *br = InstCreate(q, rilievo);
+    Ok("lotto con rilievo creato", br != NULL);
+    InstProjection(br, 1, 2.0f);
+
+    Image imA = Rendi(rt, br, 0.0f);
+    Image imB = Rendi(rt, br, 180.0f);
+    float lumA = Luminosita(imA), lumB = Luminosita(imB);
+    printf("  luminosita': a 0 gradi %.1f, a 180 gradi %.1f\n",
+           (double)lumA, (double)lumB);
+    Ok("il rilievo gira con l'oggetto: 0 e 180 gradi non si illuminano uguale",
+       fabsf(lumA - lumB) > 4.0f);
+
+    UnloadImage(imA); UnloadImage(imB);
+    InstFree(br);
+
     UnloadRenderTexture(rt);
     CloseWindow();
     return ProveEsito();
