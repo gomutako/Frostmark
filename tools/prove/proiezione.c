@@ -153,6 +153,51 @@ static void CentroQuadrato(Image im, int *cx, int *cy)
     *cy = (n > 0) ? (int)(sy / n) : im.height / 2;
 }
 
+/* Striscia inclinata: la geometria e' piana ma le normali dei vertici vanno da
+ * +X a +Y, quindi lungo la striscia la normale interpolata attraversa i 45
+ * gradi - il punto in cui l'asse dominante cambia. E' la falda del tetto,
+ * ridotta all'osso. */
+static Mesh StrisciaObliqua(void)
+{
+    static float v[18]  = { -2,0,-2,  -2,0,2,   2,0,2,
+                            -2,0,-2,   2,0,2,   2,0,-2 };
+    /* x cresce da sinistra a destra: a sinistra la normale e' quasi +Y, a
+     * destra quasi +X. */
+    static float n[18]  = { 0.20f,0.98f,0,  0.20f,0.98f,0,  0.98f,0.20f,0,
+                            0.20f,0.98f,0,  0.98f,0.20f,0,  0.98f,0.20f,0 };
+    static float uv[12] = { 0,0, 0,1, 1,1, 0,0, 1,1, 1,0 };
+
+    Mesh m = { 0 };
+    m.vertexCount = 6;
+    m.triangleCount = 2;
+    m.vertices = v; m.normals = n; m.texcoords = uv;
+    UploadMesh(&m, false);
+    return m;
+}
+
+/* Quanti pixel del quadrato differiscono fra due rese. E' la misura giusta per
+ * la miscela: dove la normale e' diagonale il modo 2 preleva TUTTE E TRE le
+ * proiezioni e le pesa, quindi il risultato si scosta dal modo 1 su tutta la
+ * superficie; dove la normale e' su un asse, il peso e' uno solo e i due modi
+ * devono coincidere.
+ *
+ * Non si misura il gradino della cucitura, e la ragione va detta perche' e'
+ * controintuitiva: sulla striscia l'asse cambia dove |nx| = |ny|, cioe' al
+ * centro, e li' la proiezione X vale z mentre la Y vale x. Sulla riga centrale
+ * z e x si equivalgono e il gradino e' NULLO: una prova che lo cercasse
+ * passerebbe anche senza miscela. */
+static int PixelDiversi(Image a, Image b)
+{
+    int n = 0;
+    for (int y = 0; y < a.height; y++)
+        for (int x = 0; x < a.width; x++) {
+            Color ca = GetImageColor(a, x, y), cb = GetImageColor(b, x, y);
+            if (!SulQuadrato(ca) || !SulQuadrato(cb)) continue;
+            if (abs((int)ca.r - (int)cb.r) > 12) n++;
+        }
+    return n;
+}
+
 int main(void)
 {
     if (access("/dev/dxg", F_OK) == 0) setenv("GALLIUM_DRIVER", "d3d12", 0);
@@ -295,6 +340,40 @@ int main(void)
            rossoOrigine, rossoSpostato);
     Ok("lo sfalsamento cambia la fase fra istanze in posizioni diverse",
        abs(rossoOrigine - rossoSpostato) > 60);
+
+    /* --- 5. il tetto: dove la normale e' diagonale serve la miscela ------- */
+    Mesh obliqua = StrisciaObliqua();
+    InstBatch *bo = InstCreate(obliqua, mat);
+    Ok("lotto obliquo creato", bo != NULL);
+
+    /* Passo largo: la rampa non deve ripetersi sulla striscia, o i suoi ritorni
+     * a zero sporcherebbero il confronto fra le due rese. */
+    InstProjection(bo, 1, 40.0f);
+    Image imDom = Rendi(rt, bo, 0.0f);
+    InstProjection(bo, 2, 40.0f);
+    Image imMix = Rendi(rt, bo, 0.0f);
+    int diversiObliqua = PixelDiversi(imDom, imMix);
+
+    /* Sul quadrato piatto la normale e' esattamente +Y: il peso della miscela
+     * e' tutto su una proiezione sola, quindi i due modi devono dare la stessa
+     * immagine. E' il controllo che impedisce di far passare la miscela
+     * scrivendo qualcosa che cambia il colore dappertutto. */
+    InstProjection(b, 1, 40.0f);
+    Image imPiattoDom = Rendi(rt, b, 0.0f);
+    InstProjection(b, 2, 40.0f);
+    Image imPiattoMix = Rendi(rt, b, 0.0f);
+    int diversiPiatto = PixelDiversi(imPiattoDom, imPiattoMix);
+
+    printf("  pixel diversi fra modo 1 e modo 2: obliqua %d, piatta %d\n",
+           diversiObliqua, diversiPiatto);
+    Ok("modo 2: sulla normale diagonale la miscela cambia il risultato",
+       diversiObliqua > 500);
+    Ok("modo 2: sulla normale su un asse la miscela non cambia niente",
+       diversiPiatto < 50);
+
+    UnloadImage(imDom); UnloadImage(imMix);
+    UnloadImage(imPiattoDom); UnloadImage(imPiattoMix);
+    InstFree(bo);
 
     UnloadImage(im0); UnloadImage(im1); UnloadImage(im90);
     UnloadImage(imP); UnloadImage(imQ);

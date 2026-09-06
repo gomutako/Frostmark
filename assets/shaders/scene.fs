@@ -118,6 +118,23 @@ vec2 CoordProiettata()
     return (uv + fragProjOffset) / max(projTile, 1e-4);
 }
 
+/* Dove la normale e' diagonale l'asse dominante oscilla, e a meta' falda
+ * nascerebbe un gradino netto. Li' si prelevano tutte e tre le proiezioni e si
+ * pesano con il quadrato della normale: tre prelievi, su un tipo di pezzo
+ * solo. Il quadrato invece del valore assoluto stringe la fascia in cui due
+ * proiezioni si sovrappongono, e quindi la sfocatura. */
+vec4 CampionaMiscelato(sampler2D tex)
+{
+    vec3 w = fragLocalNormal * fragLocalNormal;
+    w /= max(w.x + w.y + w.z, 1e-4);
+    float t = max(projTile, 1e-4);
+    vec2 o = fragProjOffset;
+
+    return texture(tex, (vec2(fragLocal.z, fragLocal.y) + o) / t) * w.x
+         + texture(tex, (vec2(fragLocal.x, fragLocal.z) + o) / t) * w.y
+         + texture(tex, (vec2(fragLocal.x, fragLocal.y) + o) / t) * w.z;
+}
+
 vec3 SurfaceNormal()
 {
     vec3 n = normalize(fragNormal);
@@ -170,8 +187,10 @@ float ShadowFactor(vec3 n)
 
 void main()
 {
-    vec2 uv = (projMode == 0) ? fragTexCoord : CoordProiettata();
-    vec4 albedo = texture(texture0, uv) * colDiffuse * fragColor;
+    vec4 base = (projMode == 2) ? CampionaMiscelato(texture0)
+                                : texture(texture0, (projMode == 0) ? fragTexCoord
+                                                                    : CoordProiettata());
+    vec4 albedo = base * colDiffuse * fragColor;
 
     /* Il ritaglio va PRIMA dell'uscita anticipata del passaggio d'ombra: le
      * foglie sono ritagli su quadrati, e un frammento buttato via qui non
