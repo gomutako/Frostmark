@@ -94,6 +94,27 @@ int main(void)
     for (int i = 0; i < 4; i++) if (visto[i] != 1) tutte = 0;
     Ok("ogni mesh sta in un gruppo e in uno solo", tutte);
 
+    /* --- I rifiuti di MeshGroupSplit ---------------------------------------
+     * Sono la porta d'ingresso del ramo degenere di world.c: se qui torna 0
+     * invece di crollare, LoadExtProps() tratta il modello come un individuo
+     * solo, cosa che nessun'altra prova verifica direttamente. */
+    n = MeshGroupSplit(fila, 0, idx, gr, 4);
+    Ok("n non positivo torna 0 invece di leggere un array vuoto", n == 0);
+
+    n = MeshGroupSplit(NULL, 4, idx, gr, 4);
+    Ok("un puntatore nullo torna 0 invece di crollare", n == 0);
+
+    /* Piu' di MESHGROUP_MAX mesh: e' il caso reale che fa scattare il ramo
+     * ng == 0 in world.c, quindi serve un array piu' grande del tetto (64). */
+    BoundingBox tante[MESHGROUP_MAX + 1];
+    for (int i = 0; i <= MESHGROUP_MAX; i++)
+        tante[i] = Box((float)i * 2.0f, 0.0f, 0.5f, 1.0f, 0.5f);
+    int idxTante[MESHGROUP_MAX + 1];
+    MeshGroup grTante[MESHGROUP_MAX + 1];
+    n = MeshGroupSplit(tante, MESHGROUP_MAX + 1, idxTante, grTante, MESHGROUP_MAX + 1);
+    Ok("oltre MESHGROUP_MAX mesh torna 0, e world.c ripiega su un individuo",
+       n == 0);
+
     /* --- Ricentrare -------------------------------------------------------
      * raylib fonde le trasformazioni dei nodi dentro i vertici, quindi la
      * seconda variante di shrub_02 porta cucito l'offset che la mette in fila.

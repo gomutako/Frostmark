@@ -140,6 +140,11 @@ void InstBegin(InstBatch *b)
     if (b != NULL) b->count = 0;
 }
 
+/* Scrittura ASSOLUTA, non moltiplicazione: b->mat.maps e' lo stesso array
+ * (copia superficiale) del materiale del modello di origine, quindi questo
+ * tocca anche quello - ma partendo sempre da WHITE non si accumula fotogramma
+ * dopo fotogramma. Il ripiego non instanziato in world.c (DrawProp) fa la
+ * stessa cosa sullo stesso array condiviso, per la stessa ragione. */
 void InstTint(InstBatch *b, Color tint)
 {
     if (b != NULL) b->mat.maps[MATERIAL_MAP_DIFFUSE].color = tint;

@@ -310,9 +310,10 @@ static void LoadExtProps(World *w)
         int ng = MeshGroupSplit(bb, nm, pv->meshIdx, pv->gruppo, nm);
         MemFree(bb);
 
-        /* Oltre MESHGROUP_MAX mesh il raggruppamento si arrende: si torna a
-         * trattare il modello come un individuo solo, che e' il comportamento
-         * di prima delle varianti. */
+        /* Oltre MESHGROUP_MAX mesh il raggruppamento si arrende: si tratta il
+         * modello come un individuo solo. Non e' il comportamento di prima
+         * delle varianti - i vertici vengono ricentrati comunque, piu' sotto -
+         * e' solo un individuo solo anziche' un set. */
         if (ng == 0) {
             for (int i = 0; i < nm; i++) pv->meshIdx[i] = i;
             pv->gruppo[0].first = 0;
@@ -337,10 +338,26 @@ static void LoadExtProps(World *w)
             Vector3 o = MeshGroupOrigin(&pv->gruppo[g]);
             for (int k = 0; k < pv->gruppo[g].count; k++) {
                 Mesh *me = &m.meshes[pv->meshIdx[pv->gruppo[g].first + k]];
+                /* MeshGroupRecenter() si difende da vertices nullo, ma
+                 * UpdateMeshBuffer() no: deferenzia anche vboId. Dopo
+                 * LoadModel() non capita mai, ma se capitasse la mesh va
+                 * saltata qui, non lasciata cadere dentro la funzione che
+                 * la scrive sulla scheda. */
+                if (me->vertices == NULL) continue;
                 MeshGroupRecenter(me->vertices, me->vertexCount, o);
                 UpdateMeshBuffer(*me, 0, me->vertices,
                                  me->vertexCount * 3 * (int)sizeof(float), 0);
             }
+
+            /* pv->gruppo[g].box va riportato all'origine appena tolta, o
+             * resterebbe in coordinate pre-ricentraggio: descriverebbe dove la
+             * variante ERA, non dov'e' adesso. Oggi nessuno lo legge come
+             * posizione assoluta (il disegno usa first/count, e
+             * MeshGroupScale usa solo differenze, invarianti per traslazione)
+             * ma un domani un raggio di culling ricavato da qui direbbe una
+             * bugia. */
+            pv->gruppo[g].box.min = Vector3Subtract(pv->gruppo[g].box.min, o);
+            pv->gruppo[g].box.max = Vector3Subtract(pv->gruppo[g].box.max, o);
 
             /* Ogni variante alla stessa taglia, partendo dal proprio ingombro. */
             pv->scala[g] = MeshGroupScale(&pv->gruppo[g], gExtProp[t].voluto,
@@ -865,8 +882,17 @@ static void DrawProp(World *w, const Prop *p, Color tint, bool lod)
             int mat = (mo->meshMaterial != NULL) ? mo->meshMaterial[mi] : 0;
             if (mat < 0 || mat >= mo->materialCount) mat = 0;
 
-            /* Il materiale e' una copia: si tinge questa, non quella del
-             * modello, o la tinta del ciclo giorno/notte si accumulerebbe. */
+            /* 'mm' e' una copia SUPERFICIALE: Material.maps e' un puntatore,
+             * quindi mm.maps resta lo stesso array di mo->materials[mat] e la
+             * riga sotto scrive comunque nel materiale del modello. Non fa
+             * danno perche' l'assegnazione e' ASSOLUTA (mette Shade(...), non
+             * lo moltiplica sul valore precedente): ogni fotogramma riparte
+             * dallo stesso WHITE e non si accumula. E' la stessa convenzione
+             * di InstTint() in instancing.c, che scrive sull'identico array
+             * condiviso (anche b->mat = mat, li', e' superficiale) - le due
+             * strade di disegno restano d'accordo apposta. Se questa riga
+             * diventasse una moltiplicazione, ACCUMULEREBBE sul materiale del
+             * modello a ogni fotogramma: e' la mossa da non fare. */
             Material mm = mo->materials[mat];
             mm.maps[MATERIAL_MAP_DIFFUSE].color = Shade(WHITE, tint);
             DrawMesh(mo->meshes[mi], mm, mt);

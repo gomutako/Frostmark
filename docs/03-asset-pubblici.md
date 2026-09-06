@@ -148,6 +148,18 @@ posizione (`PropVariantOf()` in `world.c`), come per la forma delle case: il
 mondo cotto non contiene niente di nuovo. Il dettaglio sta in *Varianti*,
 `docs/01`.
 
+**Funziona sui set ben separati, non su tutti.** Il contatto degli ingombri XZ
+senza nessuna tolleranza va bene su `shrub_02`, dove i vuoti fra un cespuglio e
+l'altro sono di 23-29 cm. Su un set fitto come `periwinkle_plant` — sei piante
+su 1,2 m, per ammissione della tabella qui sopra — gli ingombri quasi
+certamente si toccano, e il set collassa in un individuo solo: esattamente il
+comportamento sbagliato di prima, "quattro cespugli in miniatura" diventato
+"sei piante in miniatura", **senza nessun avviso**. Non è un difetto del
+codice — la regola è quella scelta, e questo è il fallimento previsto — ma va
+saputo prima di caricare un set fitto: se le piante sembrano affiancate senza
+uno spazio visibile fra loro nell'anteprima, il riconoscimento probabilmente
+non le separerà.
+
 **Come si riconosce un set prima di scaricarlo.** Sulla pagina di Poly Haven si
 vedono più individui affiancati nell'anteprima, e il glTF ha un nodo per
 individuo con nomi in sequenza — `shrub_02_a`, `_b`, `_c`, `_d` — ognuno con la

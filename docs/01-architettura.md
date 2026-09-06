@@ -290,6 +290,27 @@ manca, e nessuna prova lo copre perché nessuna prova gira senza shader. Si
 verifica rinominando `assets/shaders/scene_inst.vs` e riavviando: confrontate a
 pixel, le due strade danno la stessa immagine.
 
+**Il ricentraggio vale anche per i modelli a un individuo solo**, non solo per
+i set. Prima di questo ramo i vertici di un modello esterno restavano dove il
+glTF li aveva cotti, e `DrawModelEx(model, pos, ...)` metteva quell'origine su
+`pos`. Ora, che `MeshGroupSplit()` trovi un gruppo solo o si arrenda e
+`LoadExtProps()` tratti il modello come un individuo (vedi sopra), l'origine
+diventa comunque centro XZ + minimo Y. Misurato con un programma usa e getta
+(fuori dal repo, riusa `MeshGroupSplit`/`MeshGroupOrigin` da `meshgroup.c`) su
+tutti gli asset a un solo individuo attualmente su disco, moltiplicando lo
+scostamento in unità di modello per la scala che gli dà `gExtProp`:
+`tree.glb` e `pine.glb` si spostano di 2,2 e 1,9 cm in orizzontale e zero in
+verticale; `graveyard/crypt.glb` non si sposta di niente (offset zero su ogni
+asse — il file arriva già centrato e appoggiato). Sotto la soglia di
+percezione per tutti e tre. Due asset invece si spostano in modo non
+trascurabile: `rock.gltf` (`namaqualand_boulder_04`, il masso in uso) di 20,2
+cm in orizzontale e 2,6 cm in verticale; `herb.glb` (l'erba curativa, 0,9 m in
+gioco) di 23,4 cm in verticale — un quarto della sua altezza — e 11,7 cm in
+orizzontale: prima di questo ramo l'erba affondava nel terreno per un quarto
+della sua altezza, ora appoggia esattamente. È il motivo per cui tutti i prop
+esterni ora poggiano a terra invece di galleggiare o affondare secondo come è
+stato esportato l'asset.
+
 ### Le prove
 
 `make prove` compila ed esegue ogni file in `tools/prove/`. Non c'è un
