@@ -83,27 +83,54 @@ static Image Rendi(RenderTexture2D rt, InstBatch *b, float yawDeg)
     return LoadImageFromTexture(rt.texture);
 }
 
-/* Quante volte il rosso CROLLA fra due pixel vicini lungo una riga: e' il
- * numero di ripetizioni della rampa meno una. Dice quante volte la texture si
- * ripete sul quadrato, che e' cio' che distingue un passo dall'altro. */
-static int SaltiInRiga(Image im, int y)
+/* Quante volte il rosso fa uno sbalzo brusco fra due pixel vicini. In valore
+ * assoluto e non solo in discesa: il verso dipende da come e' orientata la
+ * camera - qui lo schermo-x segue il mondo -x - e la prova deve misurare il
+ * motivo, non l'orientamento dell'inquadratura.
+ *
+ * Contano solo le coppie interamente sul quadrato: al bordo la transizione col
+ * nero e' uno sbalzo pieno e conterebbe come una ripetizione che non c'e'. La
+ * rampa scrive verde 40 dappertutto, quindi il verde dice se il pixel e' sul
+ * quadrato; il rosso no, perche' sul lato basso della rampa vale quasi zero. */
+static bool SulQuadrato(Color c) { return c.g > 20; }
+
+static int SbalziInRiga(Image im, int y)
 {
     int n = 0;
     for (int x = 1; x < im.width; x++) {
-        int a = GetImageColor(im, x - 1, y).r, b = GetImageColor(im, x, y).r;
-        if (a - b > 100) n++;
+        Color a = GetImageColor(im, x - 1, y), b = GetImageColor(im, x, y);
+        if (!SulQuadrato(a) || !SulQuadrato(b)) continue;
+        if (abs((int)a.r - (int)b.r) > 100) n++;
     }
     return n;
 }
 
-static int SaltiInColonna(Image im, int x)
+static int SbalziInColonna(Image im, int x)
 {
     int n = 0;
     for (int y = 1; y < im.height; y++) {
-        int a = GetImageColor(im, x, y - 1).r, b = GetImageColor(im, x, y).r;
-        if (a - b > 100) n++;
+        Color a = GetImageColor(im, x, y - 1), b = GetImageColor(im, x, y);
+        if (!SulQuadrato(a) || !SulQuadrato(b)) continue;
+        if (abs((int)a.r - (int)b.r) > 100) n++;
     }
     return n;
+}
+
+/* Il centro (in pixel) dei pixel che stanno sul quadrato: il centro del CORPO
+ * dell'oggetto sullo schermo, qualunque sia il verso in cui la camera lo
+ * disegna. Serve al confronto di fase fra due istanze, che non deve
+ * indovinare da che parte si sposta lo schermo quando l'istanza si sposta nel
+ * mondo. */
+static void CentroQuadrato(Image im, int *cx, int *cy)
+{
+    long sx = 0, sy = 0, n = 0;
+    for (int y = 0; y < im.height; y++)
+        for (int x = 0; x < im.width; x++) {
+            if (!SulQuadrato(GetImageColor(im, x, y))) continue;
+            sx += x; sy += y; n++;
+        }
+    *cx = (n > 0) ? (int)(sx / n) : im.width / 2;
+    *cy = (n > 0) ? (int)(sy / n) : im.height / 2;
 }
 
 int main(void)
@@ -143,45 +170,47 @@ int main(void)
     /* --- 1. modo 0: le UV della mesh, una rampa sola sul quadrato --------- */
     InstProjection(b, 0, 1.0f);
     Image im0 = Rendi(rt, b, 0.0f);
-    int salti0 = SaltiInRiga(im0, RT / 2);
-    Ok("modo 0: la mesh usa le sue UV, una rampa sola", salti0 == 0);
+    int sbalzi0 = SbalziInRiga(im0, RT / 2);
+    Ok("modo 0: la mesh usa le sue UV, una rampa sola", sbalzi0 == 0);
 
     /* --- 2. modo 1: proiezione con passo di 1 m sul quadrato da 4 m ------ */
     InstProjection(b, 1, 1.0f);
     Image im1 = Rendi(rt, b, 0.0f);
-    int salti1 = SaltiInRiga(im1, RT / 2);
-    printf("  salti in riga: modo 0 = %d, modo 1 = %d\n", salti0, salti1);
+    int sbalzi1 = SbalziInRiga(im1, RT / 2);
+    printf("  sbalzi in riga: modo 0 = %d, modo 1 = %d\n", sbalzi0, sbalzi1);
     Ok("modo 1: il passo di 1 m ripete la texture sul quadrato di 4 m",
-       salti1 >= 3);
+       sbalzi1 >= 3);
 
     /* Il quadrato ha normale +Y, quindi l'asse dominante e' Y e la U segue
      * la x del mondo: lungo la z - le colonne dell'immagine - non deve
      * cambiare niente. */
     Ok("modo 1: sulla faccia +Y la U segue x e non z",
-       SaltiInColonna(im1, RT / 2) == 0);
+       SbalziInColonna(im1, RT / 2) == 0);
 
     /* --- 3. la proiezione e' in spazio oggetto --------------------------- */
-    /* Ruotando l'istanza di 90 gradi il motivo deve girare CON l'oggetto: i
-     * salti passano dalle righe alle colonne. Proiettando in coordinate di
+    /* Ruotando l'istanza di 90 gradi il motivo deve girare CON l'oggetto: gli
+     * sbalzi passano dalle righe alle colonne. Proiettando in coordinate di
      * mondo resterebbero nelle righe, perche' la texture scivolerebbe sotto
      * l'oggetto invece di essere incollata. */
     Image im90 = Rendi(rt, b, 90.0f);
-    int saltiRiga90 = SaltiInRiga(im90, RT / 2);
-    int saltiCol90  = SaltiInColonna(im90, RT / 2);
-    printf("  ruotato di 90 gradi: salti in riga %d, in colonna %d\n",
-           saltiRiga90, saltiCol90);
+    int sbalziRiga90 = SbalziInRiga(im90, RT / 2);
+    int sbalziCol90  = SbalziInColonna(im90, RT / 2);
+    printf("  ruotato di 90 gradi: sbalzi in riga %d, in colonna %d\n",
+           sbalziRiga90, sbalziCol90);
     Ok("spazio oggetto: a 90 gradi il motivo gira con l'oggetto",
-       saltiCol90 >= 3 && saltiRiga90 == 0);
+       sbalziCol90 >= 3 && sbalziRiga90 == 0);
 
     /* --- 4. due istanze in posizioni diverse ricevono fasi diverse ------- */
     /* Senza sfalsamento, trenta case avrebbero la venatura identica nello
-     * stesso punto del proprio corpo. Si confronta il centro del QUADRATO, non
-     * il centro dello schermo: spostando l'istanza di mezzo passo, il suo
-     * centro si sposta anche sullo schermo, e la camera ortografica rende il
-     * conto esatto - fovy 4.2 su RT pixel fa RT/4.2 pixel per metro. */
+     * stesso punto del proprio corpo. Si legge il rosso al CENTROIDE del
+     * quadrato in ciascuna immagine, non a un punto calcolato a mano: cosi'
+     * la prova non deve indovinare da che parte lo schermo si sposta quando
+     * l'istanza si sposta nel mondo - che dipende dal verso della camera, non
+     * dal motore. */
     Image imP = Rendi(rt, b, 0.0f);              /* istanza all'origine */
-    int centro = RT / 2;
-    int rossoOrigine = GetImageColor(imP, centro, centro).r;
+    int cxP, cyP;
+    CentroQuadrato(imP, &cxP, &cyP);
+    int rossoOrigine = GetImageColor(imP, cxP, cyP).r;
 
     BeginTextureMode(rt);
         ClearBackground(BLACK);
@@ -199,8 +228,9 @@ int main(void)
     EndTextureMode();
     Image imQ = LoadImageFromTexture(rt.texture);
 
-    int spostamento = (int)(0.5f * (float)RT / 4.2f);   /* mezzo metro in pixel */
-    int rossoSpostato = GetImageColor(imQ, centro + spostamento, centro).r;
+    int cxQ, cyQ;
+    CentroQuadrato(imQ, &cxQ, &cyQ);
+    int rossoSpostato = GetImageColor(imQ, cxQ, cyQ).r;
 
     printf("  rosso al centro del corpo: all'origine %d, spostata %d\n",
            rossoOrigine, rossoSpostato);
