@@ -35,6 +35,7 @@
 - Consuma: `InstCreate()`, `InstFlush()`, `LightApplyToMaterial()`, già esistenti.
 - Produce:
   - uniform `int projMode` (0 = UV, 1 = asse dominante, 2 = miscela) e `float projTile` (metri per ripetizione) in `scene.fs`;
+  - nella prova, `static bool SulQuadrato(Color c)` — vero se il pixel sta sul quadrato e non sullo sfondo — che il Task 2 riusa;
   - `void InstProjection(InstBatch *b, int mode, float tile);`
   - `void InstModelProjection(InstModel *im, int mode, float tile);`
   - `void LightSetProjection(int mode, float tile);` per il percorso non instanziato.
@@ -549,18 +550,27 @@ static Mesh StrisciaObliqua(void)
     return m;
 }
 
-/* Il salto piu' brusco fra due pixel vicini lungo una riga. Sotto il modo 1 la
- * cucitura dove l'asse cambia e' un gradino; sotto il modo 2 non c'e'. */
-static int SaltoMassimo(Image im, int y)
+/* Quanti pixel del quadrato differiscono fra due rese. E' la misura giusta per
+ * la miscela: dove la normale e' diagonale il modo 2 preleva TUTTE E TRE le
+ * proiezioni e le pesa, quindi il risultato si scosta dal modo 1 su tutta la
+ * superficie; dove la normale e' su un asse, il peso e' uno solo e i due modi
+ * devono coincidere.
+ *
+ * Non si misura il gradino della cucitura, e la ragione va detta perche' e'
+ * controintuitiva: sulla striscia l'asse cambia dove |nx| = |ny|, cioe' al
+ * centro, e li' la proiezione X vale z mentre la Y vale x. Sulla riga centrale
+ * z e x si equivalgono e il gradino e' NULLO: una prova che lo cercasse
+ * passerebbe anche senza miscela. */
+static int PixelDiversi(Image a, Image b)
 {
-    int peggio = 0;
-    for (int x = 1; x < im.width; x++) {
-        Color a = GetImageColor(im, x - 1, y), b = GetImageColor(im, x, y);
-        if (a.r < 8 && b.r < 8) continue;          /* sfondo */
-        int d = abs((int)a.r - (int)b.r);
-        if (d > peggio) peggio = d;
-    }
-    return peggio;
+    int n = 0;
+    for (int y = 0; y < a.height; y++)
+        for (int x = 0; x < a.width; x++) {
+            Color ca = GetImageColor(a, x, y), cb = GetImageColor(b, x, y);
+            if (!SulQuadrato(ca) || !SulQuadrato(cb)) continue;
+            if (abs((int)ca.r - (int)cb.r) > 12) n++;
+        }
+    return n;
 }
 ```
 
@@ -572,23 +582,33 @@ e in `main()`, prima di `ProveEsito()`:
     InstBatch *bo = InstCreate(obliqua, mat);
     Ok("lotto obliquo creato", bo != NULL);
 
-    /* Passo largo: la rampa non deve ripetersi sulla striscia, o i suoi
-     * ritorni a zero si confonderebbero con la cucitura che si vuole misurare. */
+    /* Passo largo: la rampa non deve ripetersi sulla striscia, o i suoi ritorni
+     * a zero sporcherebbero il confronto fra le due rese. */
     InstProjection(bo, 1, 40.0f);
     Image imDom = Rendi(rt, bo, 0.0f);
-    int saltoDom = SaltoMassimo(imDom, RT / 2);
-
     InstProjection(bo, 2, 40.0f);
     Image imMix = Rendi(rt, bo, 0.0f);
-    int saltoMix = SaltoMassimo(imMix, RT / 2);
+    int diversiObliqua = PixelDiversi(imDom, imMix);
 
-    printf("  salto massimo sulla striscia obliqua: modo 1 = %d, modo 2 = %d\n",
-           saltoDom, saltoMix);
-    Ok("modo 1: sulla normale diagonale nasce una cucitura", saltoDom > 30);
-    Ok("modo 2: la miscela toglie la cucitura", saltoMix < 10);
-    Ok("modo 2: la miscela non spegne la texture", saltoMix >= 0);
+    /* Sul quadrato piatto la normale e' esattamente +Y: il peso della miscela
+     * e' tutto su una proiezione sola, quindi i due modi devono dare la stessa
+     * immagine. E' il controllo che impedisce di far passare la miscela
+     * scrivendo qualcosa che cambia il colore dappertutto. */
+    InstProjection(b, 1, 40.0f);
+    Image imPiattoDom = Rendi(rt, b, 0.0f);
+    InstProjection(b, 2, 40.0f);
+    Image imPiattoMix = Rendi(rt, b, 0.0f);
+    int diversiPiatto = PixelDiversi(imPiattoDom, imPiattoMix);
+
+    printf("  pixel diversi fra modo 1 e modo 2: obliqua %d, piatta %d\n",
+           diversiObliqua, diversiPiatto);
+    Ok("modo 2: sulla normale diagonale la miscela cambia il risultato",
+       diversiObliqua > 500);
+    Ok("modo 2: sulla normale su un asse la miscela non cambia niente",
+       diversiPiatto < 50);
 
     UnloadImage(imDom); UnloadImage(imMix);
+    UnloadImage(imPiattoDom); UnloadImage(imPiattoMix);
     InstFree(bo);
 ```
 
@@ -636,7 +656,7 @@ Atteso: tutte `ok`, zero avvisi.
 
 - [ ] **Passo 5: sabotare**
 
-1. fai campionare al modo 2 la stessa `CoordProiettata()` del modo 1, cioe' salta la miscela → deve fallire "modo 2: la miscela toglie la cucitura";
+1. fai campionare al modo 2 la stessa `CoordProiettata()` del modo 1, cioe' salta la miscela → deve fallire "modo 2: sulla normale diagonale la miscela cambia il risultato";
 2. in `CampionaMiscelato()`, sostituisci il quadrato della normale con il valore assoluto → le prove passano lo stesso: e' un'altra pesatura legittima, solo piu' morbida. Annotalo, non e' un fallimento.
 
 - [ ] **Passo 6: commit**
