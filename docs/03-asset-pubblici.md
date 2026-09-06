@@ -104,6 +104,7 @@ quanto è *fuori scala* — e alcuni lo sono parecchio:
 | `namaqualand_boulder_02` | 97.964 | 53.437 | opaco | sì |
 | `boulder_01` | 66.122 | **67.042** | opaco | **no**: oltre il tetto dei 16 bit |
 | `shrub_02` | 27.254 | 6.346 | MASK | **sì — è il cespuglio in uso**, ed è un set di quattro |
+| `celandine_01` | 8.966 | 4.235 | BLEND | **sì — è l'erba in uso**, ed è un set di cinque |
 | `nettle_plant` | 31.304 | — | MASK | serve una specie adatta al bioma |
 | `fir_sapling` | 433.021 | — | opaco | è una piantina, non un albero |
 | `fir_tree_01` | **6.982.937** | — | BLEND | **no**: 478 MB di sola geometria |
@@ -123,6 +124,29 @@ un asset si guarda il conteggio dei vertici, non quello dei triangoli.**
 L'abete da solo è 59 volte l'intera scena attuale, alla risoluzione di texture
 più bassa. Non è un asset da decimare: ridurlo a qualcosa di usabile sarebbe
 rifarlo.
+
+### Le piante da prato sono rosette, non ciuffi
+
+Misurati i tre fiori gialli del catalogo, cercando un'erba raccoglibile che si
+leggesse come tale: `celandine_01` è alta 12-19 cm, `flower_ursinia` 7-16,
+`dandelion_01` 5-16. Sono **scansioni da terra**, larghe più che alte — la
+celidonia è 0,28 larga per 0,19 alta — e non esiste nel catalogo un fiore su
+stelo alto mezzo metro.
+
+Ne discendono due cose, e la seconda costa un difetto se la si sbaglia:
+
+1. **La taglia dichiarata non può venire dal modello stilizzato.** L'erba di
+   Kenney era alta 0,9 m, e portare una celidonia lì significa ingrandire una
+   fotoscansione da ×4,8 a ×7,3. Il gioco la dichiara ora **0,6 m**, che sulle
+   cinque varianti fa da ×1,9 a ×2,7.
+2. **`perAltezza` va messo a `false` per tutto ciò che cresce a terra.** Tarare
+   una rosetta sull'altezza la gonfia di traverso: la celidonia a 0,9 m di
+   altezza sarebbe larga un metro e trenta. Si tara sul lato XZ maggiore, come
+   il masso e il cespuglio.
+
+`celandine_01` è dichiarata `BLEND`, non `MASK`, e il motore la ritaglia lo
+stesso: `LightAlphaCutFor()` guarda il formato della texture, non il campo del
+glTF, e per il fogliame il ritaglio è il verso giusto in cui sbagliare.
 
 Tre cose bloccavano la vegetazione, e nessuna era di prestazioni; nessuna
 blocca più. **L'alfa**: ogni pianta del catalogo è `MASK` o `BLEND` — le foglie

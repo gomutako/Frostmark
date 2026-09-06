@@ -166,7 +166,11 @@ gExtProp[PROP_COUNT] = {
     [PROP_PINE] = { "assets/models/pine.glb",            6.8f, true  },
     [PROP_ROCK] = { "assets/models/rock.glb",            2.2f, false },
     [PROP_BUSH] = { "assets/models/bush.glb",            1.4f, false },
-    [PROP_HERB] = { "assets/models/herb.glb",            0.9f, true  },
+    /* L'erba si misura in LARGHEZZA: le piante da prato del catalogo sono
+     * rosette appoggiate a terra - la celidonia e' 0,28 larga per 0,19 alta -
+     * e tararle sull'altezza le sgonfierebbe di traverso. I 0,9 m di prima
+     * erano l'altezza del ciuffo stilizzato, non una misura. */
+    [PROP_HERB] = { "assets/models/herb.glb",            0.6f, false },
     [PROP_CRYPT]= { "assets/models/graveyard/crypt.glb", 5.0f, true  },
 };
 

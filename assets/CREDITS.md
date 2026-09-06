@@ -24,3 +24,4 @@ richiedono attribuzione: serve a dimostrare la provenienza in caso di dubbi.
 | assets/fonts/title.ttf | Cinzel | https://fonts.google.com/specimen/Cinzel | OFL | 2026-09-03 |
 | assets/models/rock.gltf | Poly Haven | https://polyhaven.com/a/namaqualand_boulder_04 | CC0 | 2026-09-05 |
 | assets/models/bush.gltf | Poly Haven | https://polyhaven.com/a/shrub_02 | CC0 | 2026-09-05 |
+| assets/models/herb.gltf | Poly Haven | https://polyhaven.com/a/celandine_01 | CC0 | 2026-09-06 |
