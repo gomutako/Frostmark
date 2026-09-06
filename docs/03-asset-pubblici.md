@@ -151,7 +151,7 @@ mondo cotto non contiene niente di nuovo. Il dettaglio sta in *Varianti*,
 **Funziona sui set ben separati, non su tutti.** Il contatto degli ingombri XZ
 senza nessuna tolleranza va bene su `shrub_02`, dove i vuoti fra un cespuglio e
 l'altro sono di 23-29 cm. Su un set fitto come `periwinkle_plant` — sei piante
-su 1,2 m, per ammissione della tabella qui sopra — gli ingombri quasi
+su 1,2 m, come dice l'apertura di questa sezione — gli ingombri quasi
 certamente si toccano, e il set collassa in un individuo solo: esattamente il
 comportamento sbagliato di prima, "quattro cespugli in miniatura" diventato
 "sei piante in miniatura", **senza nessun avviso**. Non è un difetto del
