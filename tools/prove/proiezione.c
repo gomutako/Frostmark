@@ -42,6 +42,26 @@ static Mesh QuadratoXZ(void)
     return m;
 }
 
+/* Stessa geometria del quadrato piatto, ma con le normali dichiarate lungo +X.
+ * Serve a esercitare l'altro ramo di AsseDominante(): la normale la decide il
+ * vertice, non la posizione, e da qui si vede la faccia comunque. Con l'asse X
+ * la U segue la z, quindi il motivo deve correre lungo le COLONNE invece che
+ * lungo le righe - lo specchio esatto del caso +Y. */
+static Mesh QuadratoNormaleX(void)
+{
+    static float v[18]  = { -2,0,-2,  -2,0,2,   2,0,2,
+                            -2,0,-2,   2,0,2,   2,0,-2 };
+    static float n[18]  = { 1,0,0, 1,0,0, 1,0,0, 1,0,0, 1,0,0, 1,0,0 };
+    static float uv[12] = { 0,0, 0,1, 1,1, 0,0, 1,1, 1,0 };
+
+    Mesh m = { 0 };
+    m.vertexCount = 6;
+    m.triangleCount = 2;
+    m.vertices = v; m.normals = n; m.texcoords = uv;
+    UploadMesh(&m, false);
+    return m;
+}
+
 /* Rampa orizzontale: il rosso cresce da 0 a 255 lungo U, il resto e' fisso.
  * Con il filtro lineare il valore letto e' la U campionata, a meno di un
  * texel. */
@@ -66,7 +86,7 @@ static Image Rendi(RenderTexture2D rt, InstBatch *b, float yawDeg)
     cam.position   = (Vector3){ 0.0f, 5.0f, 0.0f };
     cam.target     = (Vector3){ 0.0f, 0.0f, 0.0f };
     cam.up         = (Vector3){ 0.0f, 0.0f, 1.0f };
-    cam.fovy       = 4.2f;
+    cam.fovy       = 5.2f;
     cam.projection = CAMERA_ORTHOGRAPHIC;
 
     BeginTextureMode(rt);
@@ -187,6 +207,34 @@ int main(void)
     Ok("modo 1: sulla faccia +Y la U segue x e non z",
        SbalziInColonna(im1, RT / 2) == 0);
 
+    /* --- 2b. lo stesso quadrato, ma con la normale dichiarata lungo +X --- */
+    /* Il sole verso +Y non illumina piu' niente su questa faccia - il colore
+     * si schiaccia sull'ambiente e SulQuadrato() (che guarda il verde dopo la
+     * luce) non distinguerebbe piu' il quadrato dallo sfondo. Il sole si
+     * sposta solo per questo blocco e torna al suo posto subito dopo, perche'
+     * i controlli 3 e 4 contano sull'illuminazione originale sulla faccia +Y. */
+    LightSetSun((Vector3){ 1.0f, 0.0f, 0.0f }, 1.0f);
+    LightFrame(nulla);
+
+    Mesh qx = QuadratoNormaleX();
+    InstBatch *bx = InstCreate(qx, mat);
+    Ok("lotto X creato", bx != NULL);
+    if (bx != NULL) {
+        InstProjection(bx, 1, 1.0f);
+        Image imX = Rendi(rt, bx, 0.0f);
+        int sbalziRigaX = SbalziInRiga(imX, RT / 2);
+        int sbalziColX  = SbalziInColonna(imX, RT / 2);
+        printf("  normale +X: sbalzi in riga %d, in colonna %d\n",
+               sbalziRigaX, sbalziColX);
+        Ok("modo 1: sulla faccia +X la U segue z e non x",
+           sbalziColX >= 3 && sbalziRigaX == 0);
+        UnloadImage(imX);
+        InstFree(bx);
+    }
+
+    LightSetSun((Vector3){ 0.0f, 1.0f, 0.0f }, 1.0f);
+    LightFrame(nulla);
+
     /* --- 3. la proiezione e' in spazio oggetto --------------------------- */
     /* Ruotando l'istanza di 90 gradi il motivo deve girare CON l'oggetto: gli
      * sbalzi passano dalle righe alle colonne. Proiettando in coordinate di
@@ -217,7 +265,7 @@ int main(void)
         BeginMode3D(((Camera3D){ .position = { 0.0f, 5.0f, 0.0f },
                                  .target = { 0.0f, 0.0f, 0.0f },
                                  .up = { 0.0f, 0.0f, 1.0f },
-                                 .fovy = 4.2f,
+                                 .fovy = 5.2f,
                                  .projection = CAMERA_ORTHOGRAPHIC }));
             rlDisableBackfaceCulling();
             InstBegin(b);
