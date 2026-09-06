@@ -56,6 +56,12 @@ void InstFlush(InstBatch *b);
  * per LOTTO, non per istanza. */
 void InstTint(InstBatch *b, Color tint);
 
+/* Come si campiona la texture di questo lotto: 0 le UV della mesh, 1 la
+ * proiezione sull'asse dominante, 2 la miscela a tre. 'tile' e' quanti metri
+ * copre una ripetizione. Serve ai pezzi dei kit, che hanno UV inutilizzabili:
+ * le loro coordinate stanno tutte in una cella della tavolozza. */
+void InstProjection(InstBatch *b, int mode, float tile);
+
 /* --- Un modello intero ----------------------------------------------------
  * Un lotto tiene UNA mesh, ma un modello ne ha spesso molte: nel catalogo
  * Poly Haven la mesh singola e' l'eccezione - nettle_plant ne ha 6,
@@ -91,5 +97,6 @@ bool InstModelReady(const InstModel *im);
 void InstModelBegin(InstModel *im, Color tint);
 void InstModelAdd(InstModel *im, Vector3 pos, float yawDeg, Vector3 scale);
 void InstModelFlush(InstModel *im);
+void InstModelProjection(InstModel *im, int mode, float tile);
 
 #endif /* INSTANCING_H */

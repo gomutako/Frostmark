@@ -41,6 +41,12 @@ Shader LightInstShader(void);
 float LightAlphaCutFor(Material m);      /* 0 se il materiale e' opaco */
 void  LightSetAlphaCut(float cut);       /* su entrambi i programmi */
 
+/* Come si campiona la texture: 0 le UV della mesh, 1 la proiezione sull'asse
+ * dominante, 2 la miscela a tre; 'tile' e' quanti metri copre una ripetizione.
+ * E' il gemello di InstProjection() per il percorso non instanziato, quello
+ * che gira quando assets/shaders/ manca o un lotto non si e' creato. */
+void LightSetProjection(int mode, float tile);
+
 /* Da applicare a ogni materiale che deve ricevere luce: terreno, prop,
  * personaggi. Senza, l'oggetto resta piatto come prima.
  *

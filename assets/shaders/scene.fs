@@ -8,10 +8,20 @@ in vec2 fragTexCoord;
 in vec4 fragColor;
 in vec3 fragNormal;
 in vec4 fragTangent;
+in vec3 fragLocal;
+in vec3 fragLocalNormal;
+in vec2 fragYawSC;
+in vec3 fragInvScale;
+in vec2 fragProjOffset;
 
 uniform sampler2D texture0;   /* albedo   - raylib: MATERIAL_MAP_DIFFUSE */
 uniform sampler2D texture2;   /* normali  - raylib: MATERIAL_MAP_NORMAL  */
 uniform vec4 colDiffuse;
+
+/* 0 = le UV della mesh, 1 = proiezione sull'asse dominante, 2 = miscela a tre.
+ * Viaggia per LOTTO, come alphaCut. */
+uniform int   projMode;
+uniform float projTile;    /* metri coperti da una ripetizione */
 
 /* Soglia sotto la quale il frammento sparisce. 0 spegne il ritaglio, ed e' il
  * valore di riposo: la stragrande maggioranza delle superfici e' opaca e non
@@ -73,6 +83,41 @@ float Pcf(sampler2D map, vec3 proj, float bias)
  * darebbe NaN, quindi in quel caso si resta alla normale del vertice. E i
  * materiali senza normal map ne ricevono una piatta da light.c, cosi' qui non
  * serve sapere se ce n'e' una vera: il conto e' sempre lo stesso. */
+/* --- Materiali proiettati --------------------------------------------------
+ * I pezzi dei kit non hanno UV utilizzabili: il muro ha 64 vertici e tutte le
+ * sue coordinate stanno in una cella della tavolozza. Per loro la texture si
+ * ricava dalla POSIZIONE, e in spazio oggetto: proiettando in coordinate di
+ * mondo, una casa ruotata prenderebbe la venatura di traverso.
+ *
+ * Asse dominante e non miscela a tre: i pezzi sono pannelli allineati agli
+ * assi, quindi su una faccia piatta la scelta e' netta e costa un prelievo
+ * invece di tre. La miscela serve solo dove la normale e' diagonale. */
+int AsseDominante(vec3 n)
+{
+    vec3 a = abs(n);
+    if (a.x >= a.y && a.x >= a.z) return 1;
+    if (a.z >= a.y) return 2;
+    return 0;
+}
+
+/* La V segue sempre la verticale dell'oggetto sulle facce laterali: e' quello
+ * che tiene le assi verticali e le file parallele al muro. */
+vec2 ProiettaUV(vec3 p, int asse)
+{
+    if (asse == 1) return vec2(p.z, p.y);
+    if (asse == 2) return vec2(p.x, p.y);
+    return vec2(p.x, p.z);
+}
+
+vec2 CoordProiettata()
+{
+    vec2 uv = ProiettaUV(fragLocal, AsseDominante(fragLocalNormal));
+    /* Lo sfalsamento e' una TRASLAZIONE, non una rotazione: ruotare romperebbe
+     * la verticalita' delle assi, che e' la ragione dello spazio oggetto.
+     * Senza, trenta case avrebbero la venatura identica nello stesso punto. */
+    return (uv + fragProjOffset) / max(projTile, 1e-4);
+}
+
 vec3 SurfaceNormal()
 {
     vec3 n = normalize(fragNormal);
@@ -125,7 +170,8 @@ float ShadowFactor(vec3 n)
 
 void main()
 {
-    vec4 albedo = texture(texture0, fragTexCoord) * colDiffuse * fragColor;
+    vec2 uv = (projMode == 0) ? fragTexCoord : CoordProiettata();
+    vec4 albedo = texture(texture0, uv) * colDiffuse * fragColor;
 
     /* Il ritaglio va PRIMA dell'uscita anticipata del passaggio d'ombra: le
      * foglie sono ritagli su quadrati, e un frammento buttato via qui non

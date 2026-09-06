@@ -148,6 +148,8 @@ prove: $(RAYLIB_DEP)
 	      $(SRC_DIR)/fmath.c $(LDFLAGS) $(LDLIBS) -o $(PROVE_DIR)/instancing
 	$(CC) $(PROVE_CF) $(TOOL_DIR)/prove/alfa.c \
 	      $(SRC_DIR)/fmath.c $(LDFLAGS) $(LDLIBS) -o $(PROVE_DIR)/alfa
+	$(CC) $(PROVE_CF) $(TOOL_DIR)/prove/proiezione.c \
+	      $(SRC_DIR)/fmath.c $(LDFLAGS) $(LDLIBS) -o $(PROVE_DIR)/proiezione
 	$(CC) $(PROVE_CF) $(TOOL_DIR)/prove/varianti.c \
 	      $(SRC_DIR)/fmath.c $(SRC_DIR)/light.c $(SRC_DIR)/instancing.c \
 	      $(SRC_DIR)/worldio.c $(SRC_DIR)/dataparse.c \

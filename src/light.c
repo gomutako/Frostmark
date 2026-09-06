@@ -48,6 +48,7 @@ static int locDepthOnly[PROG_COUNT], locShadowOn[PROG_COUNT], locShadowRes[PROG_
 static int locLightVP[PROG_COUNT][SHADOW_CASCADES];
 static int locShadowMap[PROG_COUNT][SHADOW_CASCADES];
 static int locViewPos[PROG_COUNT], locSplit[PROG_COUNT], locAlphaCut[PROG_COUNT];
+static int locProjMode[PROG_COUNT], locProjTile[PROG_COUNT];
 
 static Vector3 gSunDir  = { 0.0f, 1.0f, 0.0f };
 static float   gSunAmt  = 1.0f;
@@ -107,6 +108,8 @@ bool LightInit(void)
         locViewPos[p]      = GetShaderLocation(gProg[p], "viewPos");
         locSplit[p]        = GetShaderLocation(gProg[p], "splitDist");
         locAlphaCut[p]     = GetShaderLocation(gProg[p], "alphaCut");
+        locProjMode[p]     = GetShaderLocation(gProg[p], "projMode");
+        locProjTile[p]     = GetShaderLocation(gProg[p], "projTile");
     }
 
     for (int i = 0; i < SHADOW_CASCADES; i++) gMap[i] = LoadDepthFbo(SHADOW_RES, SHADOW_RES);
@@ -177,6 +180,14 @@ void LightSetAlphaCut(float cut)
     for (int p = 0; p < PROG_COUNT; p++)
         if (gProg[p].id != 0)
             SetShaderValue(gProg[p], locAlphaCut[p], &cut, SHADER_UNIFORM_FLOAT);
+}
+void LightSetProjection(int mode, float tile)
+{
+    for (int p = 0; p < PROG_COUNT; p++) {
+        if (gProg[p].id == 0) continue;
+        SetShaderValue(gProg[p], locProjMode[p], &mode, SHADER_UNIFORM_INT);
+        SetShaderValue(gProg[p], locProjTile[p], &tile, SHADER_UNIFORM_FLOAT);
+    }
 }
 int   LightCascades(void)           { return SHADOW_CASCADES; }
 float LightShadowRadius(int cascade) { return cascade == 0 ? SHADOW_NEAR_R : SHADOW_FAR_R; }

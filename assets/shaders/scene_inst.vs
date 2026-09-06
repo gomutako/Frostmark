@@ -35,6 +35,17 @@ out vec4 fragColor;
 out vec3 fragNormal;
 out vec4 fragTangent;
 
+/* Per i materiali proiettati: la posizione e la normale in spazio OGGETTO, e
+ * quel che serve al fragment per riportare in mondo la normale perturbata.
+ * La posizione e' gia' moltiplicata per la scala, cioe' e' in metri: senza,
+ * la texture si stirerebbe con il pezzo, e la falda del tetto e' scalata
+ * (cella, cella*1.6, cella*nz). */
+out vec3 fragLocal;
+out vec3 fragLocalNormal;
+out vec2 fragYawSC;       /* seno e coseno dell'imbardata */
+out vec3 fragInvScale;
+out vec2 fragProjOffset;  /* sfalsamento per istanza, in metri */
+
 /* Rotazione attorno a Y con lo stesso verso di MatrixRotateY() di raymath:
  * x' = cos*x + sin*z, z' = -sin*x + cos*z. Sbagliare il segno qui specchia
  * tutta la foresta, e guardando un albero solo non si vede. */
@@ -72,6 +83,13 @@ void main()
     fragColor    = vertexColor;
     fragNormal   = normalize(nrm);
     fragTangent  = vec4(tan, vertexTangent.w);
+
+    /* Qui scala e imbardata arrivano dal dato d'istanza: niente da estrarre. */
+    fragLocal       = vertexPosition * sc;
+    fragLocalNormal = vertexNormal;
+    fragYawSC       = vec2(s, c);
+    fragInvScale    = 1.0 / max(sc, vec3(1e-6));
+    fragProjOffset  = vec2(instPosSin.x, instPosSin.z);
 
     gl_Position = matProjection * matView * vec4(world, 1.0);
 }

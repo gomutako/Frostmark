@@ -18,6 +18,17 @@ out vec4 fragColor;
 out vec3 fragNormal;
 out vec4 fragTangent;
 
+/* Per i materiali proiettati: la posizione e la normale in spazio OGGETTO, e
+ * quel che serve al fragment per riportare in mondo la normale perturbata.
+ * La posizione e' gia' moltiplicata per la scala, cioe' e' in metri: senza,
+ * la texture si stirerebbe con il pezzo, e la falda del tetto e' scalata
+ * (cella, cella*1.6, cella*nz). */
+out vec3 fragLocal;
+out vec3 fragLocalNormal;
+out vec2 fragYawSC;       /* seno e coseno dell'imbardata */
+out vec3 fragInvScale;
+out vec2 fragProjOffset;  /* sfalsamento per istanza, in metri */
+
 void main()
 {
     fragPosition = vec3(matModel * vec4(vertexPosition, 1.0));
@@ -30,6 +41,18 @@ void main()
      * non va trasformato. Se la mesh non porta tangenti raylib passa qui un
      * vettore nullo, e il fragment se ne accorge. */
     fragTangent  = vec4(vec3(matNormal * vec4(vertexTangent.xyz, 1.0)), vertexTangent.w);
+
+    /* Scala e imbardata stanno dentro matModel: la scala e' la lunghezza delle
+     * prime tre colonne, e la prima colonna normalizzata e' l'asse X ruotato,
+     * cioe' (cos, 0, -sin) con la convenzione di RuotaY(). */
+    vec3 sc = vec3(length(matModel[0].xyz), length(matModel[1].xyz),
+                   length(matModel[2].xyz));
+    vec3 ax = matModel[0].xyz / max(sc.x, 1e-6);
+    fragLocal       = vertexPosition * sc;
+    fragLocalNormal = vertexNormal;
+    fragYawSC       = vec2(-ax.z, ax.x);
+    fragInvScale    = 1.0 / max(sc, vec3(1e-6));
+    fragProjOffset  = vec2(matModel[3].x, matModel[3].z);
 
     gl_Position = mvp * vec4(vertexPosition, 1.0);
 }

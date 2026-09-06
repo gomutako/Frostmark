@@ -36,6 +36,9 @@ struct InstBatch {
     int elems;          /* indici da disegnare, 0 se la mesh non e' indicizzata */
     int locAlphaCut;    /* -1 se lo shader non ha l'uniform */
     float alphaCut;     /* 0 = niente ritaglio */
+    int   locProjMode, locProjTile;   /* -1 se lo shader non li ha */
+    int   projMode;                   /* 0 = UV, come prima        */
+    float projTile;                   /* metri per ripetizione     */
 };
 
 /* Aggancia il buffer d'istanza al VAO del lotto. Si rifa' identica quando il
@@ -70,6 +73,11 @@ InstBatch *InstCreate(Mesh mesh, Material mat)
 
     b->locAlphaCut = GetShaderLocation(sh, "alphaCut");
     b->alphaCut = LightAlphaCutFor(b->mat);
+
+    b->locProjMode = GetShaderLocation(sh, "projMode");
+    b->locProjTile = GetShaderLocation(sh, "projTile");
+    b->projMode    = 0;
+    b->projTile    = 1.0f;
 
     b->cap = INST_CAP_INIZIALE;
     b->cpu = (InstData *)MemAlloc((unsigned int)(b->cap * (int)sizeof(InstData)));
@@ -220,6 +228,11 @@ void InstFlush(InstBatch *b)
     if (b->locAlphaCut != -1)
         rlSetUniform(b->locAlphaCut, &b->alphaCut, SHADER_UNIFORM_FLOAT, 1);
 
+    if (b->locProjMode != -1)
+        rlSetUniform(b->locProjMode, &b->projMode, SHADER_UNIFORM_INT, 1);
+    if (b->locProjTile != -1)
+        rlSetUniform(b->locProjTile, &b->projTile, SHADER_UNIFORM_FLOAT, 1);
+
     rlEnableVertexArray(b->vao);
     if (b->elems > 0) rlDrawVertexArrayElementsInstanced(0, b->elems, 0, b->count);
     else              rlDrawVertexArrayInstanced(0, b->mesh.vertexCount, b->count);
@@ -231,6 +244,13 @@ void InstFlush(InstBatch *b)
     if (b->locAlphaCut != -1 && b->alphaCut != 0.0f) {
         float spento = 0.0f;
         rlSetUniform(b->locAlphaCut, &spento, SHADER_UNIFORM_FLOAT, 1);
+    }
+
+    /* Come per la soglia dell'alfa: un lotto non deve lasciare acceso qualcosa
+     * per il successivo, che potrebbe avere UV vere. */
+    if (b->locProjMode != -1 && b->projMode != 0) {
+        int spento = 0;
+        rlSetUniform(b->locProjMode, &spento, SHADER_UNIFORM_INT, 1);
     }
 
     for (int k = 0; k < (int)(sizeof mappe / sizeof *mappe); k++) {
@@ -311,5 +331,16 @@ void InstModelAdd(InstModel *im, Vector3 pos, float yawDeg, Vector3 scale)
 void InstModelFlush(InstModel *im)
 {
     for (int i = 0; i < im->n; i++) InstFlush(im->b[i]);
+}
+
+void InstProjection(InstBatch *b, int mode, float tile)
+{
+    b->projMode = mode;
+    b->projTile = (tile > 1e-4f) ? tile : 1.0f;
+}
+
+void InstModelProjection(InstModel *im, int mode, float tile)
+{
+    for (int i = 0; i < im->n; i++) InstProjection(im->b[i], mode, tile);
 }
 
