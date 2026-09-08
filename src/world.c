@@ -1069,8 +1069,35 @@ static void PlacePart(World *w, BuildPart part, Vector3 origin, float rotDeg,
          * si e' creato. L'uniform e' per lotto, e qui di lotto non ce n'e'. */
         if (w->buildProj[part])
             LightSetProjection(gBuildMat[part].mode, gBuildMat[part].tile);
-        DrawModelEx(w->buildPart[part], p, (Vector3){ 0.0f, 1.0f, 0.0f },
-                    rotDeg + localRot, scale, tint);
+
+        if (w->partIdx[part] != NULL) {
+            /* Un pezzo dentro un file di venti: DrawModelEx li disegnerebbe
+             * TUTTI, in un mucchio attorno alla torre. Una mesh per volta, e
+             * solo le sue - la stessa strada che DrawProp fa per le varianti. */
+            Model *mo = &w->buildPart[part];
+            Matrix mt = MatrixMultiply(
+                            MatrixMultiply(MatrixScale(scale.x, scale.y, scale.z),
+                                           MatrixRotateY((rotDeg + localRot) * DEG2RAD)),
+                            MatrixTranslate(p.x, p.y, p.z));
+            for (int j = 0; j < w->partIdxN[part]; j++) {
+                int mi  = w->partIdx[part][j];
+                int mat = (mo->meshMaterial != NULL) ? mo->meshMaterial[mi] : 0;
+                if (mat < 0 || mat >= mo->materialCount) mat = 0;
+
+                /* Copia superficiale, e l'assegnazione e' ASSOLUTA: mm.maps
+                 * resta l'array del modello, quindi questa riga ci scrive
+                 * davvero, ma riparte ogni fotogramma dallo stesso valore e non
+                 * accumula. Stessa convenzione di InstTint(). Se diventasse una
+                 * moltiplicazione, il materiale si scurirebbe a ogni frame. */
+                Material mm = mo->materials[mat];
+                mm.maps[MATERIAL_MAP_DIFFUSE].color = tint;
+                DrawMesh(mo->meshes[mi], mm, mt);
+            }
+        } else {
+            DrawModelEx(w->buildPart[part], p, (Vector3){ 0.0f, 1.0f, 0.0f },
+                        rotDeg + localRot, scale, tint);
+        }
+
         if (w->buildProj[part]) LightSetProjection(0, 1.0f);
     }
 }
@@ -1182,6 +1209,19 @@ static void DrawTower(World *w, Vector3 pos, float rotDeg, float s, Color tint)
     PlacePart(w, BUILD_TOWER_MID,  pos, rotDeg, 0.0f, 2.0f, 0.0f, 0.0f, cell, sc, tint);
     PlacePart(w, BUILD_TOWER_TOP,  pos, rotDeg, 0.0f, 3.0f, 0.0f, 0.0f, cell, sc, tint);
     PlacePart(w, BUILD_TOWER_ROOF, pos, rotDeg, 0.0f, 3.3f, 0.0f, 0.0f, cell, sc, tint);
+}
+
+/* Mastio: un pezzo solo, appoggiato a terra.
+ *
+ * Non usa la griglia delle celle - BUILD_CELL vale 2,6 m e regge le case, non
+ * una torre da 15,84 - quindi la scala e' metrica e arriva dall'ingombro
+ * misurato al caricamento. Con lx = ly = lz = 0 la cella non entra nel conto,
+ * e si passa 1 per dirlo. */
+static void DrawKeep(World *w, Vector3 pos, float rotDeg, float s, Color tint)
+{
+    float k = w->keepScale * s;
+    PlacePart(w, BUILD_KEEP, pos, rotDeg, 0.0f, 0.0f, 0.0f, 0.0f,
+              1.0f, (Vector3){ k, k, k }, tint);
 }
 
 /* Quale individuo del set tocca a questo prop. E' una FUNZIONE della
@@ -1301,6 +1341,9 @@ static void DrawProp(World *w, const Prop *p, Color tint, bool lod)
                         Shade((Color){ 108, 62, 48, 255 }, tint));
         } break;
         case PROP_TOWER: {
+            /* Tre gradini di ripiego: il mastio se c'e', i pezzi del kit se no,
+             * il cilindro procedurale se non c'e' nemmeno quello. */
+            if (w->hasKeep)       { DrawKeep(w, pos, p->rot, s, Shade(WHITE, tint)); break; }
             if (w->hasBuildParts) { DrawTower(w, pos, p->rot, s, Shade(WHITE, tint)); break; }
             DrawModelEx(w->mCyl, pos, Y, 0.0f, (Vector3){3.0f, 11.0f, 3.0f},
                         Shade((Color){ 138, 134, 128, 255 }, tint));
