@@ -223,6 +223,56 @@ static float Luminosita(Image im)
     return (n > 0) ? (float)(s / (3.0 * n)) : 0.0f;
 }
 
+/* Albedo piatto: bianco 1x1. Con la rampa il colore varierebbe per la
+ * texture, non per il rilievo; qui l'unica cosa che deve far cambiare il
+ * pixel e' l'illuminazione. */
+static Texture2D Bianca(void)
+{
+    Image im = GenImageColor(1, 1, WHITE);
+    Texture2D t = LoadTextureFromImage(im);
+    SetTextureFilter(t, TEXTURE_FILTER_POINT);
+    UnloadImage(im);
+    return t;
+}
+
+/* Normal map a due meta': la sinistra inclina la normale verso +U, la destra
+ * verso -U. Serve a distinguere DOVE la mappa viene campionata: con una tinta
+ * unita qualunque coordinata da' lo stesso campione, e leggere le UV sbagliate
+ * passerebbe inosservato - che e' proprio il difetto da cui questo compito
+ * difende, visto che le UV dei pezzi del kit stanno tutte in una cella della
+ * tavolozza. */
+static Texture2D NormaleADueMeta(void)
+{
+    Image im = GenImageColor(2, 1, (Color){ 191, 128, 222, 255 });
+    ImageDrawPixel(&im, 1, 0, (Color){ 65, 128, 222, 255 });
+    Texture2D t = LoadTextureFromImage(im);
+    SetTextureFilter(t, TEXTURE_FILTER_POINT);
+    UnloadImage(im);
+    return t;
+}
+
+/* Come SulQuadrato(), ma per il blocco 7: li' l'albedo e' bianco piatto
+ * invece della rampa, quindi il segnale che dice se il pixel sta sul
+ * quadrato e' la luminosita' intera, non il verde fisso della rampa. Sul
+ * fondo nero anche solo l'ambiente basta a superare la soglia. */
+static bool SulQuadratoLum(Color c) { return (c.r + c.g + c.b) > 30; }
+
+/* Come SbalziInRiga(), ma conta le fasce di luminosita' invece degli sbalzi
+ * della rampa: la soglia e' un parametro, perche' qui la differenza viene
+ * dall'illuminazione - poche decine di livelli fra le due meta' della mappa -
+ * non dal rosso della rampa, che salta di oltre 100. */
+static int FasceInRiga(Image im, int y, int soglia)
+{
+    int n = 0;
+    for (int x = 1; x < im.width; x++) {
+        Color a = GetImageColor(im, x - 1, y), b = GetImageColor(im, x, y);
+        if (!SulQuadratoLum(a) || !SulQuadratoLum(b)) continue;
+        int la = (int)a.r + a.g + a.b, lb = (int)b.r + b.g + b.b;
+        if (abs(la - lb) > soglia) n++;
+    }
+    return n;
+}
+
 int main(void)
 {
     if (access("/dev/dxg", F_OK) == 0) setenv("GALLIUM_DRIVER", "d3d12", 0);
@@ -429,6 +479,39 @@ int main(void)
 
     UnloadImage(imA); UnloadImage(imB);
     InstFree(br);
+
+    /* --- 7. il rilievo si campiona sulla coordinata proiettata, non le UV - */
+    /* Le UV dei pezzi del kit stanno tutte in una cella della tavolozza: se
+     * NormaleProiettata() leggesse fragTexCoord invece della coordinata
+     * proiettata, il rilievo sarebbe piatto ovunque e nessuna prova se ne
+     * accorgerebbe. Con una normal map a tinta unita (come NormaleInclinata()
+     * nel blocco 6) qualunque coordinata da' lo stesso campione, quindi non
+     * basta a distinguere DOVE si campiona: qui la mappa ha due meta' diverse
+     * apposta.
+     *
+     * L'albedo e' bianco piatto (non la rampa): l'unica cosa che fa variare
+     * il pixel e' l'illuminazione. Il passo di 2 m su un quadrato di 4 m fa
+     * attraversare alla coordinata proiettata DUE periodi della mappa,
+     * quindi la luminosita' alterna piu' volte lungo la riga; le UV della
+     * mesh (0..1 su tutto il quadrato, come nel modo 0) l'attraverserebbero
+     * una volta sola. */
+    Material dueMeta = LoadMaterialDefault();
+    LightApplyToMaterial(&dueMeta);
+    dueMeta.maps[MATERIAL_MAP_DIFFUSE].texture = Bianca();
+    dueMeta.maps[MATERIAL_MAP_NORMAL].texture  = NormaleADueMeta();
+
+    InstBatch *bm = InstCreate(q, dueMeta);
+    Ok("lotto a due meta' creato", bm != NULL);
+    InstProjection(bm, 1, 2.0f);
+
+    Image imFasce = Rendi(rt, bm, 0.0f);
+    int fasce = FasceInRiga(imFasce, RT / 2, 8);
+    printf("  fasce di luminosita' lungo la riga: %d\n", fasce);
+    Ok("il rilievo si campiona sulla coordinata proiettata, non sulle UV",
+       fasce >= 2);
+
+    UnloadImage(imFasce);
+    InstFree(bm);
 
     UnloadRenderTexture(rt);
     CloseWindow();
