@@ -311,6 +311,109 @@ della sua altezza, ora appoggia esattamente. È il motivo per cui tutti i prop
 esterni ora poggiano a terra invece di galleggiare o affondare secondo come è
 stato esportato l'asset.
 
+### Materiali proiettati
+
+I pezzi modulari degli edifici vengono da due kit Kenney e **non hanno UV
+utilizzabili**. Il numero che chiude la questione: `wall.glb` ha 64 vertici e
+**4 sole coppie UV distinte**; `planks.glb`, il solaio, ne ha 192 e **2**. Non
+sono coordinate, sono un indice di colore — ogni faccia campiona uno smalto
+pieno dentro una tavolozza da 512x512. Ci si può mettere sopra qualunque
+materiale fotografico: verrebbe un edificio a tinta unita.
+
+Per questi pezzi la texture si ricava quindi dalla **posizione** invece che
+dalle UV. La regola sta tutta in `assets/shaders/scene.fs`:
+
+- **asse dominante**, non miscela a tre. I pezzi sono pannelli allineati agli
+  assi: su una faccia piatta la scelta dell'asse è netta, e costa **un**
+  prelievo di texture invece di tre. La V segue sempre la verticale
+  dell'oggetto sulle facce laterali, ed è quello che tiene le file di assi
+  parallele al muro.
+- **in spazio oggetto**, non di mondo. Proiettando in coordinate di mondo una
+  casa ruotata prenderebbe la venatura di traverso. Verificato in gioco: la
+  casa a 88,6 gradi e quella a 191,2 gradi hanno le file di assi orizzontali
+  allo stesso modo.
+- **la miscela a tre solo sul tetto**, che è l'unico pezzo con la normale a 45
+  gradi. Lì l'asse dominante oscillerebbe e a metà falda nascerebbe un gradino
+  netto. I pesi sono il *quadrato* della normale: stringe la fascia in cui due
+  proiezioni si sovrappongono, e quindi la sfocatura.
+
+**La posizione locale è moltiplicata per la scala** prima di arrivare al
+fragment, cioè arriva in metri. Senza, la texture si stirerebbe insieme al
+pezzo, e c'è un pezzo scalato in modo non uniforme: la falda del tetto, che è
+`(cella, cella·1,6, cella·nz)`. È lo stesso motivo per cui la normale
+perturbata si **divide** per la scala tornando in mondo — moltiplicare darebbe
+normali storte proprio sulla falda, dove nessuna prova le guarda perché
+disegnano tutte a scala unitaria. Guardato sul modello vero: le scandole del
+tetto hanno lo stesso passo delle assi del muro, e il rilievo non è storto.
+
+**La normal map non usa le tangenti del vertice**, che i pezzi del kit non
+hanno: la terna si costruisce dagli **assi della proiezione**, che sono gli
+assi dell'oggetto. Chi ha UV vere continua a passare da `SurfaceNormal()` e
+dalla tangente del `.glb`.
+
+**L'interruttore viaggia per lotto**, esattamente come `alphaCut`:
+`InstProjection(lotto, modo, passo)` lo imposta prima del disegno e
+`InstFlush()` lo rimette a zero prima di uscire, perché il lotto successivo
+potrebbe avere UV vere. Non è teorico e non c'è prova che lo copra — le prove
+disegnano un lotto solo per volta. Si misura in gioco: la stessa inquadratura
+del villaggio, con e senza questo ramo, differisce **solo sui pixel degli
+edifici**. Alberi, massi, personaggi, terreno e ombre restano identici, e in
+un'inquadratura di solo bosco non c'è un pixel che cambi di più di 3 livelli su
+921.600 — cioè il rumore dell'antialiasing, e nient'altro.
+
+Che materiale va su che pezzo sta in `gBuildMat` in `world.c`. Il passo è per
+**insieme** e non per pezzo: le assi di un muro e quelle di una finestra devono
+avere lo stesso, o la finestra si stacca dalla parete.
+
+| pezzi | materiale | passo | modo |
+|---|---|---|---|
+| muro, porta, finestra | `legno_scuro` | 2,0 m | asse dominante |
+| tetto | `tetto_legno` | 1,5 m | miscela a tre |
+| solaio, scala | `assito` | 2,0 m | asse dominante |
+| i quattro pezzi della torre | `pietra` | 2,5 m | asse dominante |
+
+Se un materiale sembra fuori scala si cambia **il passo**, non `BUILD_CELL`:
+geometria e collisione dipendono dalla cella.
+
+**Senza `assets/textures/` non succede niente di male.** Il materiale si monta
+solo se il file c'è, e la granularità è per pezzo: rinominato il solo
+`legno_scuro_diff.jpg`, muri, porte e finestre tornano alla tavolozza del kit e
+al modo 0 mentre tetto, solai e torre restano proiettati — nessun avviso, il
+gioco gira. La riga di registro lo dice a colpo d'occhio: *10 pezzi per gli
+edifici modulari, 10 con materiale proiettato*, che senza quel file diventa
+*7 con materiale proiettato*.
+
+**Il ripiego non instanziato non è codice morto.** Quando manca
+`assets/shaders/scene_inst.vs` i lotti non si creano e `PlacePart()` disegna
+con `DrawModelEx()`; lì l'uniform va messo a mano con `LightSetProjection()`,
+perché di lotto non ce n'è. Verificato rinominando quel file: la stessa
+inquadratura di una parete differisce su **1.112 pixel su 921.600**, tutti sul
+contorno di oggetti lontani e sullo zoccolo, e la superficie del muro è
+identica a pixel.
+
+**Limite noto: le file di assi non combaciano fra pannelli adiacenti della
+stessa casa.** Lo sfalsamento che evita trenta case con la venatura identica
+somma alla coordinata di texture la posizione dell'istanza, `(x, z)` di mondo,
+**senza distinguere l'asse**: su una parete la componente Z finisce sulla
+verticale. Ogni pannello è un'istanza a una posizione diversa, quindi il conto
+è una funzione dell'imbardata della casa. Per due pannelli affiancati di una
+stessa parete, con passo 2,0 m e cella 2,6:
+
+| imbardata | scorrimento orizzontale | scorrimento verticale |
+|---|---|---|
+| 88,6 gradi (caso migliore) | 0,8 mm | 6,4 cm |
+| 191,2 gradi | 1,10 m | 55 cm |
+
+Lo scorrimento verticale è stato **previsto dal conto e poi misurato sullo
+schermo**, correlando le due metà di un giunto: 11 pixel a 88,6 gradi, cioè
+6,4 cm alla scala di quell'inquadratura, contro i 6,35 cm previsti; 109 pixel a
+191,2 gradi, cioè 56 cm, contro i 55 previsti. Il primo caso si nota guardando;
+il secondo si vede a occhio nudo da tre metri. Lo stesso vale fra i segmenti di
+tetto affiancati lungo il colmo, dove il salto si legge come una riga di
+scandole sfalsata. La correzione — sfalsare la sola U, oppure quantizzare lo
+sfalsamento al passo — non è stata fatta qui: cambia il modo in cui le case si
+differenziano fra loro, ed è una decisione di design.
+
 ### Le prove
 
 `make prove` compila ed esegue ogni file in `tools/prove/`. Non c'è un

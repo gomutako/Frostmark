@@ -83,6 +83,9 @@ typedef struct {
     /* Un gruppo per tipo di pezzo: una casa bassa costa 19 chiamate, una alta
      * 45, e i tipi di pezzo sono dieci. */
     InstModel partBatch[BUILD_PART_COUNT];
+    /* Quali pezzi hanno ricevuto un materiale proiettato: gli altri restano
+     * alla tavolozza del kit e al modo 0. */
+    bool   buildProj[BUILD_PART_COUNT];
 } World;
 
 /* Carica il mondo cotto da 'dir' e prepara le risorse grafiche. false se il

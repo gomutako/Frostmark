@@ -209,6 +209,31 @@ static const char *BUILD_FILES[BUILD_PART_COUNT] = {
  * 2,6: le stesse dimensioni della scatola procedurale che sostituisce. */
 #define BUILD_CELL   2.6f
 
+/* Che materiale va su ogni pezzo, con che passo e con che modo di proiezione.
+ * I pezzi dei kit non hanno UV utilizzabili - wall.glb ha 64 vertici e QUATTRO
+ * sole coppie UV distinte, dentro un riquadro di 0,375x0,35 della tavolozza -
+ * quindi la texture si ricava dalla posizione e non dalle UV.
+ *
+ * Il passo e' per INSIEME e non per pezzo: le assi di un muro e quelle di una
+ * finestra devono avere lo stesso, o la finestra si stacca dalla parete.
+ *
+ * Il tetto e' l'unico a modo 2: le sue falde hanno la normale a 45 gradi, e
+ * con l'asse dominante nascerebbe una cucitura a meta' falda. */
+typedef struct { const char *nome; float tile; int mode; } BuildMat;
+
+static const BuildMat gBuildMat[BUILD_PART_COUNT] = {
+    [BUILD_WALL]        = { "legno_scuro", 2.0f, 1 },
+    [BUILD_DOOR]        = { "legno_scuro", 2.0f, 1 },
+    [BUILD_WINDOW]      = { "legno_scuro", 2.0f, 1 },
+    [BUILD_ROOF]        = { "tetto_legno", 1.5f, 2 },
+    [BUILD_FLOOR]       = { "assito",      2.0f, 1 },
+    [BUILD_STAIRS]      = { "assito",      2.0f, 1 },
+    [BUILD_TOWER_BASE]  = { "pietra",      2.5f, 1 },
+    [BUILD_TOWER_MID]   = { "pietra",      2.5f, 1 },
+    [BUILD_TOWER_TOP]   = { "pietra",      2.5f, 1 },
+    [BUILD_TOWER_ROOF]  = { "pietra",      2.5f, 1 },
+};
+
 /* Tutti o nessuno: mezza casa e' peggio di una scatola. */
 static void LoadBuildParts(World *w)
 {
@@ -228,10 +253,47 @@ static void LoadBuildParts(World *w)
                              TEXTURE_FILTER_POINT);
         LightApplyToModel(&w->buildPart[i]);
 
+        /* Il materiale proiettato sostituisce la tavolozza del kit. Se i file
+         * non ci sono si resta alla tavolozza e al modo 0: il gioco funziona
+         * senza assets/, e questo non e' un caso d'errore. */
+        char diff[128], nor[128];
+        snprintf(diff, sizeof diff, "assets/textures/%s_diff.jpg", gBuildMat[i].nome);
+        snprintf(nor,  sizeof nor,  "assets/textures/%s_nor.jpg",  gBuildMat[i].nome);
+
+        /* I mipmap PRIMA del filtro, come per il terreno: SetTextureFilter()
+         * di raylib 5.5 guarda texture.mipmaps e, se ne trova uno solo,
+         * ripiega su GL_LINEAR con un avviso. Nell'ordine inverso i mipmap si
+         * genererebbero e non si userebbero, e una parete lontana sfarfalla. */
+        if (FileExists(diff)) {
+            Texture2D td = LoadTexture(diff);
+            GenTextureMipmaps(&td);
+            SetTextureFilter(td, TEXTURE_FILTER_TRILINEAR);
+            SetTextureWrap(td, TEXTURE_WRAP_REPEAT);
+            for (int k = 0; k < w->buildPart[i].materialCount; k++)
+                w->buildPart[i].materials[k].maps[MATERIAL_MAP_DIFFUSE].texture = td;
+
+            if (FileExists(nor)) {
+                Texture2D tn = LoadTexture(nor);
+                GenTextureMipmaps(&tn);
+                SetTextureFilter(tn, TEXTURE_FILTER_TRILINEAR);
+                SetTextureWrap(tn, TEXTURE_WRAP_REPEAT);
+                for (int k = 0; k < w->buildPart[i].materialCount; k++)
+                    w->buildPart[i].materials[k].maps[MATERIAL_MAP_NORMAL].texture = tn;
+            }
+            w->buildProj[i] = true;
+        }
+
         InstModelCreate(&w->partBatch[i], w->buildPart[i]);
+        if (w->buildProj[i])
+            InstModelProjection(&w->partBatch[i], gBuildMat[i].mode, gBuildMat[i].tile);
     }
     w->hasBuildParts = true;
-    TraceLog(LOG_INFO, "WORLD: %d pezzi per gli edifici modulari", BUILD_PART_COUNT);
+    /* Il conto dei pezzi proiettati dice a colpo d'occhio se assets/textures/
+     * c'e': senza, si resta alla tavolozza del kit e non e' un errore. */
+    int proiettati = 0;
+    for (int i = 0; i < BUILD_PART_COUNT; i++) if (w->buildProj[i]) proiettati++;
+    TraceLog(LOG_INFO, "WORLD: %d pezzi per gli edifici modulari, %d con materiale proiettato",
+             BUILD_PART_COUNT, proiettati);
 }
 
 /* Raylib 5.5 tiene gli indici di una mesh in 'unsigned short': oltre 65.535
@@ -722,8 +784,15 @@ static void PlacePart(World *w, BuildPart part, Vector3 origin, float rotDeg,
      * si e' sempre fatto. */
     if (InstModelReady(&w->partBatch[part]))
         InstModelAdd(&w->partBatch[part], p, rotDeg + localRot, scale);
-    else DrawModelEx(w->buildPart[part], p, (Vector3){ 0.0f, 1.0f, 0.0f },
-                     rotDeg + localRot, scale, tint);
+    else {
+        /* Ripiego: si arriva qui quando manca assets/shaders/ o un lotto non
+         * si e' creato. L'uniform e' per lotto, e qui di lotto non ce n'e'. */
+        if (w->buildProj[part])
+            LightSetProjection(gBuildMat[part].mode, gBuildMat[part].tile);
+        DrawModelEx(w->buildPart[part], p, (Vector3){ 0.0f, 1.0f, 0.0f },
+                    rotDeg + localRot, scale, tint);
+        if (w->buildProj[part]) LightSetProjection(0, 1.0f);
+    }
 }
 
 /* Casa: 3x2 celle, muri sul perimetro, una porta al centro della facciata,

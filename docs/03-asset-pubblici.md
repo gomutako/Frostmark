@@ -394,6 +394,72 @@ per la torre — e ognuno porta il suo `Textures/colormap.png`: stanno quindi in
 `assets/models/town/` e `assets/models/castle/`. Se manca anche un solo pezzo
 si torna alle primitive per tutti: mezza casa è peggio di una scatola.
 
+### I kit modulari non hanno UV: si riconosce dall'intervallo
+
+Un asset fotografico messo su un pezzo di kit non si vede. Il motivo è che
+quei pezzi non portano coordinate di texture ma un **indice di colore**: le UV
+puntano dentro una tavolozza da 512x512 fatta di smalti pieni, e ogni faccia
+campiona un colore solo. Ci si può montare sopra la corteccia più bella del
+catalogo: viene un edificio a tinta unita.
+
+Il caso si riconosce **senza aprire il modello in un editor**: si guarda
+l'intervallo delle UV, e soprattutto quante coppie *distinte* ce ne sono. Se
+stanno in una finestrella dell'atlante ed è un pugno di valori per centinaia di
+vertici, è una tavolozza. I dieci pezzi in uso, letti dai `.glb`:
+
+| pezzo | vertici | coppie UV distinte |
+|---|---|---|
+| `wall.glb` | 64 | **4** |
+| `planks.glb` (solaio) | 192 | **2** |
+| `wall-window-small.glb` | 154 | 8 |
+| `roof-gable.glb` | 118 | 13 |
+| `wall-doorway-round.glb` | 232 | 28 |
+| `stairs-wide-wood.glb` | 600 | 33 |
+| `tower-square-base.glb` | 56 | 5 |
+| `tower-square-mid-windows.glb` | 560 | 36 |
+| `tower-square-top.glb` | 232 | 7 |
+| `tower-square-top-roof.glb` | 192 | 9 |
+
+Il muro è il caso limite: 64 vertici e quattro coppie UV, tutte dentro un
+riquadro di 0,375 x 0,35 dell'atlante. Il solaio ha 192 vertici e la U è
+addirittura **costante**.
+
+Per confronto, un asset Poly Haven ha una UV per vertice e copre l'intero
+quadrato: quello si texturizza normalmente. La distinzione conta perché decide
+la strada — chi ha UV vere resta al modo 0, chi non ce le ha prende la texture
+dalla **posizione** (vedi *Materiali proiettati* in `docs/01`).
+
+**I quattro materiali scelti** stanno in `assets/textures/`, scaricati con
+`./tools/fetch_assets.sh texture <asset> <nome>`, e ognuno è una coppia
+`<nome>_diff.jpg` + `<nome>_nor.jpg` a 1024x1024:
+
+| nome | asset Poly Haven | su che pezzi | passo |
+|---|---|---|---|
+| `legno_scuro` | `dark_wooden_planks` | muro, porta, finestra | 2,0 m |
+| `tetto_legno` | `roof_planks` | tetto | 1,5 m |
+| `assito` | `plank_flooring` | solaio, scala | 2,0 m |
+| `pietra` | `castle_wall_slates` | i quattro pezzi della torre | 2,5 m |
+
+Il passo dice quanti metri copre una ripetizione, e va scelto **contro la
+cella**, che è 2,6 m: 2,0 m su un muro dà poco più di una ripetizione per
+pannello, che è la densità giusta perché si leggano le assi senza che diventino
+righe. Il passo è per **insieme** e non per pezzo — muro e finestra devono
+avere lo stesso, o la finestra si stacca dalla parete. Se un materiale sembra
+fuori scala si cambia il passo, non `BUILD_CELL`: geometria e collisione
+dipendono dalla cella.
+
+`legno_scuro` è scuro davvero — media (83, 74, 63) su 255. In pieno sole le
+assi si leggono bene; sulla parete in ombra, dove resta il solo ambiente
+(0,45), la casa diventa una sagoma quasi nera. È una scelta di tinta, non un
+difetto del meccanismo: si cambia sostituendo l'asset con uno più chiaro, senza
+toccare il codice.
+
+Vale la pena guardare anche i **mipmap**: `SetTextureFilter()` di raylib 5.5
+legge `texture.mipmaps` e, se ne trova uno solo, ripiega su `GL_LINEAR` con un
+avviso in registro. Chiamandolo prima di `GenTextureMipmaps()` i mipmap si
+generano e non si usano — la parete lontana sfarfalla e nessuno capisce
+perché. Prima i mipmap, poi il filtro.
+
 ### Cosa non ha un equivalente texturizzato
 
 Nei kit CC0 di Kenney non esiste un cespuglio vero: Survival e Mini Forest
