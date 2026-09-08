@@ -2150,6 +2150,40 @@ bool WorldInsideBuilding(const World *w, Vector3 pos)
     return false;
 }
 
+/* I cerchi di collisione di un prop di dettaglio. Torna quanti ne ha scritti:
+ * 0 se il prop si calpesta o se il suo modello non e' caricato, 1 se e' tondo,
+ * 2 se e' allungato.
+ *
+ * Due cerchi e non uno per il tronco: e' lungo 4,05 m e spesso 1,06, quindi un
+ * cerchio sullo spessore lascerebbe attraversare le punte e uno che lo copre
+ * tutto sarebbe un muro invisibile largo quattro metri. Stanno sull'asse del
+ * prop, che ruota con lui.
+ *
+ * Lo zero quando il modello manca e' la meta' della regola che si dimentica: il
+ * raggio sta nel MONDO COTTO, quindi senza questo controllo si sbatterebbe
+ * contro tronchi invisibili. */
+static int PropDetailCircles(const World *w, const Prop *p, Vector3 *out,
+                             float *raggio)
+{
+    const PropDetail *d = PropDetailOf(p->type);
+    if (d == NULL || d->raggio <= 0.0f) return 0;
+    if (!w->hasExtProp[p->type]) return 0;
+
+    *raggio = d->raggio * p->scale;
+
+    if (d->lunghezza <= 0.0f) { out[0] = p->pos; return 1; }
+
+    /* Il centro di ogni cerchio sta a meta' lunghezza meno il raggio, cosi' i
+     * due coprono il tronco senza sporgere oltre le punte. */
+    float off = (d->lunghezza * 0.5f - d->raggio) * p->scale;
+    float a   = p->rot * DEG2RAD;
+    float ux  = cosf(a), uz = -sinf(a);
+
+    out[0] = (Vector3){ p->pos.x - ux * off, p->pos.y, p->pos.z - uz * off };
+    out[1] = (Vector3){ p->pos.x + ux * off, p->pos.y, p->pos.z + uz * off };
+    return 2;
+}
+
 void WorldResolveCollision(World *w, Vector3 *pos, float radius)
 {
     for (int i = 0; i < MAX_LOADED_CHUNKS; i++) {
@@ -2232,6 +2266,27 @@ void WorldResolveCollision(World *w, Vector3 *pos, float radius)
                              * si raggiunge solo teletrasportandosi. */
                             pos->x += mrr;
                         }
+                    }
+                }
+                continue;
+            }
+
+            /* Il sottobosco: la sua riga dice se e' solido, e il modello dice se
+             * esiste. Il raggio cotto nel mondo non si legge - la tabella e'
+             * l'unica fonte, cosi' cambiare un numero non chiede di ricuocere. */
+            if (PropDetailOf(p->type) != NULL) {
+                Vector3 cc[2];
+                float rr = 0.0f;
+                int nc = PropDetailCircles(w, p, cc, &rr);
+                for (int m = 0; m < nc; m++) {
+                    float ddx = pos->x - cc[m].x, ddz = pos->z - cc[m].z;
+                    float dd2 = ddx * ddx + ddz * ddz;
+                    float tot = rr + radius;
+                    if (dd2 < tot * tot && dd2 > 0.0001f) {
+                        float dd = sqrtf(dd2);
+                        float push = (tot - dd) / dd;
+                        pos->x += ddx * push;
+                        pos->z += ddz * push;
                     }
                 }
                 continue;

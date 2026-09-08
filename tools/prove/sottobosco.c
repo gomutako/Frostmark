@@ -104,5 +104,58 @@ int main(void)
     }
     Ok("i due cerchi del tronco non lasciano un buco in mezzo", scoperti == 0);
 
+    /* --- I cerchi del tronco -------------------------------------------- *
+     * Un tronco e' lungo 4,05 m e spesso 1,06: un cerchio solo sul suo spessore
+     * lascerebbe attraversare le punte, uno che lo copre tutto sarebbe un muro
+     * invisibile largo quattro metri. Due cerchi sull'asse, orientati dalla
+     * rotazione del prop.
+     *
+     * World e' grosso: static, o si rischia la pila. */
+    static World mondo;
+    Prop tronco = { 0 };
+    tronco.pos   = (Vector3){ 50.0f, 0.0f, 50.0f };
+    tronco.scale = 1.0f;
+    tronco.rot   = 0.0f;
+    tronco.type  = PROP_LOG;
+
+    Vector3 c[2];
+    float raggio = 0.0f;
+
+    /* Senza il modello caricato non ci sono cerchi: niente asset, niente prop.
+     * E' la meta' della regola che si dimentica, e senza di lei il giocatore
+     * sbatte contro tronchi invisibili. */
+    mondo.hasExtProp[PROP_LOG] = false;
+    Ok("senza il modello il tronco non e' solido",
+       PropDetailCircles(&mondo, &tronco, c, &raggio) == 0);
+
+    mondo.hasExtProp[PROP_LOG] = true;
+    int ncerchi = PropDetailCircles(&mondo, &tronco, c, &raggio);
+    Ok("con il modello il tronco da' due cerchi", ncerchi == 2);
+    Ok("del raggio dichiarato", fabsf(raggio - 1.10f) < 0.01f);
+
+    /* I due cerchi stanno sull'asse del tronco, simmetrici sul centro. */
+    float cdx = c[1].x - c[0].x, cdz = c[1].z - c[0].z;
+    float cd  = sqrtf(cdx * cdx + cdz * cdz);
+    Ok("i cerchi coprono la lunghezza del tronco",
+       fabsf(cd - (4.05f - 2.0f * 1.10f)) < 0.01f);
+    Ok("e sono simmetrici sul centro del prop",
+       fabsf((c[0].x + c[1].x) * 0.5f - 50.0f) < 0.01f &&
+       fabsf((c[0].z + c[1].z) * 0.5f - 50.0f) < 0.01f);
+
+    /* Ruotato di 90 gradi l'asse gira con lui: se i cerchi restassero sull'asse
+     * X il tronco bloccherebbe dalla parte sbagliata, e a occhio non si vede. */
+    tronco.rot = 90.0f;
+    PropDetailCircles(&mondo, &tronco, c, &raggio);
+    float rdx = c[1].x - c[0].x, rdz = c[1].z - c[0].z;
+    Ok("ruotato, i cerchi ruotano con lui",
+       fabsf(rdx) < 0.01f && fabsf(fabsf(rdz) - (4.05f - 2.20f)) < 0.01f);
+
+    /* Un prop di dettaglio non solido non da' cerchi. */
+    Prop scaglia = tronco;
+    scaglia.type = PROP_BARK;
+    mondo.hasExtProp[PROP_BARK] = true;
+    Ok("la corteccia si calpesta",
+       PropDetailCircles(&mondo, &scaglia, c, &raggio) == 0);
+
     return ProveEsito();
 }
