@@ -61,4 +61,21 @@ void MeshGroupRecenter(float *v, int vertexCount, Vector3 o);
  * l'ingombro e' degenere. */
 float MeshGroupScale(const MeshGroup *g, float voluto, bool perAltezza);
 
+/* Quale gruppo tocca a un pezzo dichiarato per INDICE. Torna NULL se l'indice
+ * non esiste.
+ *
+ * L'indice e' RIPRODUCIBILE - MeshGroupSplit ordina per min.x e, a parita', per
+ * min.z - ma non e' STABILE NEL TEMPO: se il catalogo ricuoce il file e
+ * riordina i pezzi, lo stesso indice pesca un altro oggetto. Un indice fuori
+ * dai gruppi non e' quindi un errore da ignorare: e' un ripiego. */
+const MeshGroup *MeshGroupPick(const MeshGroup *g, int ng, int pezzo);
+
+/* L'ingombro del gruppo somiglia a quello dichiarato? 'tolleranza' e' RELATIVA
+ * e vale PER LATO: 0,2 accetta un quinto di scarto su ognuno dei tre.
+ *
+ * E' l'altra meta' della difesa contro un asset ricotto: l'indice dice dove
+ * guardare, questa dice se cio' che si e' trovato e' ancora quella cosa. Per
+ * lato e non sul volume, o un pezzo largo il doppio e alto la meta' passerebbe. */
+bool MeshGroupSomiglia(const MeshGroup *g, Vector3 atteso, float tolleranza);
+
 #endif /* MESHGROUP_H */

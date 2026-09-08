@@ -131,3 +131,27 @@ float MeshGroupScale(const MeshGroup *g, float voluto, bool perAltezza)
                 : fmaxf(g->box.max.x - g->box.min.x, g->box.max.z - g->box.min.z);
     return (dim > 1e-4f) ? voluto / dim : 1.0f;
 }
+
+const MeshGroup *MeshGroupPick(const MeshGroup *g, int ng, int pezzo)
+{
+    if (g == NULL || pezzo < 0 || pezzo >= ng) return NULL;
+    return &g[pezzo];
+}
+
+bool MeshGroupSomiglia(const MeshGroup *g, Vector3 atteso, float tolleranza)
+{
+    if (g == NULL || tolleranza < 0.0f) return false;
+
+    float lato[3] = { g->box.max.x - g->box.min.x,
+                      g->box.max.y - g->box.min.y,
+                      g->box.max.z - g->box.min.z };
+    float att[3]  = { atteso.x, atteso.y, atteso.z };
+
+    for (int i = 0; i < 3; i++) {
+        /* Un lato atteso nullo non e' una dichiarazione, e' una riga vuota:
+         * accettarlo vorrebbe dire accettare qualunque cosa. */
+        if (att[i] <= 1e-4f) return false;
+        if (fabsf(lato[i] - att[i]) > att[i] * tolleranza) return false;
+    }
+    return true;
+}

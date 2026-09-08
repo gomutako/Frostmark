@@ -154,6 +154,10 @@ prove: $(RAYLIB_DEP)
 	      $(SRC_DIR)/fmath.c $(SRC_DIR)/light.c $(SRC_DIR)/instancing.c \
 	      $(SRC_DIR)/worldio.c $(SRC_DIR)/dataparse.c \
 	      $(LDFLAGS) $(LDLIBS) -o $(PROVE_DIR)/varianti
+	$(CC) $(PROVE_CF) $(TOOL_DIR)/prove/mastio.c \
+	      $(SRC_DIR)/fmath.c $(SRC_DIR)/light.c $(SRC_DIR)/instancing.c \
+	      $(SRC_DIR)/worldio.c $(SRC_DIR)/dataparse.c \
+	      $(LDFLAGS) $(LDLIBS) -o $(PROVE_DIR)/mastio
 	@ok=1; for t in $(PROVE_DIR)/*; do \
 	    echo "== $$t"; \
 	    $$t; r=$$?; \
