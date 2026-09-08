@@ -25,3 +25,7 @@ richiedono attribuzione: serve a dimostrare la provenienza in caso di dubbi.
 | assets/models/rock.gltf | Poly Haven | https://polyhaven.com/a/namaqualand_boulder_04 | CC0 | 2026-09-05 |
 | assets/models/bush.gltf | Poly Haven | https://polyhaven.com/a/shrub_02 | CC0 | 2026-09-05 |
 | assets/models/herb.gltf | Poly Haven | https://polyhaven.com/a/celandine_01 | CC0 | 2026-09-06 |
+| assets/textures/legno_scuro_diff.jpg | Poly Haven | https://polyhaven.com/a/dark_wooden_planks | CC0 | 2026-09-08 |
+| assets/textures/tetto_legno_diff.jpg | Poly Haven | https://polyhaven.com/a/roof_planks | CC0 | 2026-09-08 |
+| assets/textures/assito_diff.jpg | Poly Haven | https://polyhaven.com/a/plank_flooring | CC0 | 2026-09-08 |
+| assets/textures/pietra_diff.jpg | Poly Haven | https://polyhaven.com/a/castle_wall_slates | CC0 | 2026-09-08 |

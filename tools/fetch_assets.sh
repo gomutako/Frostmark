@@ -96,6 +96,36 @@ if [ "${1:-}" = "polyhaven" ] || [ "${1:-}" = "rocce" ]; then
     exit 0
 fi
 
+# ---- materiali (Poly Haven) ------------------------------------------------
+#  I pezzi modulari dei kit non hanno UV utilizzabili - le loro coordinate
+#  stanno tutte in una cella della tavolozza - quindi la loro texture si
+#  PROIETTA dalla posizione. Servono percio' materiali, non modelli.
+#
+#      ./tools/fetch_assets.sh texture <asset> <nome>
+#
+#  Lascia assets/textures/<nome>_diff.jpg e <nome>_nor.jpg.
+if [ "${1:-}" = "texture" ]; then
+    for cmd in curl python3; do
+        command -v "$cmd" >/dev/null 2>&1 || { echo "serve $cmd"; exit 1; }
+    done
+
+    ASSET="${2:-}"; DEST="${3:-}"
+    [ -n "$ASSET" ] && [ -n "$DEST" ] || {
+        echo "uso: $0 texture <asset> <nome>"; exit 1; }
+
+    echo "cerco il materiale $ASSET su polyhaven.com..."
+    curl -sSL "https://api.polyhaven.com/files/$ASSET" -o "$ASSETS/.ph.json"
+    python3 "$ROOT/tools/polyhaven_tex.py" "$ASSETS/.ph.json" "$ASSETS/textures" "$DEST"
+    rm -f "$ASSETS/.ph.json"
+
+    if ! grep -q "assets/textures/${DEST}_diff.jpg" "$ASSETS/CREDITS.md" 2>/dev/null; then
+        printf '| assets/textures/%s_diff.jpg | Poly Haven | https://polyhaven.com/a/%s | CC0 | %s |\n' \
+            "$DEST" "$ASSET" "$(date +%Y-%m-%d)" >> "$ASSETS/CREDITS.md"
+        echo "  aggiunta la riga in assets/CREDITS.md"
+    fi
+    exit 0
+fi
+
 # ---- personaggi animati per gli NPC (KayKit) ------------------------------
 #  Un modello per ruolo. Popolano, mercante e anziano condividono lo stesso file
 #  (vedi NPC_MODEL in src/entity.c), quindi viene caricato una volta sola.
