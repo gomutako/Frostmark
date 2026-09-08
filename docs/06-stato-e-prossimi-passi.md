@@ -5,7 +5,7 @@
 > aperte. Gli altri documenti spiegano *come funziona* il gioco; questo dice
 > *a che punto siamo*.
 
-**Ultimo aggiornamento:** 8 settembre 2026, commit `6147704`.
+**Ultimo aggiornamento:** 8 settembre 2026, dopo il mastio del forte.
 
 ---
 
@@ -15,7 +15,7 @@ Le prime due fasi del piano — normal map nello shader, poi instancing — sono
 chiuse da tempo e non si toccano più. Quello che resta aperto è un obiettivo
 solo: **sostituire ogni oggetto stilizzato del gioco con uno realistico.**
 
-Non è un progetto solo. Guardandolo da vicino si divide in cinque pezzi con
+Non è un progetto solo. Guardandolo da vicino si divide in sei pezzi con
 blocchi diversi, e due — cripta e personaggi — non si risolvono affatto con
 Poly Haven, perché quel catalogo è fatto di scansioni statiche:
 
@@ -24,8 +24,9 @@ Poly Haven, perché quel catalogo è fatto di scansioni statiche:
 | 1 | **erba** | **fatto** — `celandine_01`, cinque varianti |
 | 2 | **alberi e pini** | **bloccato**: nessun albero CC0 sta sotto il tetto dei vertici. È la domanda **B** |
 | 3 | **edifici** | **fatto** — materiali proiettati sui dieci pezzi modulari |
-| 4 | **cripta** | aperto, caso singolo. È la domanda **E** |
-| 5 | **personaggi** | aperto, il più grosso: serve un'altra fonte. È la domanda **C** |
+| 4 | **torre** | **fatto** — `tower_round`, il pezzo 12 dei venti di `modular_fort_01` |
+| 5 | **cripta** | aperto, caso singolo. È la domanda **E** |
+| 6 | **personaggi** | aperto, il più grosso: serve un'altra fonte. È la domanda **C** |
 
 ### Cosa è realistico in gioco, oggi
 
@@ -37,13 +38,19 @@ Poly Haven, perché quel catalogo è fatto di scansioni statiche:
   che aveva il modello procedurale;
 - **edifici**: i dieci pezzi modulari di casa e torre portano quattro materiali
   fotogrammetrici — assiti scuri su muro, porta e finestra, scandole sul tetto,
-  assi chiare su pavimento e scala, pietra sui quattro pezzi della torre.
+  assi chiare su pavimento e scala, pietra sui quattro pezzi della torre;
+- **torre**: `tower_round`, il **pezzo 12 dei venti** di `modular_fort_01` —
+  *15,84 × 13,50 × 15,84 m alla scala vera, 2 mesh, 4.544 vertici, tre materiali
+  PBR*. Non è più una torretta da 3,2 m ma un mastio che si vede da lontano, e
+  la collisione lo segue: cilindro di raggio 7,92, che scavalca il raggio di
+  3,0 cotto nel mondo.
 
 ### Cosa è ancora stilizzato
 
 **Alberi, pini, cripta e personaggi.** I primi due per il vincolo 1 qui sotto,
 la cripta perché una scansione del genere non esiste, i personaggi perché sono
-riggati e animati e Poly Haven non ne ha nessuno.
+riggati e animati e Poly Haven non ne ha nessuno. La torre invece è uscita da
+questo elenco: il catalogo non ha una casa di villaggio, ma ha una fortezza.
 
 ---
 
@@ -129,24 +136,33 @@ blocco d'ombra il passaggio scende da 3,3 a **0,26 ms** — e
 quindi un personaggio animato con normal map avrebbe le tangenti ferme alla
 posa di riposo.
 
-### D. La torre con il forte — aperta, e la più pronta
+### D. La torre con il forte — **CHIUSA per la torre**, aperta per il resto
 
-Cercando un kit modulare realistico si è trovato che **non esiste** per le case
-di villaggio (vedi *Cosa non ha un equivalente texturizzato* in `docs/03`), ma
-esiste per una fortezza: `modular_fort_01` è **45 mesh, 20 pezzi separati**,
-tutti sotto il tetto dei vertici — massimo 4.148 — con 28.218 triangoli e
-quattro materiali PBR veri. `large_castle_door` è una porta a scala umana, 2,01
-× 2,96 × 0,30 m.
+La torre di guardia è `tower_round`, il pezzo **12** dei venti di
+`modular_fort_01`. Una riga di `BUILD_FILES` porta ora anche un indice, e il
+caricamento riusa per intero la macchina delle varianti: separa i gruppi,
+prende il k-esimo, lo ricentra e gli fa il lotto con le sole sue mesh. Design in
+`docs/superpowers/specs/2026-09-08-mastio-del-forte-design.md`, funzionamento in
+`docs/01`, sezione *Pezzi indicizzati*.
 
-Sono bastioni: pezzi alti 8,5 m, lunghi fino a 14,8, uno da 15,84 × 13,50 ×
-15,84. Accanto a case da 7,8 × 5,2 non è una torre, è un maniero, quindi andrà
-scelto **quale** dei venti pezzi e non preso in blocco.
+Misurato sul file vero: 45 primitive, 20 gruppi, **4.148** vertici nella
+primitiva peggiore, **tre** materiali PBR — il documento diceva quattro, sono
+tre — e 1,36 MB di geometria. In gioco: `x1.00 -> 13.5 m, semiampiezza 7.92 m,
+a lotti`.
 
-Una cosa emersa e utile: il raggruppamento delle varianti ha letto i 20 pezzi
-del forte da solo. Il motore **sa già caricare** un kit modulare spedito in un
-file unico; quello che non sa fare è scegliere quale pezzo va dove, perché non è
-un sorteggio dalla posizione ma logica di costruzione — `DrawHouse()` colloca
-cella per cella. Servirebbe indirizzare "il pezzo *k* del file *X*".
+Due cose imparate qui, che valgono oltre la torre:
+
+- **un indice è posizionale.** È riproducibile — l'ordinamento per `min.x` e poi
+  `min.z` regge i due pareggi che il file contiene — ma se il catalogo ricuoce
+  il file il 12 diventa un muro, in silenzio. Per questo la riga dichiara anche
+  l'ingombro atteso, e fuori tolleranza si ripiega sui pezzi Kenney con un
+  avviso che riporta i due ingombri;
+- **una taglia nuova invalida il dato cotto.** Il raggio di collisione della
+  torre sta nel mondo cotto, e ricuocerlo non basterebbe: i mondi già salvati
+  resterebbero a 3,0 m. Il codice lo scavalca quando il mastio c'è.
+
+**Resta aperto:** le mura, la porta `large_castle_door`, e il cortile in cui si
+cammina — che vorrebbe collisione a segmenti con un varco, come le case.
 
 ### E. La cripta — aperta, caso singolo
 
@@ -164,12 +180,14 @@ make prove      # le prove, esce non-zero se qualcosa non torna
 make valida     # dati e mondo cotto
 ```
 
-`make prove` compila ed esegue i **sette** file in `tools/prove/`. Non c'è un
+`make prove` compila ed esegue gli **otto** file in `tools/prove/`. Non c'è un
 framework: una prova è un eseguibile che stampa una riga per controllo. Chi esce
-77 non ha trovato un contesto OpenGL e viene contata come saltata. Due non
+77 non ha trovato un contesto OpenGL e viene contata come saltata. **Tre** non
 aprono nessuna finestra e girano ovunque: `scale`, che prova la collisione con
-le scale dentro le case, e `varianti`, che prova il raggruppamento delle mesh e
-la scelta della variante — geometria pura, senza GPU.
+le scale dentro le case; `varianti`, che prova il raggruppamento delle mesh e la
+scelta della variante; e `mastio`, che prova la scelta di un pezzo per indice,
+la guardia sull'ingombro e la taglia della collisione — geometria pura, senza
+GPU.
 
 ### Le prove si verificano sabotandole, e non è una formalità
 
@@ -193,8 +211,21 @@ cui una prova può passare senza provare niente, perché si somigliano tutti:
   le UV sbagliate — che è esattamente il difetto contro cui esiste la
   proiezione.
 
-Tutte e tre le ultime sono state trovate **dai sabotaggi, non dalle revisioni**,
-su prove che passavano.
+- **la prova già in ordine.** Nel mastio il pareggio su `min.x` va provato con
+  l'array **mescolato**: l'ordinamento è per selezione e a parità non scambia,
+  quindi con i pezzi già in ordine di Z il criterio mancante darebbe lo stesso
+  risultato di quello presente;
+- **il pezzo storto che cade comunque.** Il pezzo sbagliato con cui si prova la
+  guardia deve avere lo **stesso volume** di quello atteso — largo il doppio,
+  alto la metà — o anche un confronto sul volume lo scarterebbe, e le due regole
+  non si distinguono;
+- **la tautologia sull'origine.** Controllare che il vertice ricentrato valga
+  "l'originale meno `o`" passa con qualunque `o`, compresa una sbagliata. Va
+  controllata la **proprietà**: dopo il ricentraggio il pezzo poggia a terra ed è
+  centrato in XZ.
+
+Tutte queste sono state trovate **dai sabotaggi, non dalle revisioni**, su prove
+che passavano.
 
 ### E alcune cose le prende solo un lettore
 
@@ -225,7 +256,7 @@ legge una schermata vuota.
 ## Documenti collegati
 
 - `docs/01-architettura.md` — sezioni *Normal map*, *Instancing*, *Varianti*,
-  *Materiali proiettati* e *Le prove*
+  *Pezzi indicizzati*, *Materiali proiettati* e *Le prove*
 - `docs/03-asset-pubblici.md` — il catalogo misurato, come si sceglie un asset,
   *I kit modulari non hanno UV*, *Le piante da prato sono rosette* e *Cosa non
   ha un equivalente texturizzato*
@@ -235,4 +266,6 @@ legge una schermata vuota.
 - `docs/superpowers/specs/2026-09-06-materiali-triplanari-design.md` — i
   materiali proiettati, e in coda l'errore che conteneva: aveva dato per
   scontato che l'istanza fosse la casa, mentre è il pannello
+- `docs/superpowers/specs/2026-09-08-mastio-del-forte-design.md` — la domanda D
+  per la torre, e perché un indice non basta senza l'ingombro atteso
 - i piani eseguiti stanno accanto ai design, in `docs/superpowers/plans/`

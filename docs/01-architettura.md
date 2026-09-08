@@ -311,6 +311,62 @@ della sua altezza, ora appoggia esattamente. È il motivo per cui tutti i prop
 esterni ora poggiano a terra invece di galleggiare o affondare secondo come è
 stato esportato l'asset.
 
+### Pezzi indicizzati
+
+Un kit modulare arriva in **un file solo**: `modular_fort_01` di Poly Haven
+spedisce venti pezzi di fortezza in 45 primitive. Il raggruppamento delle
+varianti li separa già da sé — è la stessa regola degli ingombri che toccano —
+ma un edificio non è un sorteggio dalla posizione: `DrawHouse()` colloca cella
+per cella, e serviva poter dire *quale* pezzo.
+
+Da qui una riga di `BUILD_FILES` che porta anche un **indice**: `pezzo = -1`
+vuol dire "tutto il file", ed è quello che dichiarano le dieci righe dei kit
+Kenney; `pezzo = 12` è la torre tonda dentro la fortezza. Il caricamento fa la
+stessa sequenza delle varianti — separa i gruppi, prende il k-esimo, lo ricentra
+sull'origine e gli fa il lotto con `InstModelCreateSubset()` — e tiene una
+**cache dei file**, perché un file da venti pezzi va aperto una volta sola.
+
+**L'indice è riproducibile ma non stabile.** `MeshGroupSplit()` ordina per
+`min.x` e, a parità, per `min.z`: sui venti pezzi del forte i due pareggi — a
+10,00 e a 19,00 — si risolvono, quindi il gruppo 12 è `tower_round` a ogni
+esecuzione e su ogni piattaforma. Ma se il catalogo ricuoce il file e riordina i
+pezzi, il 12 diventa un muro e **non c'è nessun avviso**: è la stessa famiglia
+di difetti di `boulder_01`, dove 66.122 triangoli sembravano innocui ed erano
+67.042 vertici. Per questo la riga dichiara anche l'**ingombro atteso** e il
+caricamento lo confronta con quello misurato, un quinto di tolleranza per lato:
+fuori, si avvisa con i due ingombri e si ripiega sui pezzi Kenney.
+
+**La taglia è metrica, non in celle.** `BUILD_CELL` vale 2,6 m e regge le case;
+una torre da 15,84 no. Il pezzo indicizzato dichiara la sua taglia in metri,
+come `gExtProp`, e la scala esce dall'ingombro misurato.
+
+**Il ripiego non instanziato disegna solo le sue mesh.** Senza
+`assets/shaders/`, `PlacePart()` cadeva su `DrawModelEx()`, che per un pezzo
+dentro un file di venti disegnerebbe *tutta la fortezza* in un mucchio attorno
+alla torre. Ora è una mesh per volta, come fa `DrawProp()` per le varianti.
+
+**Il mastio è indipendente dal kit.** `hasKeep` non è `hasBuildParts`: i dieci
+pezzi di Kenney sono "tutti o nessuno" perché mezza casa è peggio di una
+scatola, mentre una torre Kenney è un edificio intero e giusto, solo stilizzato.
+Se il forte manca, o non è il pezzo atteso, la torre resta quella di prima e non
+è un errore.
+
+**La collisione segue la taglia, da un numero solo.** Il raggio della spinta è
+cotto nel mondo — 3,0 m — e ricuocerlo non basterebbe, perché i mondi già
+salvati resterebbero a 3,0. Quando il mastio c'è, `TowerHalf()` e `TowerHigh()`
+scavalcano il dato cotto, e le leggono **sia** la spinta del giocatore **sia** il
+taglio della camera: se divergessero, la camera entrerebbe in un muro che il
+giocatore non può attraversare. Ed essendo la torre tonda, il taglio passa da
+`RayBox()` a `RayTrunk()` — il cilindro dei fusti degli alberi — perché una
+scatola attorno a un tondo occluderebbe quattro angoli vuoti.
+
+Un caso trovato misurando, non leggendo: sul **centro esatto** la spinta non
+faceva niente. Il conto generico si arrende a distanza zero perché non ha una
+direzione in cui spingere; su un prop da 3 m è un bersaglio stretto, sul mastio
+— largo 15,84 e piantato al centro del villaggio — non lo è. Ora quel ramo
+sceglie un asse: uscire da una parte qualunque è l'unica cosa migliore di
+restare dentro la pietra.
+
 ### Materiali proiettati
 
 I pezzi modulari degli edifici vengono da due kit Kenney e **non hanno UV

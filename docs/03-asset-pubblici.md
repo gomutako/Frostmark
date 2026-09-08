@@ -108,6 +108,7 @@ quanto è *fuori scala* — e alcuni lo sono parecchio:
 | `nettle_plant` | 31.304 | — | MASK | serve una specie adatta al bioma |
 | `fir_sapling` | 433.021 | — | opaco | è una piantina, non un albero |
 | `fir_tree_01` | **6.982.937** | — | BLEND | **no**: 478 MB di sola geometria |
+| `modular_fort_01` | 28.218 | 4.148 | opaco | **sì — è la torre in uso**, ed è un kit di venti pezzi in un file |
 
 **Il tetto vero non è il conteggio dei triangoli: è quello dei vertici.** Il
 `Mesh` di raylib 5.5 tiene gli indici in `unsigned short`, quindi oltre **65.535
@@ -316,7 +317,35 @@ li compone in `DrawHouse()` e `DrawTower()`:
 |---|---|---|
 | casa bassa | 3×2 celle, muri sul perimetro, porta al centro della facciata, finestre altrove, tetto a due falde | 19 |
 | casa alta | 4×3 celle su **due piani**, con solaio, tromba delle scale e una rampa per salire | 45 |
-| torre | base + due piani con feritoie + coronamento + tetto | 5 |
+| torre | **un pezzo solo**: `tower_round` di `modular_fort_01`, alla scala vera | 1 |
+| torre, senza il forte | base + due piani con feritoie + coronamento + tetto | 5 |
+
+#### Un kit modulare è un catalogo, non un ostacolo
+
+La torre è il caso in cui il **set di varianti smette di essere un problema**.
+`modular_fort_01` spedisce venti pezzi in un file solo, e il raggruppamento
+scritto per i cespugli li ha letti da sé, senza sapere niente di fortezze. La
+differenza è che qui non si sorteggia dalla posizione: si sceglie, per indice.
+
+Come si sceglie un pezzo dentro un file:
+
+1. **Misurare prima di scaricare.** Gli ingombri e i vertici si leggono dagli
+   accessori del `.gltf`, applicando le trasformazioni dei nodi — che è quel che
+   raylib fonde nei vertici. Del forte: 45 primitive, 20 gruppi, **4.148**
+   vertici nella primitiva peggiore, tre materiali PBR, 1,36 MB di geometria.
+2. **Trovare l'indice.** I gruppi escono ordinati per `min.x` e, a parità, per
+   `min.z`. `tower_round` è il **12**.
+3. **Guardare la taglia contro il resto del gioco.** 15,84 × 13,50 × 15,84 m
+   accanto a case da 7,8 × 5,2 è un mastio, non una torretta. E c'è un tetto che
+   non si vede nel catalogo: l'NPC `elder` nasce a **14 m** dal centro del
+   villaggio, quindi la semiampiezza non può superare gli 8 m o un personaggio
+   nasce dentro la pietra.
+4. **Dichiarare l'ingombro atteso insieme all'indice.** L'indice è posizionale:
+   una ricottura del catalogo lo sposterebbe in silenzio.
+
+I bastioni non si prendono in blocco proprio per il punto 3: sono pezzi alti
+8,5 m e lunghi fino a 14,8, e uno accanto a un villaggio non è una torre di
+guardia.
 
 Quale delle due esce da una data casa lo decide `HouseShapeOf()` in `world.c`, a
 partire dalla **posizione**: una su tre circa è alta. È una funzione, non un
