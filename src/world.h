@@ -106,6 +106,12 @@ typedef struct {
      * keepHigh sono in METRI e gia' scalati, e li leggono sia la spinta del
      * giocatore sia il taglio della camera - un numero, due usi. */
     bool   hasKeep;
+
+    /* Il tumulo c'e' solo se l'asset della cripta e' un SET: con un modello a
+     * una variante - la cripta del kit rimessa a mano - si disegna un oggetto
+     * solo, come si e' sempre fatto. Senza questa guardia si vedrebbero quindici
+     * copie della stessa lastra in cerchio. */
+    bool   hasTumulo;
     float  keepScale;
     float  keepHalf, keepHigh;
 } World;

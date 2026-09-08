@@ -171,7 +171,15 @@ gExtProp[PROP_COUNT] = {
      * e tararle sull'altezza le sgonfierebbe di traverso. I 0,9 m di prima
      * erano l'altezza del ciuffo stilizzato, non una misura. */
     [PROP_HERB] = { "assets/models/herb.glb",            0.6f, false },
-    [PROP_CRYPT]= { "assets/models/graveyard/crypt.glb", 5.0f, true  },
+    /* La cripta e' un TUMULO: un anello di massi, non un edificio. Il file e'
+     * il set di sei massi muschiati, e la taglia e' quella di UN masso - 2,8 m
+     * sul lato XZ maggiore, come i sassi sparsi, perche' un masso si misura in
+     * larghezza e non in altezza.
+     *
+     * Per tornare alla cripta del kit non basta rimettere il file: vanno
+     * rimessi anche questi due numeri (5,0 e true), o il modello uscirebbe alto
+     * meno di tre metri. */
+    [PROP_CRYPT]= { "assets/models/crypt.glb",           2.8f, false },
 };
 
 /* Il file puo' essere .glb o .gltf: i kit spediscono il primo, Poly Haven il
@@ -712,6 +720,14 @@ static void LoadExtProps(World *w)
                  (double)gExtProp[t].voluto,
                  InstModelReady(&pv->batch[0]) ? ", a lotti" : "");
     }
+
+    /* Il tumulo vuole un SET. Con un modello a una variante - la cripta del kit
+     * rimessa a mano - si torna a disegnare un oggetto solo: quindici copie
+     * della stessa lastra in cerchio non sono un tumulo. */
+    w->hasTumulo = (w->propVar[PROP_CRYPT].n >= 2);
+    TraceLog(LOG_INFO, "WORLD: cripta %s (%d variant%s)",
+             w->hasTumulo ? "a tumulo" : "a oggetto singolo",
+             w->propVar[PROP_CRYPT].n, (w->propVar[PROP_CRYPT].n == 1) ? "e" : "i");
 }
 
 /* Mappa del mondo, generata una sola volta campionando WorldHeight(). */
@@ -1224,6 +1240,156 @@ static void DrawKeep(World *w, Vector3 pos, float rotDeg, float s, Color tint)
               1.0f, (Vector3){ k, k, k }, tint);
 }
 
+/* --- Il tumulo della cripta ----------------------------------------------
+ * La cripta non e' un oggetto ma una ricetta: un anello di massi con un varco.
+ * Un edificio del genere non esiste come scansione - cercato su 521 modelli del
+ * catalogo - quindi si compone, e i pezzi sono i sei massi di rock_moss_set_01.
+ *
+ * I numeri, e da dove vengono. Il masso normalizzato e' 2,8 m sul lato XZ
+ * maggiore; il passo fra due posti e' 2,02 m, cioe' MENO del masso, cosi' si
+ * toccano e l'anello si legge come un muro invece che come una fila di sassi.
+ *
+ * Due posti vuoti e non uno ne' tre: la corda fra i massi che fiancheggiano il
+ * varco e' 2R*sin((v+1)*PI/17) meno 2,8 di pietra. Con UNO restano 1,17 m - si
+ * passa di striscio e da fuori non si vede che e' un ingresso. Con TRE ne
+ * restano 4,61, e non e' piu' un varco ma un lato aperto. Con DUE: 2,99 m. */
+#define CRYPT_RAGGIO      5.5f
+#define CRYPT_POSTI       17
+#define CRYPT_VUOTI       2
+#define CRYPT_MASSO       2.8f     /* lato XZ maggiore, normalizzato */
+#define CRYPT_MAX_MASSI   CRYPT_POSTI
+
+/* Un masso del tumulo, in coordinate LOCALI rispetto al centro della cripta.
+ *
+ * La quota non c'e' apposta: la mette chi disegna, prendendola dal terreno
+ * sotto quel punto meno 'affonda'. Cosi' l'anello segue il pendio, e la ricetta
+ * resta geometria pura - si prova senza mondo caricato e senza GPU. */
+typedef struct {
+    float dx, dz;      /* scostamento dal centro, in metri */
+    int   variante;    /* quale dei massi del set          */
+    float scala;       /* sopra la taglia normalizzata     */
+    float yaw;         /* gradi attorno a Y                */
+    float affonda;     /* quanto sprofonda, in metri       */
+} CryptStone;
+
+/* Un valore riproducibile per il masso k di questa cripta. Il sale tiene le
+ * decisioni indipendenti fra loro: la variante di un masso non deve correlare
+ * con la sua rotazione, o l'anello mostrerebbe uno schema. */
+static float CryptHash(const Prop *p, int k, int sale)
+{
+    return FmHash01((unsigned int)(p->pos.x * 4.0f),
+                    (int)(p->pos.z * 4.0f) + k * 101, sale);
+}
+
+/* Il raggio del cerchio di collisione di un masso.
+ *
+ * CIRCOSCRIVE il masso invece di inscriverlo: blocca un po' piu' della pietra
+ * vera, ed e' la scelta voluta - meglio sfiorare un bordo invisibile che
+ * entrare dentro la roccia. */
+static float CryptStoneRadius(const CryptStone *s)
+{
+    return CRYPT_MASSO * 0.5f * s->scala;
+}
+
+/* I massi del tumulo. E' una FUNZIONE della posizione, non un dato: il mondo
+ * cotto non cambia, e disegno, spinta del giocatore e taglio della camera
+ * arrivano tutti agli stessi massi. Se divergessero si sbatterebbe contro un
+ * masso che non c'e'.
+ *
+ * Torna quanti ne ha scritti. */
+static int CryptRing(const Prop *p, CryptStone *out, int max)
+{
+    if (p == NULL || out == NULL || max <= 0) return 0;
+
+    /* Da quale posto comincia il varco. Dalla posizione, cosi' due cripte non
+     * hanno l'ingresso nello stesso punto. */
+    float h = CryptHash(p, 0, 151);
+    int primoVuoto = (int)(h * (float)CRYPT_POSTI);
+    if (primoVuoto >= CRYPT_POSTI) primoVuoto = CRYPT_POSTI - 1;   /* h == 1 */
+
+    int n = 0;
+    for (int k = 0; k < CRYPT_POSTI && n < max; k++) {
+        /* I posti vuoti sono CRYPT_VUOTI consecutivi: consecutivi e non sparsi,
+         * o sarebbero tanti buchi invece di un ingresso. */
+        int rel = (k - primoVuoto + CRYPT_POSTI) % CRYPT_POSTI;
+        if (rel < CRYPT_VUOTI) continue;
+
+        float ang = (float)k * (2.0f * PI / (float)CRYPT_POSTI);
+        CryptStone *s = &out[n++];
+        s->dx = cosf(ang) * CRYPT_RAGGIO;
+        s->dz = sinf(ang) * CRYPT_RAGGIO;
+
+        /* Sei forme su quindici posti: senza varieta' si vedrebbe la ripetizione
+         * a colpo d'occhio. */
+        float hv = CryptHash(p, k, 131);
+        s->variante = (int)(hv * 6.0f);
+        if (s->variante > 5) s->variante = 5;
+
+        s->scala   = 0.85f + CryptHash(p, k, 137) * 0.40f;
+        s->yaw     = CryptHash(p, k, 139) * 360.0f;
+        s->affonda = CryptHash(p, k, 149) * 0.30f;
+    }
+    return n;
+}
+
+/* Disegna o accoda i massi del tumulo. 'aLotti' dice quale delle due: i lotti
+ * quando ci sono, un oggetto per volta nel ripiego.
+ *
+ * La quota di ogni masso viene dal TERRENO sotto di lui, non dal centro della
+ * cripta: quindici massi su undici metri di diametro, su un pendio, appoggiati
+ * tutti alla stessa quota sarebbero mezzi sospesi e mezzi sepolti.
+ *
+ * Torna quanti massi ha messo: zero vuol dire che il chiamante deve ripiegare. */
+static int CryptDraw(World *w, const Prop *p, Color tint, bool aLotti)
+{
+    PropVariants *pv = &w->propVar[PROP_CRYPT];
+    if (pv->n == 0) return 0;
+
+    /* Se si accodasse a meta' e poi ci si arrendesse, il chiamante ripiegherebbe
+     * e disegnerebbe TUTTI i massi una seconda volta - quelli gia' accodati due
+     * volte. Quindi la resa si decide PRIMA di accodare qualunque cosa. */
+    if (aLotti)
+        for (int v = 0; v < pv->n; v++)
+            if (!InstModelReady(&pv->batch[v])) return 0;
+
+    CryptStone anello[CRYPT_MAX_MASSI];
+    int n = CryptRing(p, anello, CRYPT_MAX_MASSI);
+
+    int messi = 0;
+    for (int i = 0; i < n; i++) {
+        CryptStone *s = &anello[i];
+        /* La variante viene dalla ricetta, ma il set potrebbe averne meno di
+         * sei: si riporta dentro invece di leggere fuori dall'array. */
+        int v = s->variante % pv->n;
+        float k = p->scale * pv->scala[v] * s->scala;
+
+        Vector3 pos = { p->pos.x + s->dx * p->scale, 0.0f, p->pos.z + s->dz * p->scale };
+        pos.y = WorldHeight(w, pos.x, pos.z) - s->affonda;
+
+        if (aLotti) {
+            InstModelAdd(&pv->batch[v], pos, s->yaw, (Vector3){ k, k, k });
+            messi++;
+            continue;
+        }
+
+        Matrix mt = MatrixMultiply(
+                        MatrixMultiply(MatrixScale(k, k, k),
+                                       MatrixRotateY(s->yaw * DEG2RAD)),
+                        MatrixTranslate(pos.x, pos.y, pos.z));
+        Model *mo = &w->extProp[PROP_CRYPT];
+        for (int j = 0; j < pv->gruppo[v].count; j++) {
+            int mi  = pv->meshIdx[pv->gruppo[v].first + j];
+            int mat = (mo->meshMaterial != NULL) ? mo->meshMaterial[mi] : 0;
+            if (mat < 0 || mat >= mo->materialCount) mat = 0;
+            Material mm = mo->materials[mat];
+            mm.maps[MATERIAL_MAP_DIFFUSE].color = Shade(WHITE, tint);
+            DrawMesh(mo->meshes[mi], mm, mt);
+        }
+        messi++;
+    }
+    return messi;
+}
+
 /* Quale individuo del set tocca a questo prop. E' una FUNZIONE della
  * posizione, non un dato: il mondo cotto non cambia, e disegno, passaggio
  * d'ombra e collisione arrivano tutti allo stesso numero.
@@ -1250,6 +1416,12 @@ static void DrawProp(World *w, const Prop *p, Color tint, bool lod)
      * il ciclo giorno/notte: un tint diverso da WHITE li scurirebbe due volte. */
     if (w->hasExtProp[p->type] && w->propVar[p->type].n > 0) {
         if (p->taken) return;
+
+        /* Il tumulo, quando i lotti non ci sono: una mesh per volta. */
+        if (p->type == PROP_CRYPT && w->hasTumulo) {
+            CryptDraw(w, p, tint, false);
+            return;
+        }
 
         PropVariants *pv = &w->propVar[p->type];
         int v = PropVariantOf(p, pv->n);
@@ -1407,6 +1579,15 @@ static void PropBatchFlush(World *w)
  * chiamante disegna un oggetto per volta come si e' sempre fatto. */
 static bool PropBatchAdd(World *w, const Prop *p)
 {
+    /* Il tumulo non e' un'istanza ma quindici. Sta qui e non in DrawProp perche'
+     * da qui passano ENTRAMBI i passaggi - principale e ombra - e scriverlo due
+     * volte vorrebbe dire due ricette da tenere d'accordo.
+     *
+     * WHITE e non la tinta: quella del ciclo giorno/notte e' del LOTTO, la mette
+     * gia' PropBatchBegin, e passarla qui la applicherebbe due volte. */
+    if (p->type == PROP_CRYPT && w->hasTumulo)
+        return CryptDraw(w, p, WHITE, true) > 0;
+
     PropVariants *pv = &w->propVar[p->type];
     if (pv->n == 0 || p->taken) return false;
 
@@ -1741,6 +1922,24 @@ float WorldCameraClip(const World *w, Vector3 eye, Vector3 dir, float maxDist)
                 continue;
             }
 
+            /* Quindici massi non sono una scatola: un cilindro per masso, con
+             * lo stesso RayTrunk dei fusti degli alberi. */
+            if (p->type == PROP_CRYPT && w->hasTumulo) {
+                CryptStone anello[CRYPT_MAX_MASSI];
+                int nm = CryptRing(p, anello, CRYPT_MAX_MASSI);
+                for (int m = 0; m < nm; m++) {
+                    Vector3 sc = { p->pos.x + anello[m].dx * p->scale, p->pos.y,
+                                   p->pos.z + anello[m].dz * p->scale };
+                    float rr = CryptStoneRadius(&anello[m]) * p->scale;
+                    /* Alto quanto il masso piu' alto: una camera che passa sopra
+                     * un masso basso non da' fastidio, una che entra in uno alto
+                     * si'. */
+                    if (RayTrunk(eye, dir, sc, rr, 2.4f * p->scale, best, &hitT)
+                        && hitT < best) best = hitT;
+                }
+                continue;
+            }
+
             /* Torre del kit e cripta: scatole piene, non ci si entra. */
             if (p->type == PROP_TOWER || p->type == PROP_CRYPT) {
                 float halfXZ = (p->type == PROP_TOWER) ? 1.6f : 6.0f;
@@ -1920,6 +2119,46 @@ void WorldResolveCollision(World *w, Vector3 *pos, float radius)
                          * dentro la pietra. Misurato: senza questo, chi finisce
                          * sul centro esatto ci resta. */
                         pos->x += trr;
+                    }
+                }
+                continue;
+            }
+
+            /* Il tumulo non e' un cerchio ma quindici: il raggio 5,0 cotto nel
+             * mondo lo si scavalca, come per il mastio, e per la stessa ragione
+             * - ricuocere non aiuterebbe i mondi gia' salvati.
+             *
+             * Il centro resta LIBERO, ed e' voluto: il boss nasce esattamente
+             * li', e a distanza zero la spinta non avrebbe una direzione. */
+            if (p->type == PROP_CRYPT && w->hasTumulo) {
+                CryptStone anello[CRYPT_MAX_MASSI];
+                int nm = CryptRing(p, anello, CRYPT_MAX_MASSI);
+                for (int m = 0; m < nm; m++) {
+                    float sx = p->pos.x + anello[m].dx * p->scale;
+                    float sz = p->pos.z + anello[m].dz * p->scale;
+                    float mdx = pos->x - sx, mdz = pos->z - sz;
+                    float md2 = mdx * mdx + mdz * mdz;
+                    float mrr = CryptStoneRadius(&anello[m]) * p->scale + radius;
+                    if (md2 < mrr * mrr) {
+                        if (md2 > 0.0001f) {
+                            float md = sqrtf(md2);
+                            float mpush = (mrr - md) / md;
+                            pos->x += mdx * mpush;
+                            pos->z += mdz * mpush;
+                        } else {
+                            /* Sul centro esatto del masso non c'e' una direzione
+                             * in cui spingere, e il conto generico si arrende.
+                             * Camminando non ci si arriva - si viene fermati
+                             * prima - ma e' la seconda volta che questo caso si
+                             * presenta dopo il mastio, e costa tre righe.
+                             *
+                             * Resta aperto sul percorso GENERICO dei prop, dove
+                             * lo stesso punto cieco vale per alberi e sassi:
+                             * li' non e' stato toccato perche' cambierebbe il
+                             * comportamento di 168.000 oggetti per un caso che
+                             * si raggiunge solo teletrasportandosi. */
+                            pos->x += mrr;
+                        }
                     }
                 }
                 continue;
