@@ -1,4 +1,5 @@
 #include "worldgen.h"
+#include "propdefs.h"
 #include "noise.h"
 #include "fmath.h"
 #include "raymath.h"
@@ -205,6 +206,21 @@ static bool InsideAnyTown(const WorldGen *g, float x, float z, float margin)
     return false;
 }
 
+/* Quanto sottobosco per cella, per bioma. Il sottobosco e' quello che un bosco
+ * lascia cadere: dove non ci sono alberi non c'e'. Spiaggia, neve e oceano
+ * restano a zero - un tronco caduto sulla sabbia e' un difetto che si vede una
+ * volta sola, per caso, dopo mesi di gioco. */
+static float SottoboscoDensity(Biome b)
+{
+    switch (b) {
+        case BIOME_FOREST:   return 0.35f;
+        case BIOME_HILL:     return 0.18f;
+        case BIOME_PLAINS:   return 0.08f;
+        case BIOME_MOUNTAIN: return 0.05f;
+        default:             return 0.0f;
+    }
+}
+
 int GenChunkProps(const WorldGen *g, int cx, int cz, Prop *out, int cap)
 {
     int n = 0;
@@ -263,6 +279,47 @@ int GenChunkProps(const WorldGen *g, int cx, int cz, Prop *out, int cap)
                 EMIT(((Prop){ (Vector3){x, h, z}, 0.6f + r4 * 1.4f,
                               r1 * 360.0f, 0.9f, PROP_ROCK, false }));
             }
+        }
+    }
+
+    /* --- Seconda passata: il sottobosco ---------------------------------- *
+     * NON entra nella catena qui sopra, e il motivo e' un numero: in foresta
+     * quella catena riempie gia' il 95,5% delle celle, quindi mettercelo dentro
+     * vorrebbe dire TOGLIERLO AGLI ALBERI. Ma il sottobosco non e'
+     * un'alternativa a un albero: e' quello che sta fra gli alberi.
+     *
+     * Griglia 8x8 invece di 10x10 - celle da 8 m invece di 6,4 - perche' deve
+     * essere sparso e non tappezzare. E sali d'hash tutti suoi: se li
+     * condividesse con la vegetazione, i tronchi comparirebbero sempre accanto
+     * agli stessi alberi, e il mondo sembrerebbe stampato con lo stampino. */
+    const int SOTTO_CELLS = 8;
+    for (int gz = 0; gz < SOTTO_CELLS; gz++) {
+        for (int gx = 0; gx < SOTTO_CELLS; gx++) {
+            int id = cx * 100019 + cz * 7927 + gz * SOTTO_CELLS + gx;
+            float s1 = FmHash01(g->seed + 11u, id, 11);
+            float s2 = FmHash01(g->seed + 12u, id, 12);
+            float s3 = FmHash01(g->seed + 13u, id, 13);
+            float s4 = FmHash01(g->seed + 14u, id, 14);
+            float s5 = FmHash01(g->seed + 15u, id, 15);
+
+            float x = ox + ((float)gx + s1) * (CHUNK_SIZE / SOTTO_CELLS);
+            float z = oz + ((float)gz + s2) * (CHUNK_SIZE / SOTTO_CELLS);
+            float h = GenHeight(g, x, z);
+            if (h < SEA_LEVEL + 1.0f) continue;
+            if (InsideAnyTown(g, x, z, -6.0f)) continue;
+
+            /* Sul ripido non ci si posa: un tronco su una parete a 45 gradi
+             * galleggia, e si vede. */
+            Vector3 nrm = GenNormal(g, x, z);
+            if (nrm.y < 0.80f) continue;
+
+            if (s3 >= SottoboscoDensity(GenBiome(g, x, z))) continue;
+
+            /* Il raggio cotto resta a ZERO: per il sottobosco la collisione la
+             * decide la tabella, cosi' cambiare il raggio di un tronco e'
+             * cambiare un numero in propdefs.c e non ricuocere il mondo. */
+            EMIT(((Prop){ (Vector3){x, h, z}, 0.85f + s5 * 0.35f,
+                          s4 * 360.0f, 0.0f, PropDetailPick(s4), false }));
         }
     }
 

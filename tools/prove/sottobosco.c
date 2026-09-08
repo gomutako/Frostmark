@@ -157,5 +157,33 @@ int main(void)
     Ok("la corteccia si calpesta",
        PropDetailCircles(&mondo, &scaglia, c, &raggio) == 0);
 
+    /* --- La densita' della seconda passata -------------------------------- *
+     * Il sottobosco vive dove ci sono alberi da cui derivare. Zero dove non ce
+     * ne sono: un tronco caduto in mezzo all'oceano e' un difetto che si vede
+     * una volta sola, per caso, dopo mesi. */
+    Ok("in foresta il sottobosco e' fitto",  SottoboscoDensity(BIOME_FOREST) > 0.30f);
+    Ok("in collina e' meno",                 SottoboscoDensity(BIOME_HILL) <
+                                             SottoboscoDensity(BIOME_FOREST));
+    Ok("in pianura e' raro",                 SottoboscoDensity(BIOME_PLAINS) < 0.12f);
+    Ok("sull'oceano non ce n'e'",            SottoboscoDensity(BIOME_OCEAN) == 0.0f);
+    Ok("sulla spiaggia non ce n'e'",         SottoboscoDensity(BIOME_BEACH) == 0.0f);
+    Ok("sulla neve non ce n'e'",             SottoboscoDensity(BIOME_SNOW) == 0.0f);
+
+    /* Nessuna densita' sopra 1: sarebbe una cella su una, cioe' un tappeto. */
+    int troppo = 0;
+    for (int b = 0; b < BIOME_COUNT; b++)
+        if (SottoboscoDensity((Biome)b) > 1.0f) troppo++;
+    Ok("nessuna densita' sfonda l'uno", troppo == 0);
+
+    /* --- Il tetto per chunk ---------------------------------------------- *
+     * La prima passata riempie 10x10 celle al 95,5% in foresta, la seconda 8x8
+     * alla sua densita', e un chunk di villaggio ha 9 case piu' la torre. La
+     * somma peggiore deve stare sotto MAX_PROPS_PER_CHUNK, o il baker tronca in
+     * silenzio e sparisce roba dal mondo. */
+    int peggiore = (int)(100.0f * 0.955f)
+                 + (int)(64.0f * SottoboscoDensity(BIOME_FOREST))
+                 + 10;
+    Ok("il chunk peggiore sta sotto il tetto", peggiore < MAX_PROPS_PER_CHUNK);
+
     return ProveEsito();
 }

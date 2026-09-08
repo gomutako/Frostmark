@@ -349,15 +349,21 @@ static int Bake(unsigned int seed, const char *outDir, const char *heightmapPath
     static const char *biomeName[BIOME_COUNT] = {
         "oceano", "spiaggia", "pianura", "foresta", "colline", "montagna", "nevi"
     };
+    /* Una voce per tipo, e il ripiego non e' cerimonia: propName e' a
+     * inizializzatori posizionali, quindi un PROP_* aggiunto senza la sua voce
+     * esce NULL, e passare NULL a %s e' comportamento indefinito - glibc stampa
+     * "(null)", altre librerie non promettono niente. E' successo davvero,
+     * aggiungendo i cinque del sottobosco. */
     static const char *propName[PROP_COUNT] = {
-        "albero", "pino", "roccia", "cespuglio", "erba", "casa", "torre", "cripta"
+        "albero", "pino", "roccia", "cespuglio", "erba", "casa", "torre", "cripta",
+        "ceppo", "tronco", "radici", "rami", "corteccia"
     };
     printf("\nbiomi:");
     for (int b = 0; b < BIOME_COUNT; b++)
         printf(" %s %.1f%%", biomeName[b], 100.0 * biomeHist[b] / (double)samples);
     printf("\nprop: ");
     for (int t = 0; t < PROP_COUNT; t++)
-        printf(" %s %d", propName[t], propHist[t]);
+        printf(" %s %d", propName[t] ? propName[t] : "?", propHist[t]);
     printf("\n\ncotto in %.2f s -> %s\n", Now() - t0, outDir);
 
     free(height);
