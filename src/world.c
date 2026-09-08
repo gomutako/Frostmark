@@ -1,4 +1,5 @@
 #include "world.h"
+#include "propdefs.h"
 #include "rlgl.h"
 #include "light.h"
 #include "worldio.h"
@@ -641,9 +642,17 @@ static void FreePropVariants(PropVariants *pv)
 static void LoadExtProps(World *w)
 {
     for (int t = 0; t < PROP_COUNT; t++) {
-        if (gExtProp[t].file == NULL) continue;
+        /* Un prop di dettaglio prende file e taglia dalla sua riga; i sette
+         * grandi restano su gExtProp. PropDetailOf torna NULL per loro, ed e'
+         * quel NULL a scegliere quale tabella si legge. */
+        const PropDetail *det = PropDetailOf((PropType)t);
+        const char *decl = det ? det->file       : gExtProp[t].file;
+        float voluto     = det ? det->voluto     : gExtProp[t].voluto;
+        bool  perAltezza = det ? det->perAltezza : gExtProp[t].perAltezza;
+        if (decl == NULL) continue;
+
         char alt[256];
-        const char *file = TrovaModello(gExtProp[t].file, alt, (int)sizeof alt);
+        const char *file = TrovaModello(decl, alt, (int)sizeof alt);
         if (file == NULL) continue;
 
         Model m = LoadModel(file);
@@ -733,8 +742,7 @@ static void LoadExtProps(World *w)
             pv->gruppo[g].box.max = Vector3Subtract(pv->gruppo[g].box.max, o);
 
             /* Ogni variante alla stessa taglia, partendo dal proprio ingombro. */
-            pv->scala[g] = MeshGroupScale(&pv->gruppo[g], gExtProp[t].voluto,
-                                          gExtProp[t].perAltezza);
+            pv->scala[g] = MeshGroupScale(&pv->gruppo[g], voluto, perAltezza);
 
             InstModelCreateSubset(&pv->batch[g], m,
                                   pv->meshIdx + pv->gruppo[g].first,
@@ -744,7 +752,7 @@ static void LoadExtProps(World *w)
         TraceLog(LOG_INFO, "WORLD: modello esterno %s (%d mesh, %d variant%s, "
                  "x%.2f -> %.1f m)%s",
                  file, nm, ng, (ng == 1) ? "e" : "i", (double)pv->scala[0],
-                 (double)gExtProp[t].voluto,
+                 (double)voluto,
                  InstModelReady(&pv->batch[0]) ? ", a lotti" : "");
     }
 
@@ -1075,6 +1083,11 @@ static Color Shade(Color c, Color tint)
  * paesaggio; case e torri sono punti di riferimento e non si tagliano. */
 static float PropMaxDist(int type)
 {
+    /* Per il sottobosco la distanza sta nella sua riga: sono cinque tipi sparsi
+     * su tutta la foresta, e una scaglia da 61 cm a 140 m e' meno di un pixel. */
+    const PropDetail *d = PropDetailOf((PropType)type);
+    if (d != NULL) return d->maxDist;
+
     switch (type) {
         case PROP_HERB:
         case PROP_BUSH: return 80.0f;
@@ -1517,6 +1530,12 @@ static void DrawProp(World *w, const Prop *p, Color tint, bool lod)
         return;
     }
 
+    /* Il sottobosco non ha una primitiva di riserva, ed e' una scelta: una sfera
+     * schiacciata al posto di una scaglia di corteccia e' peggio del niente.
+     * Senza il suo asset il prop semplicemente non c'e'. La collisione fa lo
+     * stesso conto, o si sbatterebbe contro un tronco invisibile. */
+    if (PropDetailOf(p->type) != NULL) return;
+
     switch (p->type) {
         case PROP_TREE: {
             if (!lod)
@@ -1716,6 +1735,10 @@ void WorldDrawShadowCasters(World *w, Vector3 center, float radius)
              * nel bosco sono la maggioranza dei prop: saltarli dimezza il
              * passaggio senza togliere un'ombra che qualcuno noterebbe. */
             if (p->type == PROP_HERB || p->type == PROP_BUSH) continue;
+            /* Per il sottobosco lo dice la sua riga: tronco e ceppo si', il
+             * resto e' piatto a terra e non proietta niente che si veda. */
+            const PropDetail *det = PropDetailOf(p->type);
+            if (det != NULL && !det->ombra) continue;
             float dx = p->pos.x - center.x, dz = p->pos.z - center.z;
             if (dx * dx + dz * dz > r2) continue;
 

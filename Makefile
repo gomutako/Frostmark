@@ -140,6 +140,7 @@ prove: $(RAYLIB_DEP)
 	$(CC) $(PROVE_CF) $(TOOL_DIR)/prove/scale.c \
 	      $(SRC_DIR)/fmath.c $(SRC_DIR)/light.c $(SRC_DIR)/instancing.c \
 	      $(SRC_DIR)/worldio.c $(SRC_DIR)/dataparse.c $(SRC_DIR)/meshgroup.c \
+	      $(SRC_DIR)/propdefs.c \
 	      $(LDFLAGS) $(LDLIBS) -o $(PROVE_DIR)/scale
 	$(CC) $(PROVE_CF) $(TOOL_DIR)/prove/normalmap.c \
 	      $(SRC_DIR)/fmath.c $(LDFLAGS) $(LDLIBS) -o $(PROVE_DIR)/normalmap
@@ -153,15 +154,15 @@ prove: $(RAYLIB_DEP)
 	      $(SRC_DIR)/fmath.c $(LDFLAGS) $(LDLIBS) -o $(PROVE_DIR)/proiezione
 	$(CC) $(PROVE_CF) $(TOOL_DIR)/prove/varianti.c \
 	      $(SRC_DIR)/fmath.c $(SRC_DIR)/light.c $(SRC_DIR)/instancing.c \
-	      $(SRC_DIR)/worldio.c $(SRC_DIR)/dataparse.c \
+	      $(SRC_DIR)/worldio.c $(SRC_DIR)/dataparse.c $(SRC_DIR)/propdefs.c \
 	      $(LDFLAGS) $(LDLIBS) -o $(PROVE_DIR)/varianti
 	$(CC) $(PROVE_CF) $(TOOL_DIR)/prove/mastio.c \
 	      $(SRC_DIR)/fmath.c $(SRC_DIR)/light.c $(SRC_DIR)/instancing.c \
-	      $(SRC_DIR)/worldio.c $(SRC_DIR)/dataparse.c \
+	      $(SRC_DIR)/worldio.c $(SRC_DIR)/dataparse.c $(SRC_DIR)/propdefs.c \
 	      $(LDFLAGS) $(LDLIBS) -o $(PROVE_DIR)/mastio
 	$(CC) $(PROVE_CF) $(TOOL_DIR)/prove/tumulo.c \
 	      $(SRC_DIR)/fmath.c $(SRC_DIR)/light.c $(SRC_DIR)/instancing.c \
-	      $(SRC_DIR)/worldio.c $(SRC_DIR)/dataparse.c \
+	      $(SRC_DIR)/worldio.c $(SRC_DIR)/dataparse.c $(SRC_DIR)/propdefs.c \
 	      $(LDFLAGS) $(LDLIBS) -o $(PROVE_DIR)/tumulo
 	$(CC) $(PROVE_CF) $(TOOL_DIR)/prove/sottobosco.c \
 	      $(SRC_DIR)/fmath.c $(SRC_DIR)/light.c $(SRC_DIR)/instancing.c \
