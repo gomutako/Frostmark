@@ -112,5 +112,65 @@ int main(void)
     Ok("uno scarto del 5% resta dentro tolleranza",
        MeshGroupSomiglia(&vicino, atteso, 0.20f));
 
+    /* --- Il ricentraggio tocca SOLO il pezzo scelto ----------------------
+     * raylib fonde le trasformazioni dei nodi dentro i vertici, quindi ogni
+     * pezzo porta cucito l'offset che lo mette in fila con gli altri
+     * diciannove. Va tolto - ma solo al pezzo che si disegna: spostare anche
+     * gli altri non si vedrebbe mai, perche' nessuno li disegna, e resterebbe
+     * li' finche' qualcuno non ne usa un secondo.
+     *
+     * Model e Mesh sono strutture semplici: se ne costruisce una a mano, senza
+     * LoadModel e quindi senza contesto grafico. RicentraPezzo non tocca la
+     * scheda apposta. */
+    float v0[6] = { 10.0f, 0.0f, -34.0f,  14.0f,  8.0f, -20.0f };
+    /* I due vertici sono gli SPIGOLI dell'ingombro del pezzo: cosi' dopo il
+     * ricentraggio si puo' controllare dove e' finito il pezzo, e non solo di
+     * quanto si e' mosso. */
+    float v1[6] = { 32.2f, 0.0f, -33.9f,  48.04f, 13.5f, -18.06f };
+    float v2[6] = { 19.0f, 0.0f, -34.0f,  22.0f,  7.5f, -20.0f };
+    float atteso0[6], atteso2[6];
+    for (int i = 0; i < 6; i++) { atteso0[i] = v0[i]; atteso2[i] = v2[i]; }
+
+    Mesh mesh[3];
+    for (int i = 0; i < 3; i++) { mesh[i] = (Mesh){ 0 }; mesh[i].vertexCount = 2; }
+    mesh[0].vertices = v0;
+    mesh[1].vertices = v1;
+    mesh[2].vertices = v2;
+
+    Model fake = { 0 };
+    fake.meshCount = 3;
+    fake.meshes    = mesh;
+
+    /* Il gruppo scelto e' la sola mesh 1. 'first' indicizza midx, non le mesh:
+     * e' la convenzione che MeshGroupSplit riempie. */
+    int       midx[3] = { 0, 1, 2 };
+    MeshGroup scelto  = { 1, 1, Box(32.2f, -33.9f, 15.84f, 13.50f, 15.84f) };
+
+    Vector3 o = MeshGroupOrigin(&scelto);
+    int mosse = RicentraPezzo(&fake, midx, &scelto, o);
+
+    Ok("ricentra una mesh sola", mosse == 1);
+    /* La PROPRIETA', non lo spostamento: il pezzo deve restare APPOGGIATO A
+     * TERRA e centrato in XZ. Confrontare i vertici con "l'originale meno o"
+     * sarebbe una tautologia - passerebbe con qualunque o, compresa una
+     * sbagliata - ed e' esattamente il sabotaggio che ha bocciato la prima
+     * versione di questa riga. */
+    Ok("dopo il ricentraggio il pezzo poggia a terra",
+       fabsf(v1[1]) < 0.01f && fabsf(v1[4] - 13.50f) < 0.01f);
+    Ok("dopo il ricentraggio il pezzo e' centrato in XZ",
+       fabsf(v1[0] + v1[3]) < 0.01f && fabsf(v1[2] + v1[5]) < 0.01f);
+
+    int fermi = 1;
+    for (int i = 0; i < 6; i++)
+        if (v0[i] != atteso0[i] || v2[i] != atteso2[i]) fermi = 0;
+    Ok("gli altri pezzi non si muovono", fermi);
+
+    /* Una mesh senza vertici non si conta e non si deferenzia: dopo LoadModel
+     * non capita, ma chi chiama fa UpdateMeshBuffer() sulle mesh mosse, e
+     * quella funzione deferenzia anche vboId. */
+    mesh[1].vertices = NULL;
+    Ok("una mesh senza vertici non si conta",
+       RicentraPezzo(&fake, midx, &scelto, o) == 0);
+
     return ProveEsito();
 }

@@ -302,6 +302,157 @@ static void SostituisciMappa(Material *mats, int count, int mappa, Texture2D nuo
     for (int k = 0; k < count; k++) mats[k].maps[mappa].texture = nuova;
 }
 
+/* Porta all'origine le sole mesh del pezzo scelto, sulla CPU.
+ *
+ * Non tocca la scheda apposta: chi chiama fa UpdateMeshBuffer() sulle stesse
+ * mesh, e cosi' questa parte - che e' quella dove si sbaglia - resta provabile
+ * senza un contesto grafico.
+ *
+ * Solo quelle del pezzo scelto: gli altri diciannove pezzi del file restano
+ * dove il catalogo li ha messi. Spostarli non si vedrebbe oggi, perche' non li
+ * disegna nessuno, e si vedrebbe il giorno che se ne usa un secondo.
+ *
+ * Torna quante mesh ha spostato: chi chiama sa cosi' su quali fare il
+ * caricamento sulla scheda, e una mesh senza vertici non finisce dentro
+ * UpdateMeshBuffer(), che deferenzia anche vboId. */
+static int RicentraPezzo(Model *m, const int *idx, const MeshGroup *g, Vector3 o)
+{
+    if (m == NULL || idx == NULL || g == NULL) return 0;
+
+    int mosse = 0;
+    for (int k = 0; k < g->count; k++) {
+        Mesh *me = &m->meshes[idx[g->first + k]];
+        if (me->vertices == NULL) continue;
+        MeshGroupRecenter(me->vertices, me->vertexCount, o);
+        mosse++;
+    }
+    return mosse;
+}
+
+/* Carica il modello di un pezzo, riusando quello di un pezzo gia' caricato che
+ * nomina lo STESSO file.
+ *
+ * Serve perche' un file puo' contenere venti pezzi: senza, usarne due vorrebbe
+ * dire tenerne in memoria quaranta. Oggi il forte da' un pezzo solo e la cache
+ * non scatta mai; la cripta della domanda E la fara' scattare, e allora sara'
+ * gia' li'.
+ *
+ * Chi riusa NON possiede: buildOwned resta false, e WorldUnload lo salta. */
+static bool CaricaPezzo(World *w, int i)
+{
+    for (int k = 0; k < i; k++)
+        if (w->buildLoaded[k] &&
+            strcmp(BUILD_FILES[k].file, BUILD_FILES[i].file) == 0) {
+            w->buildPart[i]  = w->buildPart[k];
+            w->buildOwned[i] = false;
+            return true;
+        }
+
+    char alt[256];
+    const char *file = TrovaModello(BUILD_FILES[i].file, alt, (int)sizeof alt);
+    if (file == NULL) return false;
+
+    Model m = LoadModel(file);
+    if (m.meshCount == 0) {
+        TraceLog(LOG_WARNING, "WORLD: %s non caricato", file);
+        UnloadModel(m);
+        return false;
+    }
+    w->buildPart[i]  = m;
+    w->buildOwned[i] = true;
+    return true;
+}
+
+/* Il pezzo k del file X: si separano i gruppi, si prende il k-esimo, si
+ * verifica che somigli a quello dichiarato, lo si porta sull'origine e gli si
+ * fa il lotto con le sole sue mesh.
+ *
+ * Torna false quando il pezzo non c'e' o non e' quello atteso. Non e' un
+ * errore: il chiamante ripiega sui pezzi del kit, che e' molto meglio di un
+ * muro messo dove va una torre - lo stesso ragionamento di TroppiVertici(). */
+static bool PreparaPezzo(World *w, int i)
+{
+    Model *m  = &w->buildPart[i];
+    int    nm = m->meshCount;
+
+    BoundingBox *bb  = (BoundingBox *)MemAlloc((unsigned int)(nm * (int)sizeof(BoundingBox)));
+    int         *idx = (int *)MemAlloc((unsigned int)(nm * (int)sizeof(int)));
+    MeshGroup   *gr  = (MeshGroup *)MemAlloc((unsigned int)(nm * (int)sizeof(MeshGroup)));
+    if (bb == NULL || idx == NULL || gr == NULL) {
+        MemFree(bb); MemFree(idx); MemFree(gr);
+        return false;
+    }
+
+    for (int k = 0; k < nm; k++) bb[k] = GetMeshBoundingBox(m->meshes[k]);
+    int ng = MeshGroupSplit(bb, nm, idx, gr, nm);
+    MemFree(bb);
+
+    const MeshGroup *g = MeshGroupPick(gr, ng, BUILD_FILES[i].pezzo);
+    if (g == NULL) {
+        TraceLog(LOG_WARNING, "WORLD: %s non ha il pezzo %d (ne ha %d)",
+                 BUILD_FILES[i].file, BUILD_FILES[i].pezzo, ng);
+        MemFree(idx); MemFree(gr);
+        return false;
+    }
+
+    /* L'indice e' posizionale: se il catalogo ricuoce il file, il 12 diventa un
+     * muro e non se ne accorge nessuno. Qui si guarda cosa si e' trovato. */
+    if (!MeshGroupSomiglia(g, BUILD_FILES[i].atteso, BUILD_TOLLERANZA)) {
+        TraceLog(LOG_WARNING,
+                 "WORLD: %s pezzo %d misura %.2fx%.2fx%.2f, atteso %.2fx%.2fx%.2f: si ripiega",
+                 BUILD_FILES[i].file, BUILD_FILES[i].pezzo,
+                 (double)(g->box.max.x - g->box.min.x),
+                 (double)(g->box.max.y - g->box.min.y),
+                 (double)(g->box.max.z - g->box.min.z),
+                 (double)BUILD_FILES[i].atteso.x,
+                 (double)BUILD_FILES[i].atteso.y,
+                 (double)BUILD_FILES[i].atteso.z);
+        MemFree(idx); MemFree(gr);
+        return false;
+    }
+
+    /* Il pezzo porta cucito l'offset che lo mette in fila con gli altri
+     * diciannove: si toglie qui, una volta, invece che a ogni fotogramma. Poi
+     * si scrive sulla scheda quello che si e' mosso. */
+    MeshGroup scelto = *g;
+    Vector3   o      = MeshGroupOrigin(&scelto);
+    RicentraPezzo(m, idx, &scelto, o);
+    for (int k = 0; k < scelto.count; k++) {
+        Mesh *me = &m->meshes[idx[scelto.first + k]];
+        if (me->vertices == NULL) continue;
+        UpdateMeshBuffer(*me, 0, me->vertices,
+                         me->vertexCount * 3 * (int)sizeof(float), 0);
+    }
+    scelto.box.min = Vector3Subtract(scelto.box.min, o);
+    scelto.box.max = Vector3Subtract(scelto.box.max, o);
+
+    /* Le mesh del pezzo restano in giro: servono al lotto adesso e al ripiego
+     * non instanziato a ogni fotogramma. */
+    w->partIdx[i] = (int *)MemAlloc((unsigned int)(scelto.count * (int)sizeof(int)));
+    if (w->partIdx[i] == NULL) { MemFree(idx); MemFree(gr); return false; }
+    for (int k = 0; k < scelto.count; k++) w->partIdx[i][k] = idx[scelto.first + k];
+    w->partIdxN[i] = scelto.count;
+
+    /* I numeri della taglia sono del MASTIO, non di un pezzo indicizzato
+     * qualunque: keepScale, keepHalf e keepHigh hanno un solo destinatario, e
+     * il secondo pezzo indicizzato - la cripta della domanda E - vorra' i
+     * propri. Scriverli qui senza guardia vorrebbe dire che il secondo
+     * sovrascrive in silenzio la torre. */
+    if (i == BUILD_KEEP) {
+        w->keepScale = MeshGroupScale(&scelto, BUILD_FILES[i].voluto,
+                                      BUILD_FILES[i].perAltezza);
+        float lx = (scelto.box.max.x - scelto.box.min.x) * w->keepScale;
+        float lz = (scelto.box.max.z - scelto.box.min.z) * w->keepScale;
+        w->keepHalf = 0.5f * ((lx > lz) ? lx : lz);
+        w->keepHigh = (scelto.box.max.y - scelto.box.min.y) * w->keepScale;
+    }
+
+    InstModelCreateSubset(&w->partBatch[i], *m, w->partIdx[i], w->partIdxN[i]);
+
+    MemFree(idx); MemFree(gr);
+    return true;
+}
+
 /* Tutti o nessuno: mezza casa e' peggio di una scatola. */
 static void LoadBuildParts(World *w)
 {
@@ -379,6 +530,10 @@ static void LoadBuildParts(World *w)
         if (w->buildProj[i])
             InstModelProjection(&w->partBatch[i], gBuildMat[i].mode, gBuildMat[i].tile);
     }
+    for (int i = 0; i < BUILD_KIT_COUNT; i++) {
+        w->buildLoaded[i] = true;
+        w->buildOwned[i]  = true;
+    }
     w->hasBuildParts = true;
     /* Il conto dei pezzi proiettati dice a colpo d'occhio se assets/textures/
      * c'e': senza, si resta alla tavolozza del kit e non e' un errore. */
@@ -386,6 +541,31 @@ static void LoadBuildParts(World *w)
     for (int i = 0; i < BUILD_KIT_COUNT; i++) if (w->buildProj[i]) proiettati++;
     TraceLog(LOG_INFO, "WORLD: %d pezzi per gli edifici modulari, %d con materiale proiettato",
              BUILD_KIT_COUNT, proiettati);
+
+    /* Il mastio del forte NON entra nel "tutti o nessuno" dei pezzi dei kit:
+     * quel controllo esiste perche' mezza casa e' peggio di una scatola, mentre
+     * una torre Kenney e' un edificio intero e giusto, solo stilizzato. Se il
+     * forte non c'e', o e' un altro pezzo di quello atteso, la torre resta
+     * quella di prima e non e' un errore. */
+    if (CaricaPezzo(w, BUILD_KEEP)) {
+        w->buildLoaded[BUILD_KEEP] = true;
+        LightApplyToModel(&w->buildPart[BUILD_KEEP]);
+
+        if (PreparaPezzo(w, BUILD_KEEP)) {
+            w->hasKeep = true;
+            TraceLog(LOG_INFO,
+                     "WORLD: mastio %s pezzo %d (%d mesh, x%.2f -> %.1f m, "
+                     "semiampiezza %.2f m)%s",
+                     BUILD_FILES[BUILD_KEEP].file, BUILD_FILES[BUILD_KEEP].pezzo,
+                     w->partIdxN[BUILD_KEEP], (double)w->keepScale,
+                     (double)w->keepHigh, (double)w->keepHalf,
+                     InstModelReady(&w->partBatch[BUILD_KEEP]) ? ", a lotti" : "");
+        } else {
+            /* Il modello resta caricato e verra' scaricato da WorldUnload:
+             * buildLoaded lo dice. Quello che non c'e' e' il pezzo. */
+            TraceLog(LOG_INFO, "WORLD: niente mastio, la torre resta quella del kit");
+        }
+    }
 }
 
 /* Raylib 5.5 tiene gli indici di una mesh in 'unsigned short': oltre 65.535
@@ -735,14 +915,22 @@ void WorldUnload(World *w)
         FreePropVariants(&w->propVar[t]);
         if (w->hasExtProp[t]) { UnloadModel(w->extProp[t]); w->hasExtProp[t] = false; }
     }
-    if (w->hasBuildParts) {
-        for (int i = 0; i < BUILD_PART_COUNT; i++) {
-            /* Prima i lotti, poi il modello: i lotti puntano ai suoi VBO. */
-            InstModelFree(&w->partBatch[i]);
-            UnloadModel(w->buildPart[i]);
-        }
-        w->hasBuildParts = false;
+    /* Non piu' condizionato a hasBuildParts: il mastio si carica anche quando i
+     * pezzi dei kit non ci sono tutti, e va scaricato lo stesso. */
+    for (int i = 0; i < BUILD_PART_COUNT; i++) {
+        /* Prima i lotti, poi il modello: i lotti puntano ai suoi VBO. */
+        InstModelFree(&w->partBatch[i]);
+        MemFree(w->partIdx[i]);
+        w->partIdx[i]  = NULL;
+        w->partIdxN[i] = 0;
+        /* Chi riusa il file di un altro non lo scarica: la seconda
+         * UnloadModel() colpirebbe VBO gia' liberati. */
+        if (w->buildLoaded[i] && w->buildOwned[i]) UnloadModel(w->buildPart[i]);
+        w->buildLoaded[i] = false;
+        w->buildOwned[i]  = false;
     }
+    w->hasBuildParts = false;
+    w->hasKeep       = false;
 
     WorldIoFree(&w->io);
     w->terrainTex.id = 0;
