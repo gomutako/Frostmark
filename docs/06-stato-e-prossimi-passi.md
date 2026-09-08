@@ -5,7 +5,7 @@
 > aperte. Gli altri documenti spiegano *come funziona* il gioco; questo dice
 > *a che punto siamo*.
 
-**Ultimo aggiornamento:** 8 settembre 2026, dopo il mastio del forte.
+**Ultimo aggiornamento:** 8 settembre 2026, dopo il mastio e il tumulo.
 
 ---
 
@@ -16,8 +16,9 @@ chiuse da tempo e non si toccano più. Quello che resta aperto è un obiettivo
 solo: **sostituire ogni oggetto stilizzato del gioco con uno realistico.**
 
 Non è un progetto solo. Guardandolo da vicino si divide in sei pezzi con
-blocchi diversi, e due — cripta e personaggi — non si risolvono affatto con
-Poly Haven, perché quel catalogo è fatto di scansioni statiche:
+blocchi diversi. Uno — i personaggi — non si risolve affatto con Poly Haven,
+perché quel catalogo è fatto di scansioni statiche; e per due, torre e cripta,
+la risposta non è stata trovare l'oggetto ma **comporlo**:
 
 | # | pezzo | stato |
 |---|---|---|
@@ -25,7 +26,7 @@ Poly Haven, perché quel catalogo è fatto di scansioni statiche:
 | 2 | **alberi e pini** | **bloccato**: nessun albero CC0 sta sotto il tetto dei vertici. È la domanda **B** |
 | 3 | **edifici** | **fatto** — materiali proiettati sui dieci pezzi modulari |
 | 4 | **torre** | **fatto** — `tower_round`, il pezzo 12 dei venti di `modular_fort_01` |
-| 5 | **cripta** | aperto, caso singolo. È la domanda **E** |
+| 5 | **cripta** | **fatto** — un tumulo di massi con un varco. È la domanda **E** |
 | 6 | **personaggi** | aperto, il più grosso: serve un'altra fonte. È la domanda **C** |
 
 ### Cosa è realistico in gioco, oggi
@@ -43,14 +44,20 @@ Poly Haven, perché quel catalogo è fatto di scansioni statiche:
   *15,84 × 13,50 × 15,84 m alla scala vera, 2 mesh, 4.544 vertici, tre materiali
   PBR*. Non è più una torretta da 3,2 m ma un mastio che si vede da lontano, e
   la collisione lo segue: cilindro di raggio 7,92, che scavalca il raggio di
-  3,0 cotto nel mondo.
+  3,0 cotto nel mondo;
+- **cripta**: un **tumulo** di quindici massi di `rock_moss_set_01` in anello di
+  5,5 m con un varco da 2,99 — *6 mesh, 6 varianti, ×0,83 → 2,8 m per masso* —
+  e `gothic_statue` a fianco dell'ingresso, portata a 3 m. Ci si entra: la
+  collisione è un cerchio per masso, e il centro resta libero perché è lì che
+  nasce il boss.
 
 ### Cosa è ancora stilizzato
 
-**Alberi, pini, cripta e personaggi.** I primi due per il vincolo 1 qui sotto,
-la cripta perché una scansione del genere non esiste, i personaggi perché sono
-riggati e animati e Poly Haven non ne ha nessuno. La torre invece è uscita da
-questo elenco: il catalogo non ha una casa di villaggio, ma ha una fortezza.
+**Alberi, pini e personaggi.** I primi due per il vincolo 1 qui sotto, i
+personaggi perché sono riggati e animati e Poly Haven non ne ha nessuno. Torre e
+cripta sono uscite da questo elenco per la stessa ragione: quando l'oggetto non
+esiste come scansione, **si compone**. Una casa di villaggio il catalogo non ce
+l'ha, ma ha una fortezza; una cripta nemmeno, ma ha dei massi.
 
 ---
 
@@ -164,13 +171,35 @@ Due cose imparate qui, che valgono oltre la torre:
 **Resta aperto:** le mura, la porta `large_castle_door`, e il cortile in cui si
 cammina — che vorrebbe collisione a segmenti con un varco, come le case.
 
-### E. La cripta — aperta, caso singolo
+### E. La cripta — **CHIUSA**
 
-Un edificio del genere non esiste come scansione. O si compone da pezzi —
-pietre, colonne, ruderi — o resta il kit. Userebbe lo stesso interruttore dei
-materiali proiettati, quindi il lavoro è già preparato.
+La cripta è un **tumulo**: quindici massi di `rock_moss_set_01` in un anello di
+5,5 m con un varco da 2,99, e `gothic_statue` a fianco dell'ingresso. Ci si
+entra, e dentro c'è il boss. Design in
+`docs/superpowers/specs/2026-09-08-tumulo-della-cripta-design.md`, funzionamento
+in `docs/01`, sezione *La cripta è una ricetta*.
 
----
+Il documento diceva che la cripta «userebbe lo stesso interruttore dei materiali
+proiettati, quindi il lavoro è già preparato». **Era sbagliato due volte:**
+
+- quell'interruttore vive su `partBatch`/`buildProj`, cioè sul percorso degli
+  edifici, mentre la cripta sta su `propVar`/`extProp`;
+- e la proiezione qui sarebbe stata **obbligatoria**, non facoltativa:
+  `graveyard/crypt.glb` ha **1.028 vertici e 33 coppie UV distinte**, tutte in
+  una striscia dell'atlante — è una tavolozza, come `wall.glb`.
+
+Il lavoro davvero preparato era un altro: la macchina delle varianti. Il
+caricamento non è cambiato di una riga.
+
+Due cose imparate qui:
+
+- **le entità usano la stessa spinta del giocatore**, e il boss nasce esattamente
+  a `cryptPos`, dove la distanza è zero e la spinta non ha una direzione. Prima
+  nasceva dentro la lastra. Ora il centro del tumulo è vuoto apposta, e la spinta
+  dal centro misura 0,00 m;
+- **un asset inganna in due modi opposti**, e stanno in `docs/03`: il nome che
+  promette massi e dà ciottoli, e l'ingombro giusto di un volume che è quasi
+  tutto aria.
 
 ## Come si verifica che tutto regga
 
@@ -180,14 +209,15 @@ make prove      # le prove, esce non-zero se qualcosa non torna
 make valida     # dati e mondo cotto
 ```
 
-`make prove` compila ed esegue gli **otto** file in `tools/prove/`. Non c'è un
+`make prove` compila ed esegue i **nove** file in `tools/prove/`. Non c'è un
 framework: una prova è un eseguibile che stampa una riga per controllo. Chi esce
-77 non ha trovato un contesto OpenGL e viene contata come saltata. **Tre** non
-aprono nessuna finestra e girano ovunque: `scale`, che prova la collisione con
-le scale dentro le case; `varianti`, che prova il raggruppamento delle mesh e la
-scelta della variante; e `mastio`, che prova la scelta di un pezzo per indice,
-la guardia sull'ingombro e la taglia della collisione — geometria pura, senza
-GPU.
+77 non ha trovato un contesto OpenGL e viene contata come saltata. **Quattro**
+non aprono nessuna finestra e girano ovunque: `scale`, che prova la collisione
+con le scale dentro le case; `varianti`, che prova il raggruppamento delle mesh
+e la scelta della variante; `mastio`, che prova la scelta di un pezzo per indice
+e la guardia sull'ingombro; e `tumulo`, che prova l'anello della cripta — che il
+centro sia libero, che il varco sia uno solo e che l'anello sia chiuso altrove.
+Geometria pura, senza GPU.
 
 ### Le prove si verificano sabotandole, e non è una formalità
 
@@ -224,6 +254,14 @@ cui una prova può passare senza provare niente, perché si somigliano tutti:
   controllata la **proprietà**: dopo il ricentraggio il pezzo poggia a terra ed è
   centrato in XZ.
 
+- **il varco senza l'anello.** Una prova che verifica *c'è un'apertura* senza
+  verificare *che l'anello sia chiuso altrove* passa anche con un anello tutto
+  buchi, purché il buco più largo sia uno. I due controlli vanno in coppia, e il
+  secondo si scrive sull'indice del primo, non confrontando float;
+- **il punto scelto dove la prova non morde.** Provare la spinta *sul centro
+  esatto* di un prop passa anche senza aver scritto niente, perché a distanza
+  zero la spinta non ha una direzione. Il punto va preso di lato.
+
 Tutte queste sono state trovate **dai sabotaggi, non dalle revisioni**, su prove
 che passavano.
 
@@ -256,10 +294,11 @@ legge una schermata vuota.
 ## Documenti collegati
 
 - `docs/01-architettura.md` — sezioni *Normal map*, *Instancing*, *Varianti*,
-  *Pezzi indicizzati*, *Materiali proiettati* e *Le prove*
+  *Pezzi indicizzati*, *La cripta è una ricetta*, *Materiali proiettati* e
+  *Le prove*
 - `docs/03-asset-pubblici.md` — il catalogo misurato, come si sceglie un asset,
-  *I kit modulari non hanno UV*, *Le piante da prato sono rosette* e *Cosa non
-  ha un equivalente texturizzato*
+  *I kit modulari non hanno UV*, *Le piante da prato sono rosette*, *Due modi in
+  cui un asset inganna* e *Cosa non ha un equivalente texturizzato*
 - `docs/superpowers/specs/2026-09-04-instancing-e-impostori-design.md` — il
   perché dell'instancing, con le misure che hanno cancellato la tappa LOD
 - `docs/superpowers/specs/2026-09-05-varianti-prop-design.md` — la domanda A
@@ -268,4 +307,6 @@ legge una schermata vuota.
   scontato che l'istanza fosse la casa, mentre è il pannello
 - `docs/superpowers/specs/2026-09-08-mastio-del-forte-design.md` — la domanda D
   per la torre, e perché un indice non basta senza l'ingombro atteso
+- `docs/superpowers/specs/2026-09-08-tumulo-della-cripta-design.md` — la domanda
+  E, e perché una cripta non esiste nel catalogo
 - i piani eseguiti stanno accanto ai design, in `docs/superpowers/plans/`

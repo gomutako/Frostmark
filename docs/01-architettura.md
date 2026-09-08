@@ -367,6 +367,33 @@ direzione in cui spingere; su un prop da 3 m è un bersaglio stretto, sul mastio
 sceglie un asse: uscire da una parte qualunque è l'unica cosa migliore di
 restare dentro la pietra.
 
+#### La cripta è una ricetta
+
+Lo stesso principio dei pezzi indicizzati, applicato a un prop invece che a un
+edificio. La cripta non è un oggetto ma un **tumulo**: `CryptRing()` produce
+quindici massi — posizione, forma, scala, rotazione, affondamento — **dalla
+posizione del prop**, e la leggono in tre: disegno, spinta del giocatore e
+taglio della camera. È la regola di `HouseShapeOf()`, per la stessa ragione.
+
+La quota non sta nell'anello: la mette chi disegna, prendendola dal terreno
+sotto ogni masso. Così il tumulo segue il pendio, e la ricetta resta geometria
+pura — si prova senza mondo caricato e senza contesto grafico.
+
+Sta in `PropBatchAdd()` e non in `DrawProp()` perché di lì passano **entrambi**
+i passaggi, principale e ombra: scriverlo due volte vorrebbe dire due ricette da
+tenere d'accordo. E la resa si decide **prima** di accodare qualunque cosa —
+accodare metà massi e poi arrendersi farebbe ripiegare il chiamante, che li
+ridisegnerebbe tutti, con i primi contati due volte.
+
+Il caricamento non cambia: sono varianti, come `shrub_02`. `hasTumulo` distingue
+un set da un modello singolo, così un asset a una variante torna a comportarsi
+come sempre — quindici copie della stessa lastra in cerchio non sono un tumulo.
+
+**Il centro resta vuoto**, ed è il punto: le entità usano la stessa spinta del
+giocatore, e il boss nasce esattamente a `cryptPos`. Prima nasceva dentro la
+lastra e ne usciva solo muovendosi; ora nasce nello spazio libero del tumulo.
+Misurato: la spinta dal centro della cripta muove di **0,00 m**.
+
 ### Materiali proiettati
 
 I pezzi modulari degli edifici vengono da due kit Kenney e **non hanno UV

@@ -109,6 +109,10 @@ quanto è *fuori scala* — e alcuni lo sono parecchio:
 | `fir_sapling` | 433.021 | — | opaco | è una piantina, non un albero |
 | `fir_tree_01` | **6.982.937** | — | BLEND | **no**: 478 MB di sola geometria |
 | `modular_fort_01` | 28.218 | 4.148 | opaco | **sì — è la torre in uso**, ed è un kit di venti pezzi in un file |
+| `rock_moss_set_01` | 63.127 | 8.538 | opaco | **sì — è il tumulo della cripta**, set di sei |
+| `gothic_statue` | 27.739 | 23.314 | opaco | **sì — la statua della cripta**, ma non alla sua taglia |
+| `namaqualand_boulders_01` | 40.850 | 12.909 | opaco | **no**: si chiamano *boulders* e sono ciottoli da 0,34 m |
+| `namaqualand_rocks_01` | 85.716 | 12.996 | opaco | **no**: è ghiaia da 0,22 m |
 
 **Il tetto vero non è il conteggio dei triangoli: è quello dei vertici.** Il
 `Mesh` di raylib 5.5 tiene gli indici in `unsigned short`, quindi oltre **65.535
@@ -488,6 +492,21 @@ legge `texture.mipmaps` e, se ne trova uno solo, ripiega su `GL_LINEAR` con un
 avviso in registro. Chiamandolo prima di `GenTextureMipmaps()` i mipmap si
 generano e non si usano — la parete lontana sfarfalla e nessuno capisce
 perché. Prima i mipmap, poi il filtro.
+
+### Due modi in cui un asset inganna
+
+Trovati misurando, e sono opposti.
+
+**Il nome non è una misura.** `namaqualand_boulders_01` si chiama *boulders* ed è
+fatto di due ciottoli da **0,34 m**; `namaqualand_rocks_01` è ghiaia da **0,22**.
+Per un tumulo servivano massi veri, e li ha dati `rock_moss_set_01`: sei fra 1,8
+e 2,7 m. Il nome va sempre verificato contro l'ingombro.
+
+**L'ingombro non dice se il volume è pieno.** `gothic_statue` misura 1,48 × 1,74
+× 1,56 m — a scala umana — ma è una **filigrana**: quasi tutta aria. Messa alla
+sua taglia di scansione si perde nell'erba come un rametto scuro. Alla cripta sta
+a **3 m**, dove si legge come un cippo. Questo non lo prende nessuna misura di
+ingombro: lo prende solo guardarlo.
 
 ### Cosa non ha un equivalente texturizzato
 
