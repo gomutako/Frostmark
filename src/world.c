@@ -1674,6 +1674,31 @@ static bool RayTrunk(Vector3 o, Vector3 d, Vector3 c, float r, float h,
     return true;
 }
 
+/* La taglia della torre, in metri. Un numero, DUE USI: la spinta del giocatore
+ * e il taglio della camera leggono questo, e non possono divergere.
+ *
+ * Il raggio della spinta e' cotto nel mondo - worldgen emette 3,0 m - ma il
+ * mastio e' largo 15,84: con il raggio cotto si camminerebbe dentro il muro, e
+ * ricuocere non basterebbe perche' i mondi gia' salvati resterebbero a 3,0.
+ * Quando il mastio c'e', quindi, il dato cotto si scavalca. Non e' una novita':
+ * la casa fa gia' esattamente questo, salta il cerchio e va sui muri, perche'
+ * la sua forma la decide la ricetta e non il dato.
+ *
+ * Valgono per il MASTIO, e i due chiamanti le invocano dentro 'if (hasKeep)':
+ * senza mastio non cambia niente, e i numeri di prima - 3,0 cotto per la
+ * spinta, 1,6 e 12,0 per la scatola della camera - restano dove sono sempre
+ * stati. Non c'e' un ramo di ripiego qui dentro apposta: sarebbe un valore che
+ * non legge nessuno. */
+static float TowerHalf(const World *w, const Prop *p)
+{
+    return w->keepHalf * p->scale;
+}
+
+static float TowerHigh(const World *w, const Prop *p)
+{
+    return w->keepHigh * p->scale;
+}
+
 float WorldCameraClip(const World *w, Vector3 eye, Vector3 dir, float maxDist)
 {
     float best = maxDist;
@@ -1704,7 +1729,19 @@ float WorldCameraClip(const World *w, Vector3 eye, Vector3 dir, float maxDist)
                 continue;
             }
 
-            /* Torre e cripta: scatole piene, non ci si entra. */
+            /* La torre tonda e' un CILINDRO, non una scatola: una scatola
+             * attorno a un tondo occluderebbe quattro angoli vuoti. Il cilindro
+             * c'e' gia' - RayTrunk, scritto per i fusti degli alberi.
+             *
+             * Limite dichiarato: RayTrunk torna solo l'INGRESSO, quindi con
+             * l'occhio dentro non taglia. Su un volume pieno non ci si arriva. */
+            if (p->type == PROP_TOWER && w->hasKeep) {
+                if (RayTrunk(eye, dir, p->pos, TowerHalf(w, p), TowerHigh(w, p),
+                             best, &hitT) && hitT < best) best = hitT;
+                continue;
+            }
+
+            /* Torre del kit e cripta: scatole piene, non ci si entra. */
             if (p->type == PROP_TOWER || p->type == PROP_CRYPT) {
                 float halfXZ = (p->type == PROP_TOWER) ? 1.6f : 6.0f;
                 float high   = (p->type == PROP_TOWER) ? 12.0f : 5.5f;
@@ -1857,6 +1894,34 @@ void WorldResolveCollision(World *w, Vector3 *pos, float radius)
              * porta: la collisione e' sui muri, non su un cerchio. */
             if (p->type == PROP_HOUSE && w->hasBuildParts) {
                 ResolveHouse(p, pos, radius);
+                continue;
+            }
+
+            /* La torre, quando e' il mastio, e' larga cinque volte il raggio
+             * cotto nel mondo: lo si scavalca, con la stessa taglia che usa la
+             * camera. */
+            if (p->type == PROP_TOWER && w->hasKeep) {
+                float tdx = pos->x - p->pos.x, tdz = pos->z - p->pos.z;
+                float td2 = tdx * tdx + tdz * tdz;
+                float trr = TowerHalf(w, p) + radius;
+                if (td2 < trr * trr) {
+                    if (td2 > 0.0001f) {
+                        float td = sqrtf(td2);
+                        float tpush = (trr - td) / td;
+                        pos->x += tdx * tpush;
+                        pos->z += tdz * tpush;
+                    } else {
+                        /* Sul centro esatto non c'e' una direzione in cui
+                         * spingere, e il conto generico si arrende. Su un prop
+                         * da 3 m era un bersaglio stretto; il mastio e' largo
+                         * 15,84 e sta al centro del villaggio, dove il gioco
+                         * mette gente e cose. Si sceglie un asse: uscire da una
+                         * parte qualunque e' l'unica cosa migliore di restare
+                         * dentro la pietra. Misurato: senza questo, chi finisce
+                         * sul centro esatto ci resta. */
+                        pos->x += trr;
+                    }
+                }
                 continue;
             }
 

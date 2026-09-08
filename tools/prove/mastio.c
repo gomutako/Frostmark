@@ -172,5 +172,90 @@ int main(void)
     Ok("una mesh senza vertici non si conta",
        RicentraPezzo(&fake, midx, &scelto, o) == 0);
 
+    /* --- Un numero, due usi ----------------------------------------------
+     * La spinta del giocatore e il taglio della camera devono leggere la
+     * STESSA taglia. Se divergessero, la camera entrerebbe in un muro che il
+     * giocatore non puo' attraversare - ed e' lo stesso motivo per cui
+     * StairTop() serve sia a chi cammina sulla rampa sia a chi ci sbatte
+     * contro. */
+    /* World e' grosso: static, o si rischia la pila. */
+    static World mondo;
+    Prop  torreProp = { 0 };
+    torreProp.type   = PROP_TOWER;
+    torreProp.scale  = 1.0f;
+    torreProp.radius = 3.0f;          /* il raggio cotto nel mondo */
+
+    /* Le due funzioni valgono per il MASTIO: i due chiamanti le invocano solo
+     * dentro 'if (hasKeep)', e senza mastio i numeri di prima - 3,0 cotto per
+     * la spinta, 1,6 e 12,0 per la scatola della camera - restano scritti dove
+     * sono sempre stati. Un valore di ripiego qui dentro sarebbe codice che
+     * non legge nessuno, e una prova che lo controlla proverebbe il nulla. */
+    mondo.hasKeep  = true;
+    mondo.keepHalf = 7.92f;
+    mondo.keepHigh = 13.50f;
+    Ok("la spinta usa la semiampiezza misurata",
+       fabsf(TowerHalf(&mondo, &torreProp) - 7.92f) < 0.01f);
+    Ok("l'altezza e' quella misurata, non la semiampiezza",
+       fabsf(TowerHigh(&mondo, &torreProp) - 13.50f) < 0.01f);
+
+    /* La scala dell'istanza vale su entrambi, o una torre rimpicciolita
+     * spingerebbe alla taglia di quella intera. */
+    torreProp.scale = 0.5f;
+    Ok("la scala dell'istanza vale sulla semiampiezza",
+       fabsf(TowerHalf(&mondo, &torreProp) - 3.96f) < 0.01f);
+    Ok("la scala dell'istanza vale sull'altezza",
+       fabsf(TowerHigh(&mondo, &torreProp) - 6.75f) < 0.01f);
+
+    /* Il tetto che fissa la taglia: l'anziano nasce a 14 m dal centro del
+     * villaggio, ed e' cotto nel mondo come i prop. Una semiampiezza oltre gli
+     * 8 m lo farebbe nascere dentro la pietra. */
+    torreProp.scale = 1.0f;
+    Ok("la semiampiezza sta sotto gli 8 m che l'anziano impone",
+       TowerHalf(&mondo, &torreProp) < 8.0f);
+
+    /* --- La spinta vera, non solo il numero --------------------------------
+     * WorldResolveCollision gira sui chunk, ma non tocca la GPU: un chunk si
+     * costruisce a mano e la prova resta senza contesto grafico.
+     *
+     * Il caso che conta e' il CENTRO ESATTO. Il conto generico si arrende
+     * quando la distanza e' zero, perche' non c'e' una direzione in cui
+     * spingere: su un prop da 3 m e' un bersaglio stretto, sul mastio - largo
+     * 15,84 e piantato al centro del villaggio - non lo e'. Misurato sul mondo
+     * vero: senza il ramo apposta, chi finisce sul centro ci resta. */
+    torreProp.scale = 1.0f;
+    torreProp.pos   = (Vector3){ 100.0f, 0.0f, 100.0f };
+
+    mondo.chunks[0].active    = true;
+    mondo.chunks[0].cx        = (int)(100.0f / CHUNK_SIZE);
+    mondo.chunks[0].cz        = (int)(100.0f / CHUNK_SIZE);
+    mondo.chunks[0].propCount = 1;
+    mondo.chunks[0].props[0]  = torreProp;
+
+    Vector3 dentro = { 100.0f, 0.0f, 100.0f };      /* il centro esatto */
+    WorldResolveCollision(&mondo, &dentro, 0.35f);
+    float dOut = sqrtf((dentro.x - 100.0f) * (dentro.x - 100.0f) +
+                       (dentro.z - 100.0f) * (dentro.z - 100.0f));
+    Ok("dal centro esatto si viene spinti fuori lo stesso",
+       dOut >= 7.92f + 0.35f - 0.01f);
+
+    /* E di fianco, che e' il caso normale: 7,92 di pietra piu' il raggio di chi
+     * cammina. */
+    Vector3 vicino2 = { 102.0f, 0.0f, 100.0f };
+    WorldResolveCollision(&mondo, &vicino2, 0.35f);
+    float dLato = sqrtf((vicino2.x - 100.0f) * (vicino2.x - 100.0f) +
+                        (vicino2.z - 100.0f) * (vicino2.z - 100.0f));
+    Ok("di fianco si resta fuori di semiampiezza piu' raggio",
+       fabsf(dLato - (7.92f + 0.35f)) < 0.01f);
+
+    /* Senza mastio la torre torna al cerchio cotto nel mondo: 3,0 + 0,35. E'
+     * la promessa del ripiego, e va provata o non e' una promessa. */
+    mondo.hasKeep = false;
+    Vector3 kit = { 102.0f, 0.0f, 100.0f };
+    WorldResolveCollision(&mondo, &kit, 0.35f);
+    float dKit = sqrtf((kit.x - 100.0f) * (kit.x - 100.0f) +
+                       (kit.z - 100.0f) * (kit.z - 100.0f));
+    Ok("senza mastio si torna al raggio cotto nel mondo",
+       fabsf(dKit - (3.0f + 0.35f)) < 0.01f);
+
     return ProveEsito();
 }
