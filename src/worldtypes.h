@@ -16,9 +16,19 @@ typedef enum {
     BIOME_HILL,  BIOME_MOUNTAIN, BIOME_SNOW, BIOME_COUNT
 } Biome;
 
+/* I primi otto sono i prop "grandi": ognuno ha la sua riga in gExtProp e la sua
+ * primitiva di riserva in DrawProp, e senza assets/ il gioco li disegna lo
+ * stesso.
+ *
+ * I cinque dopo sono il SOTTOBOSCO, e si comportano diversamente: stanno tutti
+ * in una tabella sola (src/propdefs.c) e non hanno una primitiva di riserva -
+ * senza il loro asset non esistono, ne' disegnati ne' solidi. Una sfera
+ * schiacciata al posto di una scaglia di corteccia sarebbe peggio del niente. */
 typedef enum {
     PROP_TREE, PROP_PINE, PROP_ROCK, PROP_BUSH,
-    PROP_HERB, PROP_HOUSE, PROP_TOWER, PROP_CRYPT, PROP_COUNT
+    PROP_HERB, PROP_HOUSE, PROP_TOWER, PROP_CRYPT,
+    PROP_STUMP, PROP_LOG, PROP_ROOTS, PROP_BRANCH, PROP_BARK,
+    PROP_COUNT
 } PropType;
 
 /* Pezzi con cui si costruiscono casa e torre. Nei kit CC0 gli edifici

@@ -34,7 +34,8 @@ OBJS     := $(patsubst $(SRC_DIR)/%.c,$(BUILD_DIR)/%.o,$(SRCS))
 # quello generato usando esattamente il codice che poi ci gioca.
 BAKER      := baker
 BAKER_SRCS := $(TOOL_DIR)/baker.c $(TOOL_DIR)/worldgen.c $(TOOL_DIR)/noise.c \
-              $(SRC_DIR)/worldio.c $(SRC_DIR)/dataparse.c $(SRC_DIR)/fmath.c
+              $(SRC_DIR)/worldio.c $(SRC_DIR)/dataparse.c $(SRC_DIR)/fmath.c \
+              $(SRC_DIR)/propdefs.c
 BAKER_OBJS := $(patsubst %.c,$(BUILD_DIR)/baker-%.o,$(notdir $(BAKER_SRCS)))
 
 # -MMD -MP: genera i file .d con le dipendenze dagli header, cosi' modificare
@@ -162,6 +163,11 @@ prove: $(RAYLIB_DEP)
 	      $(SRC_DIR)/fmath.c $(SRC_DIR)/light.c $(SRC_DIR)/instancing.c \
 	      $(SRC_DIR)/worldio.c $(SRC_DIR)/dataparse.c \
 	      $(LDFLAGS) $(LDLIBS) -o $(PROVE_DIR)/tumulo
+	$(CC) $(PROVE_CF) $(TOOL_DIR)/prove/sottobosco.c \
+	      $(SRC_DIR)/fmath.c $(SRC_DIR)/light.c $(SRC_DIR)/instancing.c \
+	      $(SRC_DIR)/worldio.c $(SRC_DIR)/dataparse.c $(SRC_DIR)/propdefs.c \
+	      $(TOOL_DIR)/noise.c \
+	      $(LDFLAGS) $(LDLIBS) -o $(PROVE_DIR)/sottobosco
 	@ok=1; for t in $(PROVE_DIR)/*; do \
 	    echo "== $$t"; \
 	    $$t; r=$$?; \
