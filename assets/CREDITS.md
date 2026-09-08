@@ -32,3 +32,8 @@ richiedono attribuzione: serve a dimostrare la provenienza in caso di dubbi.
 | assets/models/fort/modular_fort_01.gltf | Poly Haven | https://polyhaven.com/a/modular_fort_01 | CC0 | 2026-09-08 |
 | assets/models/crypt.gltf | Poly Haven | https://polyhaven.com/a/rock_moss_set_01 | CC0 | 2026-09-08 |
 | assets/models/statua.gltf | Poly Haven | https://polyhaven.com/a/gothic_statue | CC0 | 2026-09-08 |
+| assets/models/ceppo.gltf | Poly Haven | https://polyhaven.com/a/tree_stump_01 | CC0 | 2026-09-08 |
+| assets/models/tronco.gltf | Poly Haven | https://polyhaven.com/a/dead_tree_trunk_02 | CC0 | 2026-09-08 |
+| assets/models/radici.gltf | Poly Haven | https://polyhaven.com/a/pine_roots | CC0 | 2026-09-08 |
+| assets/models/rami.gltf | Poly Haven | https://polyhaven.com/a/dry_branches_medium_01 | CC0 | 2026-09-08 |
+| assets/models/corteccia.gltf | Poly Haven | https://polyhaven.com/a/bark_debris_01 | CC0 | 2026-09-08 |
