@@ -189,21 +189,55 @@ static const char *TrovaModello(const char *file, char *buf, int n)
 }
 
 /* --- Edifici modulari ----------------------------------------------------
- * I pezzi vengono da due kit diversi, quindi da due cartelle: ognuno porta il
- * suo Textures/colormap.png e i due file hanno lo stesso nome.
- * La cella e' l'unita' del kit: qui vale BUILD_CELL metri. */
-static const char *BUILD_FILES[BUILD_PART_COUNT] = {
-    [BUILD_WALL]        = "assets/models/town/wall.glb",
-    [BUILD_DOOR]        = "assets/models/town/wall-doorway-round.glb",
-    [BUILD_WINDOW]      = "assets/models/town/wall-window-small.glb",
-    [BUILD_ROOF]        = "assets/models/town/roof-gable.glb",
-    [BUILD_FLOOR]       = "assets/models/town/planks.glb",
-    [BUILD_STAIRS]      = "assets/models/town/stairs-wide-wood.glb",
-    [BUILD_TOWER_BASE]  = "assets/models/castle/tower-square-base.glb",
-    [BUILD_TOWER_MID]   = "assets/models/castle/tower-square-mid-windows.glb",
-    [BUILD_TOWER_TOP]   = "assets/models/castle/tower-square-top.glb",
-    [BUILD_TOWER_ROOF]  = "assets/models/castle/tower-square-top-roof.glb",
+ * I pezzi vengono da kit diversi, quindi da cartelle diverse: ognuno porta il
+ * suo Textures/colormap.png e i file hanno lo stesso nome.
+ * La cella e' l'unita' dei kit di Kenney: qui vale BUILD_CELL metri.
+ *
+ * Un pezzo e' un file, O UN PEZZO DENTRO UN FILE. Kenney spedisce un muro per
+ * file; Poly Haven spedisce venti pezzi di fortezza in uno solo, 45 primitive,
+ * e il raggruppamento delle mesh li separa gia' da se'.
+ *
+ * 'pezzo' e' l'indice del gruppo, -1 per "tutto il file". L'indice e'
+ * riproducibile ma NON stabile nel tempo: se il catalogo ricuoce il file e
+ * riordina i pezzi, il 12 diventa un muro e non c'e' nessun avviso. Per questo
+ * la riga dichiara anche 'atteso', l'ingombro che ci si aspetta di trovare.
+ *
+ * 'voluto' e' la taglia in metri, come in gExtProp: la scala esce
+ * dall'ingombro MISURATO, non da una costante tarata a mano. Vale solo per i
+ * pezzi indicizzati - quelli dei kit stanno sulla griglia di BUILD_CELL, e
+ * hanno 'voluto' a zero. */
+static const struct {
+    const char *file;
+    int         pezzo;        /* -1 = tutto il file           */
+    Vector3     atteso;       /* ingombro del pezzo, in metri */
+    float       voluto;       /* taglia dichiarata, in metri  */
+    bool        perAltezza;
+} BUILD_FILES[BUILD_PART_COUNT] = {
+    [BUILD_WALL]        = { "assets/models/town/wall.glb",                       -1, { 0 }, 0.0f, false },
+    [BUILD_DOOR]        = { "assets/models/town/wall-doorway-round.glb",         -1, { 0 }, 0.0f, false },
+    [BUILD_WINDOW]      = { "assets/models/town/wall-window-small.glb",          -1, { 0 }, 0.0f, false },
+    [BUILD_ROOF]        = { "assets/models/town/roof-gable.glb",                 -1, { 0 }, 0.0f, false },
+    [BUILD_FLOOR]       = { "assets/models/town/planks.glb",                     -1, { 0 }, 0.0f, false },
+    [BUILD_STAIRS]      = { "assets/models/town/stairs-wide-wood.glb",           -1, { 0 }, 0.0f, false },
+    [BUILD_TOWER_BASE]  = { "assets/models/castle/tower-square-base.glb",        -1, { 0 }, 0.0f, false },
+    [BUILD_TOWER_MID]   = { "assets/models/castle/tower-square-mid-windows.glb", -1, { 0 }, 0.0f, false },
+    [BUILD_TOWER_TOP]   = { "assets/models/castle/tower-square-top.glb",         -1, { 0 }, 0.0f, false },
+    [BUILD_TOWER_ROOF]  = { "assets/models/castle/tower-square-top-roof.glb",    -1, { 0 }, 0.0f, false },
+
+    /* tower_round di modular_fort_01, misurato il 2026-09-08: gruppo 12 dei
+     * venti, 2 mesh, 4.544 vertici, base a Y = 0. La taglia dichiarata e'
+     * l'altezza vera dell'asset, quindi la scala esce 1,00 - il numero e'
+     * dichiarato lo stesso, e non sottinteso. */
+    [BUILD_KEEP]        = { "assets/models/fort/modular_fort_01.gltf",           12,
+                            { 15.84f, 13.50f, 15.84f }, 13.50f, true },
 };
+
+/* Quanto puo' scostarsi l'ingombro misurato da quello dichiarato, per lato.
+ * Un quinto: largo abbastanza da reggere una ricottura che cambia l'asset di
+ * poco, stretto abbastanza da distinguere la torre tonda da ogni altro pezzo
+ * del file - il piu' vicino per altezza e' un bastione da 8,61 m, che sta il
+ * 36% sotto. */
+#define BUILD_TOLLERANZA  0.20f
 
 /* Metri per cella. 3x2 celle fanno una casa di 7,8 x 5,2 m con i muri alti
  * 2,6: le stesse dimensioni della scatola procedurale che sostituisce. */
@@ -218,20 +252,27 @@ static const char *BUILD_FILES[BUILD_PART_COUNT] = {
  * finestra devono avere lo stesso, o la finestra si stacca dalla parete.
  *
  * Il tetto e' l'unico a modo 2: le sue falde hanno la normale a 45 gradi, e
- * con l'asse dominante nascerebbe una cucitura a meta' falda. */
-typedef struct { const char *nome; float tile; int mode; } BuildMat;
+ * con l'asse dominante nascerebbe una cucitura a meta' falda.
+ *
+ * 'uvVere' dice che il pezzo campiona le PROPRIE UV e non va proiettato. Non
+ * basta lasciare la riga vuota: una riga mancante e' quasi sempre una riga
+ * dimenticata, e viene gridata. Qui l'assenza di materiale proiettato e' la
+ * scelta giusta - i pezzi di Poly Haven hanno UV vere e portano le loro mappe
+ * PBR - quindi va detta, non sottintesa. */
+typedef struct { const char *nome; float tile; int mode; bool uvVere; } BuildMat;
 
 static const BuildMat gBuildMat[BUILD_PART_COUNT] = {
-    [BUILD_WALL]        = { "legno_scuro", 2.0f, 1 },
-    [BUILD_DOOR]        = { "legno_scuro", 2.0f, 1 },
-    [BUILD_WINDOW]      = { "legno_scuro", 2.0f, 1 },
-    [BUILD_ROOF]        = { "tetto_legno", 1.5f, 2 },
-    [BUILD_FLOOR]       = { "assito",      2.0f, 1 },
-    [BUILD_STAIRS]      = { "assito",      2.0f, 1 },
-    [BUILD_TOWER_BASE]  = { "pietra",      2.5f, 1 },
-    [BUILD_TOWER_MID]   = { "pietra",      2.5f, 1 },
-    [BUILD_TOWER_TOP]   = { "pietra",      2.5f, 1 },
-    [BUILD_TOWER_ROOF]  = { "pietra",      2.5f, 1 },
+    [BUILD_WALL]        = { "legno_scuro", 2.0f, 1, false },
+    [BUILD_DOOR]        = { "legno_scuro", 2.0f, 1, false },
+    [BUILD_WINDOW]      = { "legno_scuro", 2.0f, 1, false },
+    [BUILD_ROOF]        = { "tetto_legno", 1.5f, 2, false },
+    [BUILD_FLOOR]       = { "assito",      2.0f, 1, false },
+    [BUILD_STAIRS]      = { "assito",      2.0f, 1, false },
+    [BUILD_TOWER_BASE]  = { "pietra",      2.5f, 1, false },
+    [BUILD_TOWER_MID]   = { "pietra",      2.5f, 1, false },
+    [BUILD_TOWER_TOP]   = { "pietra",      2.5f, 1, false },
+    [BUILD_TOWER_ROOF]  = { "pietra",      2.5f, 1, false },
+    [BUILD_KEEP]        = { NULL,          0.0f, 0, true  },
 };
 
 /* Sostituisce la texture di una mappa su TUTTI i materiali di un modello,
@@ -264,14 +305,14 @@ static void SostituisciMappa(Material *mats, int count, int mappa, Texture2D nuo
 /* Tutti o nessuno: mezza casa e' peggio di una scatola. */
 static void LoadBuildParts(World *w)
 {
-    for (int i = 0; i < BUILD_PART_COUNT; i++)
-        if (!FileExists(BUILD_FILES[i])) return;
+    for (int i = 0; i < BUILD_KIT_COUNT; i++)
+        if (!FileExists(BUILD_FILES[i].file)) return;
 
-    for (int i = 0; i < BUILD_PART_COUNT; i++) {
-        w->buildPart[i] = LoadModel(BUILD_FILES[i]);
+    for (int i = 0; i < BUILD_KIT_COUNT; i++) {
+        w->buildPart[i] = LoadModel(BUILD_FILES[i].file);
         if (w->buildPart[i].meshCount == 0) {
             TraceLog(LOG_WARNING, "WORLD: %s non caricato, edifici procedurali",
-                     BUILD_FILES[i]);
+                     BUILD_FILES[i].file);
             for (int k = 0; k <= i; k++) UnloadModel(w->buildPart[k]);
             return;
         }
@@ -285,7 +326,7 @@ static void LoadBuildParts(World *w)
          * indefinito - glibc stampa "(null)", altre librerie non promettono
          * niente. Il pezzo resta alla tavolozza del kit e al modo 0, che e'
          * esattamente cio' che succede quando le texture non ci sono. */
-        if (gBuildMat[i].nome == NULL) {
+        if (gBuildMat[i].nome == NULL && !gBuildMat[i].uvVere) {
             TraceLog(LOG_WARNING, "WORLD: pezzo %d senza riga in gBuildMat, niente proiezione", i);
             InstModelCreate(&w->partBatch[i], w->buildPart[i]);
             continue;
@@ -342,9 +383,9 @@ static void LoadBuildParts(World *w)
     /* Il conto dei pezzi proiettati dice a colpo d'occhio se assets/textures/
      * c'e': senza, si resta alla tavolozza del kit e non e' un errore. */
     int proiettati = 0;
-    for (int i = 0; i < BUILD_PART_COUNT; i++) if (w->buildProj[i]) proiettati++;
+    for (int i = 0; i < BUILD_KIT_COUNT; i++) if (w->buildProj[i]) proiettati++;
     TraceLog(LOG_INFO, "WORLD: %d pezzi per gli edifici modulari, %d con materiale proiettato",
-             BUILD_PART_COUNT, proiettati);
+             BUILD_KIT_COUNT, proiettati);
 }
 
 /* Raylib 5.5 tiene gli indici di una mesh in 'unsigned short': oltre 65.535

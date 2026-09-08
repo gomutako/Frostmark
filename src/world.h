@@ -86,6 +86,28 @@ typedef struct {
     /* Quali pezzi hanno ricevuto un materiale proiettato: gli altri restano
      * alla tavolozza del kit e al modo 0. */
     bool   buildProj[BUILD_PART_COUNT];
+
+    /* Un pezzo puo' venire da un file tutto suo o essere UNO dei venti dentro
+     * un file solo. Da qui due bandiere invece di una:
+     *   buildLoaded - il pezzo ha un modello utilizzabile;
+     *   buildOwned  - ...e ne POSSIEDE il Model, quindi lo scarica lui. Un
+     *                 pezzo che riusa il file di un altro non deve scaricarlo,
+     *                 o la seconda UnloadModel() colpirebbe VBO gia' liberati. */
+    bool   buildLoaded[BUILD_PART_COUNT];
+    bool   buildOwned[BUILD_PART_COUNT];
+
+    /* Le mesh del pezzo scelto dentro il file, per il ripiego non instanziato:
+     * senza, DrawModelEx disegnerebbe tutti e venti i pezzi in un mucchio.
+     * NULL per i pezzi che sono un file intero. */
+    int   *partIdx[BUILD_PART_COUNT];
+    int    partIdxN[BUILD_PART_COUNT];
+
+    /* Il mastio: c'e' o non c'e', e se c'e' porta i suoi numeri. keepHalf e
+     * keepHigh sono in METRI e gia' scalati, e li leggono sia la spinta del
+     * giocatore sia il taglio della camera - un numero, due usi. */
+    bool   hasKeep;
+    float  keepScale;
+    float  keepHalf, keepHigh;
 } World;
 
 /* Carica il mondo cotto da 'dir' e prepara le risorse grafiche. false se il

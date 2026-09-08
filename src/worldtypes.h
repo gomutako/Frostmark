@@ -23,10 +23,17 @@ typedef enum {
 
 /* Pezzi con cui si costruiscono casa e torre. Nei kit CC0 gli edifici
  * medievali sono modulari - muro, muro con porta, falda, solaio - su una
- * griglia di celle da 1 unita': un edificio e' una ricetta, non un file. */
+ * griglia di celle da 1 unita': un edificio e' una ricetta, non un file.
+ *
+ * BUILD_KEEP sta ULTIMO e non e' come gli altri: e' UN PEZZO DENTRO un file di
+ * venti, arriva da un altro catalogo, ha UV vere e non entra nel "tutti o
+ * nessuno" dei pezzi dei kit. I dieci obbligatori sono quelli PRIMA di lui e si
+ * contano cosi', senza una seconda costante da tenere allineata a mano. */
 typedef enum {
     BUILD_WALL, BUILD_DOOR, BUILD_WINDOW, BUILD_ROOF, BUILD_FLOOR, BUILD_STAIRS,
     BUILD_TOWER_BASE, BUILD_TOWER_MID, BUILD_TOWER_TOP, BUILD_TOWER_ROOF,
+    BUILD_KIT_COUNT,
+    BUILD_KEEP = BUILD_KIT_COUNT,
     BUILD_PART_COUNT
 } BuildPart;
 
