@@ -238,6 +238,13 @@ static const struct {
      * dichiarato lo stesso, e non sottinteso. */
     [BUILD_KEEP]        = { "assets/models/fort/modular_fort_01.gltf",           12,
                             { 15.84f, 13.50f, 15.84f }, 13.50f, true },
+
+    /* gothic_statue, misurata il 2026-09-08: 1,48 x 1,74 x 1,56 m, 1 mesh,
+     * 23.314 vertici, un materiale PBR. E' un file intero - pezzo -1 - ma con
+     * una taglia dichiarata, perche' non sta sulla griglia di BUILD_CELL: e'
+     * l'unico oggetto del catalogo che dica "tomba" invece di "sasso". */
+    [BUILD_STATUE]      = { "assets/models/statua.glb",                        -1,
+                            { 0 }, 1.74f, true },
 };
 
 /* Quanto puo' scostarsi l'ingombro misurato da quello dichiarato, per lato.
@@ -281,6 +288,7 @@ static const BuildMat gBuildMat[BUILD_PART_COUNT] = {
     [BUILD_TOWER_TOP]   = { "pietra",      2.5f, 1, false },
     [BUILD_TOWER_ROOF]  = { "pietra",      2.5f, 1, false },
     [BUILD_KEEP]        = { NULL,          0.0f, 0, true  },
+    [BUILD_STATUE]      = { NULL,          0.0f, 0, true  },
 };
 
 /* Sostituisce la texture di una mappa su TUTTI i materiali di un modello,
@@ -446,19 +454,32 @@ static bool PreparaPezzo(World *w, int i)
      * il secondo pezzo indicizzato - la cripta della domanda E - vorra' i
      * propri. Scriverli qui senza guardia vorrebbe dire che il secondo
      * sovrascrive in silenzio la torre. */
+    w->partScale[i] = MeshGroupScale(&scelto, BUILD_FILES[i].voluto,
+                                     BUILD_FILES[i].perAltezza);
+
+    /* keepHalf e keepHigh restano del solo mastio: sono la taglia della TORRE,
+     * e li leggono la spinta del giocatore e il taglio della camera. */
     if (i == BUILD_KEEP) {
-        w->keepScale = MeshGroupScale(&scelto, BUILD_FILES[i].voluto,
-                                      BUILD_FILES[i].perAltezza);
-        float lx = (scelto.box.max.x - scelto.box.min.x) * w->keepScale;
-        float lz = (scelto.box.max.z - scelto.box.min.z) * w->keepScale;
+        float lx = (scelto.box.max.x - scelto.box.min.x) * w->partScale[i];
+        float lz = (scelto.box.max.z - scelto.box.min.z) * w->partScale[i];
         w->keepHalf = 0.5f * ((lx > lz) ? lx : lz);
-        w->keepHigh = (scelto.box.max.y - scelto.box.min.y) * w->keepScale;
+        w->keepHigh = (scelto.box.max.y - scelto.box.min.y) * w->partScale[i];
     }
 
     InstModelCreateSubset(&w->partBatch[i], *m, w->partIdx[i], w->partIdxN[i]);
 
     MemFree(idx); MemFree(gr);
     return true;
+}
+
+/* La scala di un pezzo che e' un FILE INTERO e dichiara una taglia in metri.
+ * I pezzi dei kit non la dichiarano - stanno sulla griglia di BUILD_CELL e
+ * hanno 'voluto' a zero - e per loro la scala resta 1. */
+static float ScalaPezzoIntero(const Model *m, int i)
+{
+    if (BUILD_FILES[i].voluto <= 0.0f) return 1.0f;
+    MeshGroup g = { 0, m->meshCount, GetModelBoundingBox(*m) };
+    return MeshGroupScale(&g, BUILD_FILES[i].voluto, BUILD_FILES[i].perAltezza);
 }
 
 /* Tutti o nessuno: mezza casa e' peggio di una scatola. */
@@ -550,29 +571,31 @@ static void LoadBuildParts(World *w)
     TraceLog(LOG_INFO, "WORLD: %d pezzi per gli edifici modulari, %d con materiale proiettato",
              BUILD_KIT_COUNT, proiettati);
 
-    /* Il mastio del forte NON entra nel "tutti o nessuno" dei pezzi dei kit:
+    /* I pezzi facoltativi NON entrano nel "tutti o nessuno" dei pezzi dei kit:
      * quel controllo esiste perche' mezza casa e' peggio di una scatola, mentre
-     * una torre Kenney e' un edificio intero e giusto, solo stilizzato. Se il
-     * forte non c'e', o e' un altro pezzo di quello atteso, la torre resta
-     * quella di prima e non e' un errore. */
-    if (CaricaPezzo(w, BUILD_KEEP)) {
-        w->buildLoaded[BUILD_KEEP] = true;
-        LightApplyToModel(&w->buildPart[BUILD_KEEP]);
+     * una torre Kenney e una cripta senza statua sono cose intere e giuste. Se
+     * il file non c'e', o non e' il pezzo atteso, si ripiega e non e' un errore. */
+    for (int i = BUILD_KIT_COUNT; i < BUILD_PART_COUNT; i++) {
+        if (!CaricaPezzo(w, i)) continue;
+        w->buildLoaded[i] = true;
+        LightApplyToModel(&w->buildPart[i]);
 
-        if (PreparaPezzo(w, BUILD_KEEP)) {
-            w->hasKeep = true;
-            TraceLog(LOG_INFO,
-                     "WORLD: mastio %s pezzo %d (%d mesh, x%.2f -> %.1f m, "
-                     "semiampiezza %.2f m)%s",
-                     BUILD_FILES[BUILD_KEEP].file, BUILD_FILES[BUILD_KEEP].pezzo,
-                     w->partIdxN[BUILD_KEEP], (double)w->keepScale,
-                     (double)w->keepHigh, (double)w->keepHalf,
-                     InstModelReady(&w->partBatch[BUILD_KEEP]) ? ", a lotti" : "");
+        if (BUILD_FILES[i].pezzo >= 0) {
+            if (!PreparaPezzo(w, i)) {
+                TraceLog(LOG_INFO, "WORLD: %s pezzo %d non preparato, si ripiega",
+                         BUILD_FILES[i].file, BUILD_FILES[i].pezzo);
+                continue;
+            }
         } else {
-            /* Il modello resta caricato e verra' scaricato da WorldUnload:
-             * buildLoaded lo dice. Quello che non c'e' e' il pezzo. */
-            TraceLog(LOG_INFO, "WORLD: niente mastio, la torre resta quella del kit");
+            w->partScale[i] = ScalaPezzoIntero(&w->buildPart[i], i);
+            InstModelCreate(&w->partBatch[i], w->buildPart[i]);
         }
+
+        if (i == BUILD_KEEP) w->hasKeep = true;
+
+        TraceLog(LOG_INFO, "WORLD: pezzo %s x%.2f%s", BUILD_FILES[i].file,
+                 (double)w->partScale[i],
+                 InstModelReady(&w->partBatch[i]) ? ", a lotti" : "");
     }
 }
 
@@ -1235,7 +1258,7 @@ static void DrawTower(World *w, Vector3 pos, float rotDeg, float s, Color tint)
  * e si passa 1 per dirlo. */
 static void DrawKeep(World *w, Vector3 pos, float rotDeg, float s, Color tint)
 {
-    float k = w->keepScale * s;
+    float k = w->partScale[BUILD_KEEP] * s;
     PlacePart(w, BUILD_KEEP, pos, rotDeg, 0.0f, 0.0f, 0.0f, 0.0f,
               1.0f, (Vector3){ k, k, k }, tint);
 }
@@ -1387,6 +1410,29 @@ static int CryptDraw(World *w, const Prop *p, Color tint, bool aLotti)
         }
         messi++;
     }
+
+    /* La statua sta DI FIANCO al varco, non in mezzo: l'ingresso e' il punto in
+     * cui il giocatore corre, e una statua nel mezzo si prende una spallata.
+     * Sfalsata di mezzo posto oltre il bordo del varco, e arretrata di 1,6 m
+     * dall'anello, girata verso il centro. */
+    if (w->buildLoaded[BUILD_STATUE]) {
+        float hs = CryptHash(p, 0, 151);
+        int primoVuoto = (int)(hs * (float)CRYPT_POSTI);
+        if (primoVuoto >= CRYPT_POSTI) primoVuoto = CRYPT_POSTI - 1;
+
+        float passo = 2.0f * PI / (float)CRYPT_POSTI;
+        float ang   = ((float)primoVuoto - 0.8f) * passo;
+        float rad   = (CRYPT_RAGGIO + 1.6f) * p->scale;
+        Vector3 sp  = { p->pos.x + cosf(ang) * rad, 0.0f, p->pos.z + sinf(ang) * rad };
+        sp.y = WorldHeight(w, sp.x, sp.z);
+
+        float k = w->partScale[BUILD_STATUE] * p->scale;
+        /* Girata verso il centro: l'angolo del raggio, piu' mezzo giro. */
+        float yaw = -ang * RAD2DEG + 180.0f;
+        PlacePart(w, BUILD_STATUE, sp, yaw, 0.0f, 0.0f, 0.0f, 0.0f,
+                  1.0f, (Vector3){ k, k, k }, tint);
+    }
+
     return messi;
 }
 

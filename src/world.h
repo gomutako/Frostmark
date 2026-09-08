@@ -107,12 +107,16 @@ typedef struct {
      * giocatore sia il taglio della camera - un numero, due usi. */
     bool   hasKeep;
 
+    /* Il moltiplicatore che porta ogni pezzo alla sua taglia dichiarata. Per
+     * pezzo e non per il solo mastio: i pezzi facoltativi sono due, e il
+     * secondo non deve sovrascrivere i numeri del primo. */
+    float  partScale[BUILD_PART_COUNT];
+
     /* Il tumulo c'e' solo se l'asset della cripta e' un SET: con un modello a
      * una variante - la cripta del kit rimessa a mano - si disegna un oggetto
      * solo, come si e' sempre fatto. Senza questa guardia si vedrebbero quindici
      * copie della stessa lastra in cerchio. */
     bool   hasTumulo;
-    float  keepScale;
     float  keepHalf, keepHigh;
 } World;
 
