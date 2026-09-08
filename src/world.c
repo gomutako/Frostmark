@@ -242,9 +242,13 @@ static const struct {
     /* gothic_statue, misurata il 2026-09-08: 1,48 x 1,74 x 1,56 m, 1 mesh,
      * 23.314 vertici, un materiale PBR. E' un file intero - pezzo -1 - ma con
      * una taglia dichiarata, perche' non sta sulla griglia di BUILD_CELL: e'
-     * l'unico oggetto del catalogo che dica "tomba" invece di "sasso". */
+     * l'unico oggetto del catalogo che dica "tomba" invece di "sasso".
+     *
+     * TRE METRI e non i suoi 1,74 di scansione. L'ingombro non dice se il volume
+     * e' pieno: questa e' una filigrana, quasi tutta aria, e alla sua taglia
+     * vera si perde nell'erba come un rametto scuro. Visto, non dedotto. */
     [BUILD_STATUE]      = { "assets/models/statua.glb",                        -1,
-                            { 0 }, 1.74f, true },
+                            { 0 }, 3.0f, true },
 };
 
 /* Quanto puo' scostarsi l'ingombro misurato da quello dichiarato, per lato.
