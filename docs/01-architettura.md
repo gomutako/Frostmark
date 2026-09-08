@@ -394,6 +394,40 @@ giocatore, e il boss nasce esattamente a `cryptPos`. Prima nasceva dentro la
 lastra e ne usciva solo muovendosi; ora nasce nello spazio libero del tumulo.
 Misurato: la spinta dal centro della cripta muove di **0,00 m**.
 
+### Prop di dettaglio
+
+I sette prop "grandi" costano **sette punti** a testa da toccare: l'enum, la riga
+di `gExtProp`, il `switch` delle distanze, quello del ripiego procedurale, la
+lista di chi non proietta ombra, l'emissione nel `baker` e il suo resoconto.
+Per i cinque del sottobosco sarebbero trentacinque modifiche, e una di quelle
+chiederebbe di inventare una primitiva procedurale per una scaglia di corteccia
+da 20 cm.
+
+Quindi un pezzo di sottobosco è **una riga** in `src/propdefs.c`, e la stessa
+riga la leggono il gioco — per caricare, disegnare e collidere — e il `baker`,
+per emettere. `PropDetailOf()` torna **NULL** per i sette grandi, ed è quel NULL
+a decidere quale delle due regole si applica.
+
+**Niente primitiva di riserva, e niente solidità.** Un albero senza il suo asset
+resta un cilindro con una sfera sopra; un pezzo di sottobosco senza il suo asset
+**non esiste**. La seconda metà è quella che si dimentica: il raggio di
+collisione sta nel **mondo cotto**, quindi senza il controllo su `hasExtProp` il
+giocatore sbatterebbe contro tronchi invisibili.
+
+**Il tronco caduto è due cerchi.** È lungo 4,05 m e spesso 1,06, e la collisione
+di questo motore è un cerchio: uno sullo spessore lascerebbe attraversare le
+punte, uno che lo copre tutto sarebbe un muro invisibile largo quattro metri.
+I due stanno a metà lunghezza meno il raggio — così coprono il tronco senza
+sporgere — e ruotano con `p->rot`. La tabella lo dichiara con `lunghezza`, e chi
+ha una lunghezza deve avere anche un raggio.
+
+**Il sottobosco nasce in una seconda passata.** In foresta la catena di
+`GenChunkProps()` riempie già il 95,5% delle celle, quindi metterlo lì vorrebbe
+dire toglierlo agli alberi. Ha la sua griglia 8×8 — più larga della 10×10 della
+vegetazione, perché deve essere sparso e non tappezzare — e **sali d'hash tutti
+suoi**: condividendoli, i tronchi comparirebbero sempre accanto agli stessi
+alberi.
+
 ### Materiali proiettati
 
 I pezzi modulari degli edifici vengono da due kit Kenney e **non hanno UV

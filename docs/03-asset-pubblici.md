@@ -113,6 +113,14 @@ quanto è *fuori scala* — e alcuni lo sono parecchio:
 | `gothic_statue` | 27.739 | 23.314 | opaco | **sì — la statua della cripta**, ma non alla sua taglia |
 | `namaqualand_boulders_01` | 40.850 | 12.909 | opaco | **no**: si chiamano *boulders* e sono ciottoli da 0,34 m |
 | `namaqualand_rocks_01` | 85.716 | 12.996 | opaco | **no**: è ghiaia da 0,22 m |
+| `tree_stump_01` | 41.046 | 22.472 | opaco | **sì — il ceppo del sottobosco** |
+| `dead_tree_trunk_02` | 83.128 | 46.112 | opaco | **sì — il tronco caduto**, l'unico solido |
+| `pine_roots` | 162.693 | 43.897 | opaco | **sì — le radici**, set di due |
+| `dry_branches_medium_01` | 16.803 | 4.252 | opaco | **sì — i rami**, set di tre |
+| `bark_debris_01` | 193.406 | 39.748 | opaco | **sì — la corteccia**, set di quattro |
+| `quiver_tree_02` | 82.074 | 49.005 | opaco | sotto il tetto, ma è alto **1,47 m** |
+| `island_tree_02` | 1.072.213 | **625.401** | BLEND | **no**, ed è alto 3,41 m |
+| `pine_tree_01` | 17.182.252 | **6.784.746** | BLEND | **no**: 958 MB |
 
 **Il tetto vero non è il conteggio dei triangoli: è quello dei vertici.** Il
 `Mesh` di raylib 5.5 tiene gli indici in `unsigned short`, quindi oltre **65.535
@@ -492,6 +500,25 @@ legge `texture.mipmaps` e, se ne trova uno solo, ripiega su `GL_LINEAR` con un
 avviso in registro. Chiamandolo prima di `GenTextureMipmaps()` i mipmap si
 generano e non si usano — la parete lontana sfarfalla e nessuno capisce
 perché. Prima i mipmap, poi il filtro.
+
+### Il catalogo si misura senza scaricarlo
+
+Il conteggio dei vertici per primitiva sta negli **accessori del `.gltf`**, e un
+`.gltf` pesa fra i 10 e i 70 KB: il `.bin` e le texture, che sono i megabyte, non
+servono per saperlo. Con questo si misurano **145 modelli vegetali in pochi
+minuti** invece di scaricare gigabyte.
+
+Fatto il 2026-09-08, e ha corretto una convinzione: **109 dei 145 stanno sotto il
+tetto dei 65.535 vertici**. La frase «nessun albero CC0 sta sotto il tetto» era
+falsa alla lettera. Ma quelli che ci stanno sono **piccoli** — `quiver_tree_02`
+entra con 16.530 vertici di margine ed è alto 1,47 m — e quelli grandi non sono
+appena sopra: `pine_tree_01` è a **6,7 milioni di vertici e 958 MB**.
+
+Il vincolo vero non è l'indirizzamento a 16 bit ma il **peso**. Uno spezzatore di
+mesh sbloccherebbe un asset solo.
+
+Nota sull'API: rifiuta lo User-Agent predefinito di Python con un 403. Va messa
+un'intestazione, o si usa `curl` come fa `fetch_assets.sh`.
 
 ### Due modi in cui un asset inganna
 

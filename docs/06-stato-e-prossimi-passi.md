@@ -5,7 +5,14 @@
 > aperte. Gli altri documenti spiegano *come funziona* il gioco; questo dice
 > *a che punto siamo*.
 
-**Ultimo aggiornamento:** 8 settembre 2026, dopo il mastio e il tumulo.
+**Ultimo aggiornamento:** 8 settembre 2026, dopo il mastio, il tumulo e il
+sottobosco.
+
+> **Il mondo è stato ricotto e il risultato è nel repository.** I prop del
+> sottobosco nascono nel mondo cotto, e `assets/world/` è versionata: chi
+> aggiorna li riceve e non deve lanciare niente. Chi invece **cambia la
+> generazione** deve ricuocere *e committare* `props.bin`, o il suo mondo e
+> quello del repository divergono in silenzio.
 
 ---
 
@@ -23,7 +30,7 @@ la risposta non è stata trovare l'oggetto ma **comporlo**:
 | # | pezzo | stato |
 |---|---|---|
 | 1 | **erba** | **fatto** — `celandine_01`, cinque varianti |
-| 2 | **alberi e pini** | **bloccato**: nessun albero CC0 sta sotto il tetto dei vertici. È la domanda **B** |
+| 2 | **alberi e pini** | **risolta diversamente** — restano stilizzati, ma il suolo sotto è vero. È la domanda **B** |
 | 3 | **edifici** | **fatto** — materiali proiettati sui dieci pezzi modulari |
 | 4 | **torre** | **fatto** — `tower_round`, il pezzo 12 dei venti di `modular_fort_01` |
 | 5 | **cripta** | **fatto** — un tumulo di massi con un varco. È la domanda **E** |
@@ -49,7 +56,10 @@ la risposta non è stata trovare l'oggetto ma **comporlo**:
   5,5 m con un varco da 2,99 — *6 mesh, 6 varianti, ×0,83 → 2,8 m per masso* —
   e `gothic_statue` a fianco dell'ingresso, portata a 3 m. Ci si entra: la
   collisione è un cerchio per masso, e il centro resta libero perché è lì che
-  nasce il boss.
+  nasce il boss;
+- **sottobosco**: ceppi, tronchi caduti, radici, rami e scaglie di corteccia —
+  cinque tipi, **35.653 prop** su un mondo che ne conta ora **204.386** contro i
+  168.733 di prima. Il tronco è l'unico solido, ed è due cerchi sul suo asse.
 
 ### Cosa è ancora stilizzato
 
@@ -74,10 +84,19 @@ attraversano l'oggetto. `boulder_01` è la trappola perfetta: 66.122 triangoli
 sembrano innocui, sono 67.042 vertici. `LoadExtProps()` **scarta** i modelli
 oltre il tetto e torna alla primitiva procedurale.
 
-**2. Nessun albero del catalogo CC0 sta sotto quel tetto.** Il più vicino,
-`quiver_tree_01`, manca per 3.787 vertici; `island_tree_02` ne ha 625.401 in una
-primitiva sola. Non è una questione di specie o di bioma: **non ce n'è uno
-caricabile**.
+**2. Il vincolo sugli alberi non è il tetto: è il peso.** Misurati tutti e 145 i
+modelli vegetali del catalogo — leggendo gli accessori dei `.gltf`, senza
+scaricare un `.bin` — **109 stanno sotto il tetto**, quindi la vecchia frase
+«non ce n'è uno caricabile» era falsa alla lettera.
+
+Ma quelli che ci stanno sono **piccoli**: `quiver_tree_02` entra con 16.530
+vertici di margine ed è alto **1,47 m**, `quiver_tree_01` 2,72 m, `island_tree_02`
+3,41 m con 625.401 vertici. E quelli veri non sono appena sopra il tetto:
+`fir_tree_01` è 487 MB, `pine_tree_01` **958 MB**.
+
+Il catalogo non ha alberi grandi ed economici: ha **alberelli costosissimi**.
+Reindicizzare le mesh risolverebbe gli indici e non il peso, quindi sbloccherebbe
+**un asset solo**, alto due metri e settanta e di specie desertica.
 
 **3. Metà del catalogo vegetale è fatto di *set di varianti*, e non è più un
 ostacolo.** `shrub_02` sono quattro cespugli diversi in fila su sei metri.
@@ -122,13 +141,34 @@ disegnare dalla posizione. Il mondo cotto non è stato toccato. Design in
 Restano fuori e restano YAGNI: i **pesi per variante** (una comune, tre rare) e
 le varianti dichiarate a mano.
 
-### B. Spezzare le mesh oltre il tetto — aperta
+### B. Gli alberi — **RISOLTA DIVERSAMENTE**
 
-È l'unico modo per usare gli alberi realistici: dividere una primitiva da
-625.000 vertici in blocchi da 65.535, reindicizzando. C'è anche un problema di
-peso, non solo di indici: `fir_tree_01` è 478 MB di sola geometria. Da valutare
-se ne valga la pena, o se gli alberi stilizzati siano un prezzo accettabile con
-tutto il resto realistico.
+Non si scrive nessuno spezzatore di mesh, e la ragione sta nel vincolo 2 qui
+sopra: reindicizzare risolve gli indici, non il peso, e sbloccherebbe un asset
+solo — `quiver_tree_01`, alto 2,72 m e di specie desertica.
+
+Gli alberi restano stilizzati. Diventa realistico **il suolo su cui poggiano**:
+cinque tipi di sottobosco, che il catalogo ha in abbondanza e della taglia
+giusta. Design in `docs/superpowers/specs/2026-09-08-sottobosco-design.md`,
+funzionamento in `docs/01`, sezione *Prop di dettaglio*.
+
+Tre cose imparate qui:
+
+- **il catalogo si misura senza scaricarlo**: i vertici per primitiva stanno
+  negli accessori del `.gltf`, che pesa decine di KB. 145 modelli in pochi
+  minuti, ed è così che si è scoperto che la vecchia conclusione era giusta per
+  la ragione sbagliata;
+- **aggiungere un tipo di prop costava sette punti**, non sei come credevo
+  scrivendo il design: mi ero dimenticato il resoconto del `baker`, che stampava
+  `(null)` per i cinque tipi nuovi — `printf("%s", NULL)` è comportamento
+  indefinito, ed è la stessa trappola che `world.c` documenta da mesi;
+- **niente asset vuol dire niente prop**, e la metà che conta è la collisione: il
+  raggio sta nel mondo cotto, quindi un prop senza modello resterebbe solido e
+  invisibile.
+
+**Resta aperto:** se un giorno il catalogo avrà un albero grande a un peso
+utilizzabile, la strada è già misurata. `quiver_tree_02`, alto 1,47 m, potrebbe
+invece diventare un arbusto.
 
 ### C. I personaggi — aperta, e la più grossa
 
@@ -209,15 +249,16 @@ make prove      # le prove, esce non-zero se qualcosa non torna
 make valida     # dati e mondo cotto
 ```
 
-`make prove` compila ed esegue i **nove** file in `tools/prove/`. Non c'è un
+`make prove` compila ed esegue i **dieci** file in `tools/prove/`. Non c'è un
 framework: una prova è un eseguibile che stampa una riga per controllo. Chi esce
-77 non ha trovato un contesto OpenGL e viene contata come saltata. **Quattro**
+77 non ha trovato un contesto OpenGL e viene contata come saltata. **Cinque**
 non aprono nessuna finestra e girano ovunque: `scale`, che prova la collisione
 con le scale dentro le case; `varianti`, che prova il raggruppamento delle mesh
 e la scelta della variante; `mastio`, che prova la scelta di un pezzo per indice
-e la guardia sull'ingombro; e `tumulo`, che prova l'anello della cripta — che il
-centro sia libero, che il varco sia uno solo e che l'anello sia chiuso altrove.
-Geometria pura, senza GPU.
+e la guardia sull'ingombro; `tumulo`, che prova l'anello della cripta — che il
+centro sia libero, che il varco sia uno solo e che l'anello sia chiuso altrove;
+e `sottobosco`, che prova la tabella dei prop di dettaglio, i due cerchi del
+tronco e il tetto per chunk. Geometria pura, senza GPU.
 
 ### Le prove si verificano sabotandole, e non è una formalità
 

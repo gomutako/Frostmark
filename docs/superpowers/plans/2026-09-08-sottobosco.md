@@ -27,8 +27,9 @@ gli alberi.
   solido**. Senza la seconda metà, il giocatore sbatterebbe contro tronchi
   invisibili, perché il raggio sta nel mondo cotto.
 - **Il mondo si ricuoce**, e questa volta è necessario: `make mondo`. Non rompe
-  salvataggi — `assets/world/` non è versionato e `SaveData` non indicizza i
-  prop — ma va detto nei documenti.
+  salvataggi, perché `SaveData` non indicizza i prop. `assets/world/` **è
+  versionata** (correzione a una stesura precedente di questo piano, che diceva
+  il contrario): il risultato della ricottura va quindi **committato**.
 - **Tetto dei vertici: 65.535 per primitiva.** Il peggiore dei cinque ne ha
   46.112.
 - **`MAX_PROPS_PER_CHUNK` è 160**, e `baker` conta i `fullChunks`: quel numero

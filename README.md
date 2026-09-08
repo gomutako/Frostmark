@@ -195,6 +195,9 @@ momento `assets/world/` è la sorgente di verità: versionata nel repository,
 
 ```bash
 make mondo             # cuoce assets/world/ se non c'è (2 s)
+                       # serve solo a chi CAMBIA la generazione: il mondo
+                       # e' versionato, quindi chi aggiorna lo riceve gia' cotto
+                       # - e chi lo ricuoce deve committare props.bin
 make mondo-forza       # ricuoce, cancellando le modifiche fatte a mano
 make verifica-mondo    # confronta il mondo cotto con quello generato dal seme
 ./baker --seme 12345 --out /tmp/altro-mondo

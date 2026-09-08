@@ -208,14 +208,19 @@ passaggio d'ombra salta già.
 Il mondo cotto va rigenerato con `make mondo`, e questa volta è necessario: i
 prop nuovi nascono lì.
 
-Non rompe niente, ed è verificato: `assets/world/` **non è versionato** — è un
-artefatto locale — e il salvataggio **non indicizza i prop**. `SaveData` in
-`src/save.c` contiene giocatore, inventario, quest e contatori; lo stato `taken`
-dei prop non c'è, e `worldio.c` lo azzera a ogni caricamento. Un mondo ricotto
-con lo stesso seme accoglie un salvataggio esistente senza accorgersene.
+Non rompe i salvataggi, e questa metà è verificata: il salvataggio **non
+indicizza i prop**. `SaveData` in `src/save.c` contiene giocatore, inventario,
+quest e contatori; lo stato `taken` dei prop non c'è, e `worldio.c` lo azzera a
+ogni caricamento. Un mondo ricotto con lo stesso seme accoglie un salvataggio
+esistente senza accorgersene.
 
-Va però **detto nei documenti**: chi aggiorna il repo e non lancia `make mondo`
-non vede il sottobosco e non capisce perché.
+**Correzione a una versione precedente di questa spec**, che diceva
+`assets/world/` non versionata: **lo è**, sei file per 15 MB. La verifica era
+stata fatta con un `git ls-files assets/ | head -5`, che mostrava solo i primi
+file e non arrivava a `world/`. Ne discende il contrario di quel che avevo
+scritto: il mondo ricotto **va committato**, e chi aggiorna il repository lo
+riceve senza dover lanciare niente. È chi *cambia la generazione* a dover
+ricuocere e committare il risultato.
 
 ## Le prove
 

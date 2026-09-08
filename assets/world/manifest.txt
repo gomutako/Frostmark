@@ -1,7 +1,7 @@
 # ============================================================================
 #  manifest.txt - carta d'identita' del mondo cotto.
 #
-#  Lo ha scritto tools/baker in 2.11 s. Il seme non serve piu' al gioco: e'
+#  Lo ha scritto tools/baker in 2.61 s. Il seme non serve piu' al gioco: e'
 #  qui perche' si sappia da dove viene questo mondo e perche' un salvataggio
 #  fatto in un altro mondo si possa riconoscere e rifiutare.
 #
@@ -20,5 +20,5 @@ campioni        = 2049
 # Informativi: il gioco li legge ma non li usa per decidere.
 quota_minima    = 6.35
 quota_massima   = 132.52
-prop            = 168733
+prop            = 204386
 generato        = Frostmark 1.0.0 baker
