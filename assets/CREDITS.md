@@ -29,3 +29,4 @@ richiedono attribuzione: serve a dimostrare la provenienza in caso di dubbi.
 | assets/textures/tetto_legno_diff.jpg | Poly Haven | https://polyhaven.com/a/roof_planks | CC0 | 2026-09-08 |
 | assets/textures/assito_diff.jpg | Poly Haven | https://polyhaven.com/a/plank_flooring | CC0 | 2026-09-08 |
 | assets/textures/pietra_diff.jpg | Poly Haven | https://polyhaven.com/a/castle_wall_slates | CC0 | 2026-09-08 |
+| assets/models/fort/modular_fort_01.gltf | Poly Haven | https://polyhaven.com/a/modular_fort_01 | CC0 | 2026-09-08 |

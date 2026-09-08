@@ -16,6 +16,7 @@
 #        ./tools/fetch_assets.sh models     scarica i modelli CC0 di Kenney
 #        ./tools/fetch_assets.sh rocce      scarica un masso fotogrammetrico CC0
 #        ./tools/fetch_assets.sh polyhaven <asset> <nome>   un asset CC0 qualsiasi
+#        ./tools/fetch_assets.sh forte     scarica il kit modulare della fortezza
 #        ./tools/fetch_assets.sh player     scarica il personaggio animato CC0
 #        ./tools/fetch_assets.sh npc        scarica i personaggi animati degli NPC
 #        ./tools/fetch_assets.sh font       scarica i font dell'interfaccia (OFL)
@@ -123,6 +124,45 @@ if [ "${1:-}" = "texture" ]; then
             "$DEST" "$ASSET" "$(date +%Y-%m-%d)" >> "$ASSETS/CREDITS.md"
         echo "  aggiunta la riga in assets/CREDITS.md"
     fi
+    exit 0
+fi
+
+# ---- kit modulari (Poly Haven) --------------------------------------------
+#  Un kit modulare e' UN file con dentro molti pezzi: modular_fort_01 ne ha
+#  venti, e 45 primitive in tutto. Il gioco li separa da se' - due mesh sono lo
+#  stesso pezzo se i loro ingombri XZ si toccano - e ne indirizza uno per
+#  indice, quindi qui non si spezza niente: si scarica il file com'e'.
+#
+#      ./tools/fetch_assets.sh forte
+#
+#  Lascia assets/models/fort/ con il .gltf, il suo .bin e le sue texture. La
+#  cartella e' sua perche' il .gltf nomina il .bin e le texture per come stanno
+#  nel pacchetto: rinominarli o spostarli lo romperebbe.
+#
+#  Senza questo file la torre resta quella del kit Kenney, e non e' un errore.
+if [ "${1:-}" = "forte" ]; then
+    for cmd in curl python3; do
+        command -v "$cmd" >/dev/null 2>&1 || { echo "serve $cmd"; exit 1; }
+    done
+
+    ASSET="modular_fort_01"
+    mkdir -p "$ASSETS/models/fort"
+
+    echo "cerco $ASSET su polyhaven.com..."
+    curl -sSL "https://api.polyhaven.com/files/$ASSET" -o "$ASSETS/.ph.json"
+    python3 "$ROOT/tools/polyhaven_get.py" "$ASSETS/.ph.json" \
+            "$ASSETS/models/fort" "$ASSET.gltf"
+    rm -f "$ASSETS/.ph.json"
+
+    if ! grep -q "assets/models/fort/$ASSET.gltf" "$ASSETS/CREDITS.md" 2>/dev/null; then
+        printf '| assets/models/fort/%s.gltf | Poly Haven | https://polyhaven.com/a/%s | CC0 | %s |\n' \
+            "$ASSET" "$ASSET" "$(date +%Y-%m-%d)" >> "$ASSETS/CREDITS.md"
+        echo "  aggiunta la riga in assets/CREDITS.md"
+    fi
+
+    echo
+    echo "fatto. Per tornare alla torre del kit:"
+    echo "  rm -r assets/models/fort"
     exit 0
 fi
 
