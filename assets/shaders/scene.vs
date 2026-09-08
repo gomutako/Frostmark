@@ -27,7 +27,12 @@ out vec3 fragLocal;
 out vec3 fragLocalNormal;
 out vec2 fragYawSC;       /* seno e coseno dell'imbardata */
 out vec3 fragInvScale;
-out vec2 fragProjOffset;  /* sfalsamento per istanza, in metri */
+/* Lo sfalsamento per istanza: la posizione dell'istanza riportata negli ASSI
+ * DEL PEZZO, in metri. Si somma alla posizione prima di proiettare, non alla
+ * UV dopo - vedi PosProiezione() in scene.fs - quindi qui deve gia' essere
+ * ruotata all'indietro dell'imbardata, o due pannelli affiancati della stessa
+ * parete non hanno le file di assi alla stessa quota. */
+out vec3 fragProjOffset;
 
 void main()
 {
@@ -52,7 +57,12 @@ void main()
     fragLocalNormal = vertexNormal;
     fragYawSC       = vec2(-ax.z, ax.x);
     fragInvScale    = 1.0 / max(sc, vec3(1e-6));
-    fragProjOffset  = vec2(matModel[3].x, matModel[3].z);
+    /* La rotazione all'indietro: RuotaY() con il seno cambiato di segno.
+     * Qui non c'e' la funzione perche' non c'e' un dato d'istanza da ruotare;
+     * il seno e il coseno sono quelli appena estratti da matModel. */
+    vec3 wp = matModel[3].xyz;
+    fragProjOffset  = vec3(fragYawSC.y * wp.x - fragYawSC.x * wp.z, wp.y,
+                           fragYawSC.x * wp.x + fragYawSC.y * wp.z);
 
     gl_Position = mvp * vec4(vertexPosition, 1.0);
 }

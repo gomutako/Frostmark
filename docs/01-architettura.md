@@ -351,6 +351,28 @@ hanno: la terna si costruisce dagli **assi della proiezione**, che sono gli
 assi dell'oggetto. Chi ha UV vere continua a passare da `SurfaceNormal()` e
 dalla tangente del `.glb`.
 
+**La bitangente si dichiara, non si ricava da `cross(n, t)`.** Qui `t` e `bt`
+non sono una terna generica: sono gli assi della proiezione, e la V ha una
+direzione *nota per costruzione* — la verticale dell'oggetto sulle facce
+laterali, la Z sulle facce orizzontali. Il prodotto vettore dà una terna
+destrorsa, che coincide con quella direzione solo su **metà** degli
+orientamenti: per l'asse dominante X con normale +X, per l'asse Z con normale
+−Z e per l'asse Y con normale +Y il verso esce rovesciato. Dentro la stessa
+casa la parete rivolta a +Z e quella rivolta a −Z illuminavano le stesse
+scanalature in versi opposti — solchi su una, nervature sull'altra — e il piano
+del solaio era fra le rovesciate. Entrambi gli assi si raddrizzano poi rispetto
+alla normale (Gram-Schmidt), che serve solo alla falda del tetto, dove la
+normale non sta su un asse. Il blocco 8 di `tools/prove/proiezione.c` lo
+inchioda: la stessa mesh con la normale rovesciata, sotto lo stesso sole, deve
+illuminarsi allo stesso modo.
+
+**Il passaggio d'ombra non paga la proiezione.** Un frammento opaco esce da
+`main()` subito, prima ancora del prelievo dell'albedo: il suo colore non lo
+guarda nessuno, e sul tetto il modo 2 costava tre prelievi per frammento in
+ogni cascata, buttati. Chi ha il ritaglio dell'alfa — le foglie — resta sulla
+strada lunga, perché lì il colore decide la profondità e senza il `discard`
+l'ombra di una fronda sarebbe un rettangolo.
+
 **L'interruttore viaggia per lotto**, esattamente come `alphaCut`:
 `InstProjection(lotto, modo, passo)` lo imposta prima del disegno e
 `InstFlush()` lo rimette a zero prima di uscire, perché il lotto successivo
@@ -391,28 +413,46 @@ inquadratura di una parete differisce su **1.112 pixel su 921.600**, tutti sul
 contorno di oggetti lontani e sullo zoccolo, e la superficie del muro è
 identica a pixel.
 
-**Limite noto: le file di assi non combaciano fra pannelli adiacenti della
-stessa casa.** Lo sfalsamento che evita trenta case con la venatura identica
-somma alla coordinata di texture la posizione dell'istanza, `(x, z)` di mondo,
-**senza distinguere l'asse**: su una parete la componente Z finisce sulla
-verticale. Ogni pannello è un'istanza a una posizione diversa, quindi il conto
-è una funzione dell'imbardata della casa. Per due pannelli affiancati di una
-stessa parete, con passo 2,0 m e cella 2,6:
+**Lo sfalsamento si somma alla POSIZIONE, prima di proiettare.** Serve a due
+cose insieme, e il modo in cui lo si applica decide se la seconda funziona:
+
+1. differenziare le case fra loro — senza, trenta case avrebbero la venatura
+   identica nello stesso punto del proprio corpo;
+2. **tenere insieme i pannelli della stessa parete**, che è la parte che si
+   sbagliava.
+
+L'istanza qui **non è la casa: è il pannello.** `DrawHouse()` colloca muri,
+porte, finestre e solai cella per cella, e ognuno è un'istanza a una posizione
+diversa. La prima versione sommava la posizione dell'istanza alla coordinata di
+texture *dopo* la proiezione, e per giunta senza distinguere l'asse: su una
+parete la componente Z finiva sulla verticale, e il salto fra due pannelli
+affiancati diventava una funzione dell'imbardata della casa. Misurato sullo
+schermo, con passo 2,0 m e cella 2,6, correlando le due metà di un giunto:
 
 | imbardata | scorrimento orizzontale | scorrimento verticale |
 |---|---|---|
 | 88,6 gradi (caso migliore) | 0,8 mm | 6,4 cm |
 | 191,2 gradi | 1,10 m | 55 cm |
 
-Lo scorrimento verticale è stato **previsto dal conto e poi misurato sullo
-schermo**, correlando le due metà di un giunto: 11 pixel a 88,6 gradi, cioè
-6,4 cm alla scala di quell'inquadratura, contro i 6,35 cm previsti; 109 pixel a
-191,2 gradi, cioè 56 cm, contro i 55 previsti. Il primo caso si nota guardando;
-il secondo si vede a occhio nudo da tre metri. Lo stesso vale fra i segmenti di
-tetto affiancati lungo il colmo, dove il salto si legge come una riga di
-scandole sfalsata. La correzione — sfalsare la sola U, oppure quantizzare lo
-sfalsamento al passo — non è stata fatta qui: cambia il modo in cui le case si
-differenziano fra loro, ed è una decisione di design.
+La correzione: il vertex shader passa al fragment la posizione dell'istanza
+**riportata negli assi del pezzo** — ruotata all'indietro dell'imbardata — e il
+fragment proietta `fragLocal + fragProjOffset` (`PosProiezione()`), una
+posizione sola per l'albedo e per il rilievo. Sommarla prima di proiettare
+rende la parete un **campo continuo**: due pannelli affiancati della stessa
+parete differiscono solo lungo la direzione della parete, che è lo stesso asse
+su cui corre la U, quindi il motivo prosegue attraverso il giunto invece di
+ripartire. La rotazione non tocca la Y, quindi le file restano alla stessa
+quota su tutti i pannelli dello stesso livello. La varietà fra case diverse
+resta, perché case diverse stanno in posti diversi.
+
+**Quantizzare lo sfalsamento al passo non era una correzione**, ed era scritto
+qui: un multiplo esatto del passo, dopo la divisione per il passo, campiona
+esattamente lo stesso texel: equivale a non avere sfalsamento affatto, cioè a
+trenta case identiche.
+
+**Limite noto e accettato:** agli spigoli, dove la rotazione locale del pezzo
+cambia di 90 gradi, il motivo non prosegue. Su uno spigolo di casa è una
+discontinuità attesa.
 
 ### Le prove
 

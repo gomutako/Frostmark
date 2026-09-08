@@ -234,6 +234,33 @@ static const BuildMat gBuildMat[BUILD_PART_COUNT] = {
     [BUILD_TOWER_ROOF]  = { "pietra",      2.5f, 1 },
 };
 
+/* Sostituisce la texture di una mappa su TUTTI i materiali di un modello,
+ * scaricando prima quella che sta per essere persa.
+ *
+ * Senza lo scarico l'id vecchio non e' piu' raggiungibile da nessuno:
+ * UnloadModel() liberera' la texture che la mappa contiene ALLORA, cioe' quella
+ * nuova, e la tavolozza del kit resta in memoria sulla scheda a ogni
+ * caricamento del mondo.
+ *
+ * Due esclusioni. La texture di riposo di rlgl e' condivisa da tutto il motore
+ * e non appartiene al modello. E un id gia' incontrato non si scarica due
+ * volte: due materiali dello stesso .glb possono puntare alla stessa texture,
+ * e la seconda UnloadTexture() colpirebbe un id ormai riassegnato a qualcun
+ * altro. */
+static void SostituisciMappa(Material *mats, int count, int mappa, Texture2D nuova)
+{
+    for (int k = 0; k < count; k++) {
+        unsigned int id = mats[k].maps[mappa].texture.id;
+        if (id == 0 || id == nuova.id || id == rlGetTextureIdDefault()) continue;
+
+        bool gia = false;
+        for (int j = 0; j < k; j++)
+            if (mats[j].maps[mappa].texture.id == id) { gia = true; break; }
+        if (!gia) UnloadTexture(mats[k].maps[mappa].texture);
+    }
+    for (int k = 0; k < count; k++) mats[k].maps[mappa].texture = nuova;
+}
+
 /* Tutti o nessuno: mezza casa e' peggio di una scatola. */
 static void LoadBuildParts(World *w)
 {
@@ -253,6 +280,17 @@ static void LoadBuildParts(World *w)
                              TEXTURE_FILTER_POINT);
         LightApplyToModel(&w->buildPart[i]);
 
+        /* gBuildMat e' a inizializzatori designati: un BUILD_* aggiunto senza
+         * la sua riga esce { NULL, 0, 0 }, e passare NULL a %s e' comportamento
+         * indefinito - glibc stampa "(null)", altre librerie non promettono
+         * niente. Il pezzo resta alla tavolozza del kit e al modo 0, che e'
+         * esattamente cio' che succede quando le texture non ci sono. */
+        if (gBuildMat[i].nome == NULL) {
+            TraceLog(LOG_WARNING, "WORLD: pezzo %d senza riga in gBuildMat, niente proiezione", i);
+            InstModelCreate(&w->partBatch[i], w->buildPart[i]);
+            continue;
+        }
+
         /* Il materiale proiettato sostituisce la tavolozza del kit. Se i file
          * non ci sono si resta alla tavolozza e al modo 0: il gioco funziona
          * senza assets/, e questo non e' un caso d'errore. */
@@ -266,21 +304,34 @@ static void LoadBuildParts(World *w)
          * genererebbero e non si userebbero, e una parete lontana sfarfalla. */
         if (FileExists(diff)) {
             Texture2D td = LoadTexture(diff);
-            GenTextureMipmaps(&td);
-            SetTextureFilter(td, TEXTURE_FILTER_TRILINEAR);
-            SetTextureWrap(td, TEXTURE_WRAP_REPEAT);
-            for (int k = 0; k < w->buildPart[i].materialCount; k++)
-                w->buildPart[i].materials[k].maps[MATERIAL_MAP_DIFFUSE].texture = td;
+            /* Il file c'e' ma puo' essere troncato: allora td.id resta 0.
+             * Accendere lo stesso la proiezione sarebbe peggio che spegnerla -
+             * InstFlush() non lega le mappe con id nullo, quindi texture0
+             * resterebbe quella del lotto precedente e l'edificio prenderebbe
+             * la texture di un altro oggetto invece della tavolozza. */
+            if (td.id != 0) {
+                GenTextureMipmaps(&td);
+                SetTextureFilter(td, TEXTURE_FILTER_TRILINEAR);
+                SetTextureWrap(td, TEXTURE_WRAP_REPEAT);
+                SostituisciMappa(w->buildPart[i].materials, w->buildPart[i].materialCount,
+                                 MATERIAL_MAP_DIFFUSE, td);
 
-            if (FileExists(nor)) {
-                Texture2D tn = LoadTexture(nor);
-                GenTextureMipmaps(&tn);
-                SetTextureFilter(tn, TEXTURE_FILTER_TRILINEAR);
-                SetTextureWrap(tn, TEXTURE_WRAP_REPEAT);
-                for (int k = 0; k < w->buildPart[i].materialCount; k++)
-                    w->buildPart[i].materials[k].maps[MATERIAL_MAP_NORMAL].texture = tn;
+                if (FileExists(nor)) {
+                    Texture2D tn = LoadTexture(nor);
+                    if (tn.id != 0) {
+                        GenTextureMipmaps(&tn);
+                        SetTextureFilter(tn, TEXTURE_FILTER_TRILINEAR);
+                        SetTextureWrap(tn, TEXTURE_WRAP_REPEAT);
+                        SostituisciMappa(w->buildPart[i].materials, w->buildPart[i].materialCount,
+                                         MATERIAL_MAP_NORMAL, tn);
+                    } else {
+                        TraceLog(LOG_WARNING, "WORLD: %s non caricata, rilievo piatto", nor);
+                    }
+                }
+                w->buildProj[i] = true;
+            } else {
+                TraceLog(LOG_WARNING, "WORLD: %s non caricata, si resta alla tavolozza", diff);
             }
-            w->buildProj[i] = true;
         }
 
         InstModelCreate(&w->partBatch[i], w->buildPart[i]);

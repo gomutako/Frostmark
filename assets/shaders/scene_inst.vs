@@ -44,7 +44,12 @@ out vec3 fragLocal;
 out vec3 fragLocalNormal;
 out vec2 fragYawSC;       /* seno e coseno dell'imbardata */
 out vec3 fragInvScale;
-out vec2 fragProjOffset;  /* sfalsamento per istanza, in metri */
+/* Lo sfalsamento per istanza: la posizione dell'istanza riportata negli ASSI
+ * DEL PEZZO, in metri. Si somma alla posizione prima di proiettare, non alla
+ * UV dopo - vedi PosProiezione() in scene.fs - quindi qui deve gia' essere
+ * ruotata all'indietro dell'imbardata, o due pannelli affiancati della stessa
+ * parete non hanno le file di assi alla stessa quota. */
+out vec3 fragProjOffset;
 
 /* Rotazione attorno a Y con lo stesso verso di MatrixRotateY() di raymath:
  * x' = cos*x + sin*z, z' = -sin*x + cos*z. Sbagliare il segno qui specchia
@@ -89,7 +94,7 @@ void main()
     fragLocalNormal = vertexNormal;
     fragYawSC       = vec2(s, c);
     fragInvScale    = 1.0 / max(sc, vec3(1e-6));
-    fragProjOffset  = vec2(instPosSin.x, instPosSin.z);
+    fragProjOffset  = RuotaY(instPosSin.xyz, -s, c);
 
     gl_Position = matProjection * matView * vec4(world, 1.0);
 }

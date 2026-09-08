@@ -181,8 +181,10 @@ void LightSetAlphaCut(float cut)
         if (gProg[p].id != 0)
             SetShaderValue(gProg[p], locAlphaCut[p], &cut, SHADER_UNIFORM_FLOAT);
 }
+
 void LightSetProjection(int mode, float tile)
 {
+    if (!gReady) return;
     for (int p = 0; p < PROG_COUNT; p++) {
         if (gProg[p].id == 0) continue;
         SetShaderValue(gProg[p], locProjMode[p], &mode, SHADER_UNIFORM_INT);

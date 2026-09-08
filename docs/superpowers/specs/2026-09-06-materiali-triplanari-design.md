@@ -82,11 +82,41 @@ in silenzio il giorno che l'asset cambia.
 
 Con la stessa mappatura in spazio oggetto, ogni casa avrebbe la venatura
 identica nello stesso punto: trenta copie della stessa parete. Il dato
-d'istanza porta già la posizione nel mondo, quindi la si usa per **sfalsare**
-la coordinata di texture. Una riga di shader, nessun dato nuovo.
+d'istanza porta già la posizione, quindi la si usa per **sfalsare**.
 
-Lo sfalsamento è una traslazione, non una rotazione: ruotare romperebbe la
-verticalità delle assi, che è la ragione per cui si proietta in spazio oggetto.
+> **Questa sezione diceva il falso, ed è l'origine di un difetto vero.**
+> Diceva: «il dato d'istanza porta già la posizione nel mondo, quindi la si usa
+> per sfalsare la coordinata di texture — una riga di shader, nessun dato
+> nuovo», e dava per scontato che l'istanza fosse la casa. **L'istanza è il
+> pannello.** Una casa è fatta di muri, porte, finestre e solai messi cella per
+> cella, e ognuno è un'istanza a una posizione diversa: sfalsare per istanza
+> non differenzia le case fra loro, differenzia i pannelli *dentro* la stessa
+> casa. Sommando lo sfalsamento alla UV *dopo* la proiezione, per giunta senza
+> distinguere l'asse, la componente Z della posizione finiva sulla verticale di
+> una parete: 55 cm di scorrimento fra due pannelli affiancati di una casa
+> ruotata di 191 gradi, misurati sullo schermo.
+
+**La regola giusta: lo sfalsamento si ruota negli assi del pezzo e si somma
+alla posizione, PRIMA di proiettare.** Il vertex shader passa al fragment la
+posizione dell'istanza già riportata negli assi del pezzo — cioè ruotata
+all'indietro dell'imbardata — e il fragment proietta `fragLocal +
+fragProjOffset`, una posizione sola per l'albedo e per il rilievo
+(`PosProiezione()` in `scene.fs`).
+
+Così la parete diventa un **campo continuo**: due pannelli affiancati della
+stessa parete differiscono solo lungo la direzione della parete, che è lo
+stesso asse su cui corre la U, quindi il motivo prosegue attraverso il giunto
+invece di ripartire. La rotazione non tocca la Y, quindi le file restano alla
+stessa quota su tutti i pannelli dello stesso livello. La varietà fra case
+diverse resta, perché case diverse stanno in posti diversi.
+
+Lo sfalsamento resta una traslazione della posizione, non una rotazione della
+texture: ruotare la texture romperebbe la verticalità delle assi, che è la
+ragione per cui si proietta in spazio oggetto.
+
+**Limite accettato:** agli spigoli, dove la rotazione locale del pezzo cambia
+di 90 gradi, il motivo non prosegue. Su uno spigolo di casa è una discontinuità
+attesa.
 
 ## La normal map
 

@@ -20,7 +20,6 @@
 #include "../../src/instancing.c"
 #include "prova.h"
 
-#include <string.h>
 #include <unistd.h>
 
 #define RT 120
@@ -251,6 +250,38 @@ static Texture2D NormaleADueMeta(void)
     return t;
 }
 
+/* Stessa geometria del quadrato piatto, ma con la normale dichiarata lungo -Y.
+ * Serve al blocco 8: e' lo stesso pezzo visto dalla faccia opposta, e la V
+ * della proiezione punta lungo +Z in tutti e due i casi. */
+static Mesh QuadratoNormaleGiu(void)
+{
+    static float v[18]  = { -2,0,-2,  -2,0,2,   2,0,2,
+                            -2,0,-2,   2,0,2,   2,0,-2 };
+    static float n[18]  = { 0,-1,0, 0,-1,0, 0,-1,0, 0,-1,0, 0,-1,0, 0,-1,0 };
+    static float uv[12] = { 0,0, 0,1, 1,1, 0,0, 1,1, 1,0 };
+
+    Mesh m = { 0 };
+    m.vertexCount = 6;
+    m.triangleCount = 2;
+    m.vertices = v; m.normals = n; m.texcoords = uv;
+    UploadMesh(&m, false);
+    return m;
+}
+
+/* Normal map costante che inclina la normale verso +V, cioe' lungo la
+ * BITANGENTE: in spazio tangente il vettore e' (0, 0.5, 0.74), quindi il verde
+ * e' l'unica componente che conta. Il blocco 6 usa la gemella lungo la
+ * tangente; qui serve l'altra, perche' il verso della bitangente e' proprio
+ * cio' che si sta misurando. */
+static Texture2D NormaleLungoV(void)
+{
+    Image im = GenImageColor(4, 4, (Color){ 128, 191, 222, 255 });
+    Texture2D t = LoadTextureFromImage(im);
+    SetTextureFilter(t, TEXTURE_FILTER_POINT);
+    UnloadImage(im);
+    return t;
+}
+
 /* Come SulQuadrato(), ma per il blocco 7: li' l'albedo e' bianco piatto
  * invece della rampa, quindi il segnale che dice se il pixel sta sul
  * quadrato e' la luminosita' intera, non il verde fisso della rampa. Sul
@@ -420,35 +451,37 @@ int main(void)
     Mesh obliqua = StrisciaObliqua();
     InstBatch *bo = InstCreate(obliqua, mat);
     Ok("lotto obliquo creato", bo != NULL);
+    if (bo != NULL) {
+        /* Passo largo: la rampa non deve ripetersi sulla striscia, o i suoi
+         * ritorni a zero sporcherebbero il confronto fra le due rese. */
+        InstProjection(bo, 1, 40.0f);
+        Image imDom = Rendi(rt, bo, 0.0f);
+        InstProjection(bo, 2, 40.0f);
+        Image imMix = Rendi(rt, bo, 0.0f);
+        int diversiObliqua = PixelDiversi(imDom, imMix);
 
-    /* Passo largo: la rampa non deve ripetersi sulla striscia, o i suoi ritorni
-     * a zero sporcherebbero il confronto fra le due rese. */
-    InstProjection(bo, 1, 40.0f);
-    Image imDom = Rendi(rt, bo, 0.0f);
-    InstProjection(bo, 2, 40.0f);
-    Image imMix = Rendi(rt, bo, 0.0f);
-    int diversiObliqua = PixelDiversi(imDom, imMix);
+        /* Sul quadrato piatto la normale e' esattamente +Y: il peso della
+         * miscela e' tutto su una proiezione sola, quindi i due modi devono
+         * dare la stessa immagine. E' il controllo che impedisce di far
+         * passare la miscela scrivendo qualcosa che cambia il colore
+         * dappertutto. */
+        InstProjection(b, 1, 40.0f);
+        Image imPiattoDom = Rendi(rt, b, 0.0f);
+        InstProjection(b, 2, 40.0f);
+        Image imPiattoMix = Rendi(rt, b, 0.0f);
+        int diversiPiatto = PixelDiversi(imPiattoDom, imPiattoMix);
 
-    /* Sul quadrato piatto la normale e' esattamente +Y: il peso della miscela
-     * e' tutto su una proiezione sola, quindi i due modi devono dare la stessa
-     * immagine. E' il controllo che impedisce di far passare la miscela
-     * scrivendo qualcosa che cambia il colore dappertutto. */
-    InstProjection(b, 1, 40.0f);
-    Image imPiattoDom = Rendi(rt, b, 0.0f);
-    InstProjection(b, 2, 40.0f);
-    Image imPiattoMix = Rendi(rt, b, 0.0f);
-    int diversiPiatto = PixelDiversi(imPiattoDom, imPiattoMix);
+        printf("  pixel diversi fra modo 1 e modo 2: obliqua %d, piatta %d\n",
+               diversiObliqua, diversiPiatto);
+        Ok("modo 2: sulla normale diagonale la miscela cambia il risultato",
+           diversiObliqua > 500);
+        Ok("modo 2: sulla normale su un asse la miscela non cambia niente",
+           diversiPiatto < 50);
 
-    printf("  pixel diversi fra modo 1 e modo 2: obliqua %d, piatta %d\n",
-           diversiObliqua, diversiPiatto);
-    Ok("modo 2: sulla normale diagonale la miscela cambia il risultato",
-       diversiObliqua > 500);
-    Ok("modo 2: sulla normale su un asse la miscela non cambia niente",
-       diversiPiatto < 50);
-
-    UnloadImage(imDom); UnloadImage(imMix);
-    UnloadImage(imPiattoDom); UnloadImage(imPiattoMix);
-    InstFree(bo);
+        UnloadImage(imDom); UnloadImage(imMix);
+        UnloadImage(imPiattoDom); UnloadImage(imPiattoMix);
+        InstFree(bo);
+    }
 
     UnloadImage(im0); UnloadImage(im1); UnloadImage(im90);
     UnloadImage(imP); UnloadImage(imQ);
@@ -467,18 +500,20 @@ int main(void)
 
     InstBatch *br = InstCreate(q, rilievo);
     Ok("lotto con rilievo creato", br != NULL);
-    InstProjection(br, 1, 2.0f);
+    if (br != NULL) {
+        InstProjection(br, 1, 2.0f);
 
-    Image imA = Rendi(rt, br, 0.0f);
-    Image imB = Rendi(rt, br, 180.0f);
-    float lumA = Luminosita(imA), lumB = Luminosita(imB);
-    printf("  luminosita': a 0 gradi %.1f, a 180 gradi %.1f\n",
-           (double)lumA, (double)lumB);
-    Ok("il rilievo gira con l'oggetto: 0 e 180 gradi non si illuminano uguale",
-       fabsf(lumA - lumB) > 4.0f);
+        Image imA = Rendi(rt, br, 0.0f);
+        Image imB = Rendi(rt, br, 180.0f);
+        float lumA = Luminosita(imA), lumB = Luminosita(imB);
+        printf("  luminosita': a 0 gradi %.1f, a 180 gradi %.1f\n",
+               (double)lumA, (double)lumB);
+        Ok("il rilievo gira con l'oggetto: 0 e 180 gradi non si illuminano uguale",
+           fabsf(lumA - lumB) > 4.0f);
 
-    UnloadImage(imA); UnloadImage(imB);
-    InstFree(br);
+        UnloadImage(imA); UnloadImage(imB);
+        InstFree(br);
+    }
 
     /* --- 7. il rilievo si campiona sulla coordinata proiettata, non le UV - */
     /* Le UV dei pezzi del kit stanno tutte in una cella della tavolozza: se
@@ -502,16 +537,61 @@ int main(void)
 
     InstBatch *bm = InstCreate(q, dueMeta);
     Ok("lotto a due meta' creato", bm != NULL);
-    InstProjection(bm, 1, 2.0f);
+    if (bm != NULL) {
+        InstProjection(bm, 1, 2.0f);
 
-    Image imFasce = Rendi(rt, bm, 0.0f);
-    int fasce = FasceInRiga(imFasce, RT / 2, 8);
-    printf("  fasce di luminosita' lungo la riga: %d\n", fasce);
-    Ok("il rilievo si campiona sulla coordinata proiettata, non sulle UV",
-       fasce >= 2);
+        Image imFasce = Rendi(rt, bm, 0.0f);
+        int fasce = FasceInRiga(imFasce, RT / 2, 8);
+        printf("  fasce di luminosita' lungo la riga: %d\n", fasce);
+        Ok("il rilievo si campiona sulla coordinata proiettata, non sulle UV",
+           fasce >= 2);
 
-    UnloadImage(imFasce);
-    InstFree(bm);
+        UnloadImage(imFasce);
+        InstFree(bm);
+    }
+
+    /* --- 8. la V della proiezione ha un verso solo ----------------------- */
+    /* La stessa mesh, una volta con la normale +Y e una con -Y, sotto lo
+     * stesso sole: la V della proiezione punta lungo +Z in tutti e due i
+     * casi - lo dice ProiettaUV(), che per l'asse Y torna (x, z) - quindi una
+     * normal map che inclina il rilievo verso +V deve illuminarle allo stesso
+     * modo.
+     *
+     * Ricavando la bitangente con cross(n, t) il verso si rovescia su meta'
+     * degli orientamenti: cross(+Y, +X) da' -Z, cross(-Y, +X) da' +Z. E'
+     * quello che faceva leggere come solchi, sulla parete a +Z della stessa
+     * casa, cio' che sulla parete a -Z si leggeva come nervature; il piano del
+     * solaio era fra i rovesciati. Il sole e' orizzontale lungo +Z apposta:
+     * cosi' l'unica cosa che cambia il pixel e' la componente Z del rilievo,
+     * cioe' proprio il verso della bitangente. */
+    LightSetSun((Vector3){ 0.0f, 0.0f, 1.0f }, 1.0f);
+    LightFrame(nulla);
+
+    Material lungoV = LoadMaterialDefault();
+    LightApplyToMaterial(&lungoV);
+    lungoV.maps[MATERIAL_MAP_DIFFUSE].texture = Bianca();
+    lungoV.maps[MATERIAL_MAP_NORMAL].texture  = NormaleLungoV();
+
+    Mesh qgiu = QuadratoNormaleGiu();
+    InstBatch *bsu  = InstCreate(q,    lungoV);
+    InstBatch *bgiu = InstCreate(qgiu, lungoV);
+    Ok("lotti per la normale rovesciata creati", bsu != NULL && bgiu != NULL);
+    if (bsu != NULL && bgiu != NULL) {
+        InstProjection(bsu,  1, 2.0f);
+        InstProjection(bgiu, 1, 2.0f);
+
+        Image imSu  = Rendi(rt, bsu,  0.0f);
+        Image imGiu = Rendi(rt, bgiu, 0.0f);
+        float lumSu = Luminosita(imSu), lumGiu = Luminosita(imGiu);
+        printf("  luminosita': normale +Y %.1f, normale -Y %.1f\n",
+               (double)lumSu, (double)lumGiu);
+        Ok("la bitangente non si inverte quando si rovescia la normale",
+           fabsf(lumSu - lumGiu) < 4.0f);
+
+        UnloadImage(imSu); UnloadImage(imGiu);
+    }
+    if (bsu  != NULL) InstFree(bsu);
+    if (bgiu != NULL) InstFree(bgiu);
 
     UnloadRenderTexture(rt);
     CloseWindow();

@@ -12,7 +12,7 @@ in vec3 fragLocal;
 in vec3 fragLocalNormal;
 in vec2 fragYawSC;
 in vec3 fragInvScale;
-in vec2 fragProjOffset;
+in vec3 fragProjOffset;
 
 uniform sampler2D texture0;   /* albedo   - raylib: MATERIAL_MAP_DIFFUSE */
 uniform sampler2D texture2;   /* normali  - raylib: MATERIAL_MAP_NORMAL  */
@@ -109,13 +109,26 @@ vec2 ProiettaUV(vec3 p, int asse)
     return vec2(p.x, p.z);
 }
 
+/* La posizione su cui si proietta: quella locale piu' la posizione
+ * dell'istanza riportata negli assi del pezzo. Sommarla PRIMA di proiettare, e
+ * non alla UV dopo, e' cio' che rende la parete un campo continuo: due pannelli
+ * affiancati della stessa parete differiscono solo lungo la direzione della
+ * parete, che e' lo stesso asse della U, quindi il motivo prosegue attraverso
+ * il giunto invece di ripartire. La rotazione non tocca la Y, quindi le file
+ * restano alla stessa quota su tutti i pannelli dello stesso livello.
+ *
+ * Sommarla alla UV dopo la proiezione - come si faceva prima - mandava la
+ * componente Z sulla verticale di una parete: 55 cm di scarto fra due pannelli
+ * della stessa casa, misurati.
+ *
+ * Serve anche a dare varieta': senza, trenta case avrebbero la venatura
+ * identica nello stesso punto del proprio corpo. */
+vec3 PosProiezione() { return fragLocal + fragProjOffset; }
+
 vec2 CoordProiettata()
 {
-    vec2 uv = ProiettaUV(fragLocal, AsseDominante(fragLocalNormal));
-    /* Lo sfalsamento e' una TRASLAZIONE, non una rotazione: ruotare romperebbe
-     * la verticalita' delle assi, che e' la ragione dello spazio oggetto.
-     * Senza, trenta case avrebbero la venatura identica nello stesso punto. */
-    return (uv + fragProjOffset) / max(projTile, 1e-4);
+    return ProiettaUV(PosProiezione(), AsseDominante(fragLocalNormal))
+           / max(projTile, 1e-4);
 }
 
 /* Dove la normale e' diagonale l'asse dominante oscilla, e a meta' falda
@@ -128,11 +141,15 @@ vec4 CampionaMiscelato(sampler2D tex)
     vec3 w = fragLocalNormal * fragLocalNormal;
     w /= max(w.x + w.y + w.z, 1e-4);
     float t = max(projTile, 1e-4);
-    vec2 o = fragProjOffset;
+    vec3 p = PosProiezione();
 
-    return texture(tex, (vec2(fragLocal.z, fragLocal.y) + o) / t) * w.x
-         + texture(tex, (vec2(fragLocal.x, fragLocal.z) + o) / t) * w.y
-         + texture(tex, (vec2(fragLocal.x, fragLocal.y) + o) / t) * w.z;
+    /* Le tre proiezioni le da' ProiettaUV(), non tre vec2 riscritte a mano:
+     * la regola di come si proietta deve stare in un posto solo, o i due posti
+     * si disallineano - ed e' gia' successo. Il peso va con l'asse che nomina:
+     * w.x con l'asse X (asse 1), w.y con Y (asse 0), w.z con Z (asse 2). */
+    return texture(tex, ProiettaUV(p, 1) / t) * w.x
+         + texture(tex, ProiettaUV(p, 0) / t) * w.y
+         + texture(tex, ProiettaUV(p, 2) / t) * w.z;
 }
 
 vec3 SurfaceNormal()
@@ -166,19 +183,34 @@ vec3 NormaleProiettata()
     int asse = AsseDominante(fragLocalNormal);
     vec3 n = normalize(fragLocalNormal);
 
-    /* La tangente e' l'asse lungo cui corre la U della proiezione. */
-    vec3 t = (asse == 1) ? vec3(0.0, 0.0, 1.0)
-           : (asse == 2) ? vec3(1.0, 0.0, 0.0)
-                         : vec3(1.0, 0.0, 0.0);
-    t = normalize(t - n * dot(n, t));
-    if (dot(t, t) < 1e-8) return normalize(RuotaYFrag(n * fragInvScale));
+    /* Tangente e bitangente sono gli ASSI DELLA PROIEZIONE: la U corre lungo
+     * il primo, la V lungo il secondo, e ProiettaUV() dice quali sono. Vanno
+     * dati tutti e due esplicitamente, e non la bitangente con cross(n, t):
+     * il prodotto vettore da' una terna destrorsa, non la direzione in cui
+     * cresce la V, e i due coincidono solo su meta' degli orientamenti. Con
+     * cross() la parete rivolta a +Z e quella rivolta a -Z della stessa casa
+     * illuminavano le stesse scanalature in versi opposti - solchi su una,
+     * nervature sull'altra - e il piano del solaio era fra le rovesciate. */
+    vec3 t, bt;
+    if      (asse == 1) { t = vec3(0.0, 0.0, 1.0); bt = vec3(0.0, 1.0, 0.0); }
+    else if (asse == 2) { t = vec3(1.0, 0.0, 0.0); bt = vec3(0.0, 1.0, 0.0); }
+    else                { t = vec3(1.0, 0.0, 0.0); bt = vec3(0.0, 0.0, 1.0); }
 
-    vec3 b  = cross(n, t);
-    vec2 uv = (projMode == 2) ? ProiettaUV(fragLocal, asse) / max(projTile, 1e-4)
-                              : CoordProiettata();
-    vec3 ts = texture(texture2, uv).rgb * 2.0 - 1.0;
+    /* Il raddrizzamento serve solo alla falda del tetto, dove la normale non
+     * sta su un asse e i due assi della proiezione non sono perpendicolari a
+     * lei. Su una parete non cambia niente. */
+    t  = t  - n * dot(n, t);
+    bt = bt - n * dot(n, bt);
+    if (dot(t, t) < 1e-8 || dot(bt, bt) < 1e-8)
+        return normalize(RuotaYFrag(n * fragInvScale));
+    t  = normalize(t);
+    bt = normalize(bt);
 
-    vec3 nObj = normalize(mat3(t, b, n) * ts);
+    /* La stessa coordinata dell'albedo, sempre: se il rilievo si campionasse
+     * altrove il solco non starebbe sopra il solco. */
+    vec3 ts = texture(texture2, CoordProiettata()).rgb * 2.0 - 1.0;
+
+    vec3 nObj = normalize(mat3(t, bt, n) * ts);
     return normalize(RuotaYFrag(nObj * fragInvScale));
 }
 
@@ -220,6 +252,12 @@ float ShadowFactor(vec3 n)
 
 void main()
 {
+    /* Gli edifici sono opachi: nel passaggio d'ombra il loro colore non lo
+     * guarda nessuno, e sul tetto il modo 2 costava tre prelievi per frammento
+     * in ogni cascata, buttati. Chi ha il ritaglio - le foglie - passa dalla
+     * strada lunga qui sotto, perche' li' il colore decide la profondita'. */
+    if (depthOnly == 1 && alphaCut <= 0.0) { finalColor = vec4(1.0); return; }
+
     vec4 base = (projMode == 2) ? CampionaMiscelato(texture0)
                                 : texture(texture0, (projMode == 0) ? fragTexCoord
                                                                     : CoordProiettata());
