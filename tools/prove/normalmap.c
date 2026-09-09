@@ -16,6 +16,22 @@
  *
  * Include light.c perche' gShader e le location sono static.
  * ========================================================================== */
+
+/* --- Perche' due fixture dichiarano tangenti SBAGLIATE ----------------------
+ * Quadrato() dichiara w = +1, che da' b = cross(n,t) = (0,0,-1). Ma le sue UV
+ * fanno crescere la v lungo +Z, quindi la bitangente vera e' (0,0,+1): la w
+ * dichiarata e' in disaccordo con le UV dello stesso quadrato.
+ *
+ * NON e' un errore da correggere: e' cio' che rende discriminanti i casi 6a e
+ * 6b. Una terna costruita dalle derivate segue le UV e ignora la w; una
+ * costruita dall'attributo segue la w. Con le due d'accordo i due percorsi
+ * darebbero lo stesso numero e la prova non distinguerebbe niente.
+ *
+ * E' anche il caso vero: una mesh animata porta una tangente che non
+ * corrisponde piu' alla sua superficie, perche' UpdateModelAnimation() non la
+ * aggiorna. Un fixture statico con la tangente in disaccordo con le UV e' il
+ * sostituto piu' vicino che si possa provare senza un personaggio in gioco.
+ * ------------------------------------------------------------------------ */
 #include "../../src/light.c"
 #include "prova.h"
 
@@ -61,6 +77,29 @@ static Mesh QuadratoIndicizzato(void)
     m.vertexCount = 4;
     m.triangleCount = 2;
     m.vertices = v; m.normals = n; m.texcoords = uv; m.indices = idx;
+    UploadMesh(&m, false);
+    return m;
+}
+
+/* Lo stesso quadrato, ma con le UV RUOTATE di 90 gradi: la u cresce lungo +Z e
+ * la v lungo +X, quindi la tangente vera e' (0,0,1) e la bitangente (1,0,0).
+ * La tangente dichiarata resta (1,0,0) con verso +1 - quella del quadrato non
+ * ruotato - cioe' e' esattamente il valore che avrebbe un'implementazione che
+ * inchiodasse la tangente a +X. Serve a distinguere una terna che segue
+ * davvero le UV da una che sembra funzionare perche' in ogni altro quadrato
+ * del file la u cresce gia' lungo +X. */
+static Mesh QuadratoUVRuotate(void)
+{
+    static float v[18]  = { -2,0,-2,  -2,0,2,   2,0,2,
+                            -2,0,-2,   2,0,2,   2,0,-2 };
+    static float n[18]  = { 0,1,0, 0,1,0, 0,1,0, 0,1,0, 0,1,0, 0,1,0 };
+    static float uv[12] = { 0,0, 1,0, 1,1, 0,0, 1,1, 0,1 };
+    static float tg[24] = { 1,0,0,1, 1,0,0,1, 1,0,0,1, 1,0,0,1, 1,0,0,1, 1,0,0,1 };
+
+    Mesh m = { 0 };
+    m.vertexCount = 6;
+    m.triangleCount = 2;
+    m.vertices = v; m.normals = n; m.texcoords = uv; m.tangents = tg;
     UploadMesh(&m, false);
     return m;
 }
@@ -197,6 +236,32 @@ int main(void)
     iq.materials[0].maps[MATERIAL_MAP_DIFFUSE].color = (Color){ 100, 100, 100, 255 };
     Near("indicizzato, piegato verso il sole",
          Centro(rt, iq.meshes[0], iq.materials[0]), 129, 3);
+
+    /* --- 6. la terna segue le UV, non l'attributo ------------------------- */
+    /* Sole con componente Z: senza, la bitangente sta su ±Z e il prodotto
+     * scalare con il sole e' nullo in ogni caso - la prova non morderebbe
+     * comunque, qualunque normal map le si dia. */
+    LightSetSun((Vector3){ 0.0f, 0.8f, 0.6f }, 1.0f);
+    LightFrame(nulla);
+    /* LightFrame() ricarica shadowOn dal suo stato: vanno rispente a mano, o
+     * il fattore d'ombra rientra nel conto e i numeri non tornano. */
+    SetShaderValue(gShader, GetShaderLocation(gShader, "shadowOn"),  &zero, SHADER_UNIFORM_INT);
+    SetShaderValue(gShader, GetShaderLocation(gShader, "depthOnly"), &zero, SHADER_UNIFORM_INT);
+
+    /* 6a. Perturbazione lungo la BITANGENTE: ts = (0, 0.5, 0.866).
+     *   terna dalle UV  b = (0,0,+1) -> n = (0, 0.866,  0.5), diff 0.993 -> 129
+     *   terna dalla w   b = (0,0,-1) -> n = (0, 0.866, -0.5), diff 0.393 ->  78 */
+    UnloadTexture(mat.maps[MATERIAL_MAP_NORMAL].texture);
+    mat.maps[MATERIAL_MAP_NORMAL].texture = PixelNormale(128, 191, 238);
+    Near("bitangente: dalle UV, non dalla w", Centro(rt, q, mat), 129, 3);
+
+    /* 6b. UV ruotate, perturbazione lungo la TANGENTE: ts = (0.5, 0, 0.866).
+     *   terna dalle UV  t = (0,0,1) -> n = (0,   0.866, 0.5), diff 0.993 -> 129
+     *   tangente a +X   t = (1,0,0) -> n = (0.5, 0.866, 0  ), diff 0.693 -> 104 */
+    Mesh qr = QuadratoUVRuotate();
+    UnloadTexture(mat.maps[MATERIAL_MAP_NORMAL].texture);
+    mat.maps[MATERIAL_MAP_NORMAL].texture = PixelNormale(191, 128, 238);
+    Near("tangente: dalle UV, non inchiodata a +X", Centro(rt, qr, mat), 129, 3);
 
     CloseWindow();
     return ProveEsito();
