@@ -32,6 +32,11 @@
  * aggiorna. Un fixture statico con la tangente in disaccordo con le UV e' il
  * sostituto piu' vicino che si possa provare senza un personaggio in gioco.
  * ------------------------------------------------------------------------ */
+
+/* Sabotaggi eseguiti il 2026-09-09, a prova verde:
+ *   b = -b                            -> 6a legge  78 invece di 129, FALLITO
+ *   t = (1,0,0); b = cross(n,t)       -> 6b legge 104 invece di 129, FALLITO
+ * I casi mordono. Chi tocca questa prova li rifaccia. */
 #include "../../src/light.c"
 #include "prova.h"
 
