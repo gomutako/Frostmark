@@ -5,8 +5,15 @@
 > aperte. Gli altri documenti spiegano *come funziona* il gioco; questo dice
 > *a che punto siamo*.
 
-**Ultimo aggiornamento:** 8 settembre 2026, dopo il mastio, il tumulo e il
-sottobosco.
+**Ultimo aggiornamento:** 9 settembre 2026.
+
+> **L'obiettivo dichiarato è un clone di Skyrim, anche più semplice, ma
+> realistico** — non qualcosa di "fumettoso". Detto dall'utente il 9 settembre
+> 2026, e cambia il peso delle decisioni: finché l'obiettivo era "realistico
+> dove conviene", tenere alberi e personaggi stilizzati era un compromesso
+> difendibile. Ora è un **ripiego temporaneo da dichiarare**, non una risposta.
+> Quando una strada porta a un risultato stilizzato — Kenney, KayKit,
+> Quaternius — va scritto che è un ripiego.
 
 > **Il mondo è stato ricotto e il risultato è nel repository.** I prop del
 > sottobosco nascono nel mondo cotto, e `assets/world/` è versionata: chi
@@ -30,11 +37,11 @@ la risposta non è stata trovare l'oggetto ma **comporlo**:
 | # | pezzo | stato |
 |---|---|---|
 | 1 | **erba** | **fatto** — `celandine_01`, cinque varianti |
-| 2 | **alberi e pini** | **risolta diversamente** — restano stilizzati, ma il suolo sotto è vero. È la domanda **B** |
+| 2 | **alberi e pini** | **ripiego**: restano stilizzati e il suolo sotto è vero. Con l'obiettivo dichiarato non basta più. È la domanda **B** |
 | 3 | **edifici** | **fatto** — materiali proiettati sui dieci pezzi modulari |
 | 4 | **torre** | **fatto** — `tower_round`, il pezzo 12 dei venti di `modular_fort_01` |
 | 5 | **cripta** | **fatto** — un tumulo di massi con un varco. È la domanda **E** |
-| 6 | **personaggi** | aperto, il più grosso: serve un'altra fonte. È la domanda **C** |
+| 6 | **personaggi** | aperto, il più grosso: serve un'altra fonte, e prima va tolto il vincolo delle tangenti. Sono le domande **C** e **F** |
 
 ### Cosa è realistico in gioco, oggi
 
@@ -141,7 +148,7 @@ disegnare dalla posizione. Il mondo cotto non è stato toccato. Design in
 Restano fuori e restano YAGNI: i **pesi per variante** (una comune, tre rare) e
 le varianti dichiarate a mano.
 
-### B. Gli alberi — **RISOLTA DIVERSAMENTE**
+### B. Gli alberi — risolta con un ripiego, **riaperta dall'obiettivo**
 
 Non si scrive nessuno spezzatore di mesh, e la ragione sta nel vincolo 2 qui
 sopra: reindicizzare risolve gli indici, non il peso, e sbloccherebbe un asset
@@ -170,6 +177,16 @@ Tre cose imparate qui:
 utilizzabile, la strada è già misurata. `quiver_tree_02`, alto 1,47 m, potrebbe
 invece diventare un arbusto.
 
+**E con l'obiettivo dichiarato il 9 settembre, "risolta diversamente" diventa un
+ripiego, non una risposta.** Un bosco di alberi stilizzati è l'80% di quello che
+si vede a 260 m: è il singolo ostacolo più grande fra il gioco di oggi e un
+Skyrim semplificato. Le strade non ancora esplorate, in ordine di costo
+crescente: **impostori** — pannelli con l'immagine di un albero vero reso una
+volta sola, che è come li fanno i giochi grandi oltre una certa distanza;
+**alberi generati** da uno strumento tipo Sapling o TreeGen di Blender, esportati
+a un conteggio scelto da noi invece che subito dal catalogo; **un'altra fonte**
+con licenza compatibile. Nessuna delle tre è stata misurata.
+
 ### C. I personaggi — aperta, e la più grossa
 
 Non è un lavoro Poly Haven: giocatore e cinque NPC sono **riggati e animati**,
@@ -179,9 +196,52 @@ fonte di modelli riggati con le animazioni da ri-targettare.
 Due cose misurate che riguardano questa domanda: i personaggi sono **il costo
 dominante del fotogramma** — togliendo `EntitiesDraw()` e `PlayerDraw()` dal
 blocco d'ombra il passaggio scende da 3,3 a **0,26 ms** — e
-`UpdateModelAnimation()` aggiorna posizioni e normali ma **non** le tangenti,
-quindi un personaggio animato con normal map avrebbe le tangenti ferme alla
-posa di riposo.
+`UpdateModelAnimation()` aggiorna posizioni e normali ma **non** le tangenti.
+Quest'ultima è la domanda **F**, ed è il primo lavoro da fare: viene prima di
+scaricare qualunque modello.
+
+#### Le fonti, cercate il 9 settembre 2026
+
+**L'intersezione fra CC0, realistico e riggato è praticamente vuota.** Le prove:
+
+- la categoria `rigged` di Poly Haven sono **15 asset e sono tutti prop** —
+  sveglie, una morsa, un cannone, un orologio a pendolo. Zero umani, coerente
+  con un catalogo di scansioni statiche;
+- Kenney, Quaternius e KayKit sono CC0 su tutto ma **stilizzati per scelta
+  editoriale**: i sei personaggi in gioco vengono da KayKit;
+- su Sketchfab il filtro CC0 dà scansioni di persone, ma **statiche**: lo
+  scheletro non c'è.
+
+Tre strade praticabili, con la licenza verificata alla fonte:
+
+**1. Mixamo.** Gratuito con un account Adobe, **royalty-free anche per giochi
+commerciali**, personaggi e animazioni insieme più un auto-rigger. Il divieto è
+ridistribuire i file grezzi come pacchetto di asset: qui non succede, perché
+`assets/models/` è in `.gitignore` e il repository spedisce lo script, non i
+file. Due limiti veri: i personaggi sono *semi*-realistici, non fotorealistici,
+e **non è automatizzabile** — serve un account e non c'è API, quindi
+`fetch_assets.sh` non può scaricarli, esattamente come già succede per
+Quaternius.
+
+**2. MakeHuman / MPFB.** L'unica strada per un umano **su misura e davvero
+CC0**: l'addon è GPL, ma il modello esportato è CC0 e utilizzabile anche in un
+gioco a sorgente chiusa. In cambio il rig e le animazioni restano da fare — la
+Universal Animation Library di Quaternius ha 250+ clip CC0 su un rig umanoide
+ri-targettabile.
+
+**3. Scansione CC0 statica più auto-rig.** Il risultato più realistico e il
+processo più fragile: la topologia da fotogrammetria si deforma male sulle
+articolazioni.
+
+Fonti: [Mixamo FAQ](https://helpx.adobe.com/creative-cloud/faq/mixamo-faq.html) ·
+[MakeHuman, licenza](https://static.makehumancommunity.org/about/license.html) ·
+[MPFB, uso in giochi a sorgente chiusa](https://static.makehumancommunity.org/mpfb/faq/use_in_closed_source.html) ·
+[Poly Haven API, categoria `rigged`](https://api.polyhaven.com/assets?t=models&c=rigged)
+
+**Il consiglio, se si procede:** Mixamo è la strada pragmatica — licenza a
+posto, animazioni incluse, ri-targeting risolto da loro. Ma l'ordine conta: un
+umano realistico davanti a un albero di cartone peggiora l'insieme invece di
+migliorarlo, quindi la domanda **B** e questa vanno guardate insieme.
 
 ### D. La torre con il forte — **CHIUSA per la torre**, aperta per il resto
 
@@ -240,6 +300,51 @@ Due cose imparate qui:
 - **un asset inganna in due modi opposti**, e stanno in `docs/03`: il nome che
   promette massi e dà ciottoli, e l'ingombro giusto di un volume che è quasi
   tutto aria.
+
+### F. Le tangenti sulle mesh animate — design pronto, **non approvato**
+
+È il prossimo lavoro, e viene prima di scaricare qualunque personaggio.
+
+**Cosa blocca.** `UpdateModelAnimation()` di raylib aggiorna posizioni e normali
+ma **non le tangenti**: un personaggio con una normal map vera avrebbe il rilievo
+fermo alla posa di riposo, e si vedrebbe sui volti.
+
+**Perché oggi non si vede niente.** Nessun personaggio ha una normal map vera:
+`LightApplyToModel()` costruisce le tangenti solo per le mesh che ne hanno una
+(`light.c:350-356`), e i modelli KayKit non ne hanno — ricevono la normale piatta
+di riserva, quindi `SurfaceNormal()` torna alla normale del vertice. **È un
+prerequisito, non una riparazione**, e chi riprende non deve aspettarsi di
+trovare un difetto in gioco.
+
+**Il design presentato il 9 settembre, in attesa di approvazione:**
+
+- nel ramo `projMode == 0` di `scene.fs`, `SurfaceNormal()` smette di usare
+  `fragTangent` e costruisce la terna dalle **derivate di schermo** — `dFdx` e
+  `dFdy` della posizione nel mondo e delle UV, il *cotangent frame*. Su una mesh
+  animata è corretto **per costruzione**: le derivate lavorano sulle posizioni
+  già deformate dallo scheletro, quindi non esiste una tangente da aggiornare;
+- **ovunque, non solo sugli animati.** Due percorsi che fanno la stessa cosa in
+  modi diversi divergono in silenzio — è già successo con lo sfalsamento della
+  proiezione — e in più le derivate coprono il caso che `BuildTangents()` lascia
+  scoperto: le UV degeneri, dove la tangente resta nulla e il rilievo sparisce;
+- i due rami proiettati **non cambiano**: si costruiscono già la loro terna dagli
+  assi della proiezione;
+- **il rischio è il costo**, che si paga per frammento su tutta la scena invece
+  che una volta al caricamento. Va **misurato** col binario strumentato sullo
+  stesso percorso di 75 secondi, non dichiarato gratis. Ripiego se il passaggio
+  principale peggiora: un interruttore per materiale che usa le derivate solo
+  dove servono;
+- **la prova**: una mesh statica con UV note e una normal map inclinata,
+  illuminata di taglio; la terna dalle derivate deve dare la **stessa**
+  illuminazione di quella dalle tangenti, entro tolleranza. Se concordano sullo
+  statico, l'animato segue per costruzione — ed è l'unico modo di provarlo finché
+  non esiste in gioco un personaggio con una normal map vera. Sabotaggio:
+  invertire la bitangente derivata deve far fallire il confronto;
+- **fuori ambito, da fare dopo:** se la sostituzione regge, `BuildTangents()`,
+  l'attributo `vertexTangent` e il varying `fragTangent` diventano codice morto,
+  e toglierli restituirebbe quattro float di varying su tutta la scena. Tocca la
+  disposizione degli attributi in `instancing.c`, che è delicata: si fa quando il
+  percorso nuovo è provato in gioco, non prima.
 
 ## Come si verifica che tutto regga
 
