@@ -118,6 +118,65 @@ l'avrà reso inutile.
 Quello che si fa invece: **confronto a pixel su due inquadrature lontane** col
 binario strumentato, prima di chiudere. Se non si vede, non si scrive niente.
 
+#### Misurato il 2026-09-09: lo sfarfallio non c'è
+
+Non è stato guardato, è stato **contato**: lo sfarfallio è varianza temporale.
+Stesso binario strumentato, modalità alternativa, sessanta fotogrammi
+consecutivi presi con `LoadImageFromScreen()`, differenza media assoluta fra
+fotogrammi consecutivi sul canale della luminanza.
+
+**Dove.** `x = 2350`, `z = 2300` (quota dal terreno), sguardo a **60°**,
+inclinazione **−0,10 rad**: il nevaio a nord-est. Nel campo visivo ci sono
+**51 prop Poly Haven con normal map vera — 37 massi e 14 cespugli — da 17 a
+136 m**, ventiquattro dei quali oltre i 90 m, e nessun albero che li copra.
+
+**Perché lì e non in una foresta.** In foresta la scena è fatta di alberi
+KayKit, che una normal map vera non ce l'hanno: la prova avrebbe misurato
+terreno e cielo. E perché non «a 150–260 m» come diceva il piano: **nessun prop
+Poly Haven viene disegnato oltre i 140 m.** `PropMaxDist()` taglia i massi e i
+tronchi a 140, i ceppi a 100, i cespugli e l'erba a 80, il sottobosco fra 40 e
+60. Oltre i 140 m restano solo alberi, case e torri — nessuno dei quali passa
+da `SurfaceNormal()` con una normal map vera. La fascia 150–260 m è vuota di
+ciò che si voleva guardare, per costruzione.
+
+Non è una rinuncia, perché **la distanza non è la condizione vera**: la
+condizione è il triangolo sotto il pixel, e `rock.gltf` ha 59 066 triangoli su
+2,2 m. A 100 m un masso occupa una dozzina di pixel: sono centinaia di
+triangoli per pixel. La soglia oltre cui i suoi triangoli scendono sotto il
+pixel è **6,5 m**, non 150. Con questi asset il rischio, se esistesse, si
+vedrebbe da qualunque distanza.
+
+**Il passo.** La camera avanza di **1 cm a fotogramma** lungo la direzione
+dello sguardo — 59 cm in tutta la sequenza — dopo quaranta fotogrammi di
+riscaldamento. Il movimento serve: ferma, la scena darebbe fotogrammi identici
+e varianza zero in tutte e due le copie, e la prova non morderebbe. In avanti e
+non di lato perché il flusso di pixel di una traslazione frontale è minimo
+verso il centro dello schermo, dove stanno i massi lontani: così la differenza
+fra fotogrammi non è dominata dal movimento.
+
+**I due numeri.** La misura è deterministica — due esecuzioni della stessa
+copia danno la stessa cifra fino alla quarta decimale.
+
+| | differenza media fra fotogrammi | pixel che cambiano | picco |
+|---|---|---|---|
+| prima | **0,2393** livelli | 18,165% | 115,30 |
+| dopo  | **0,2400** livelli | 18,218% | 116,23 |
+
+**+0,25%.** Sette decimillesimi di livello su 255.
+
+**E non è concentrato sui massi.** Una mappa per pixel della varianza
+temporale, confrontata fra le due copie, dice dove sta quel poco. Sui 114 pixel
+in cui i due shader danno risultati diversi di almeno due livelli — cioè sui
+massi, dove la terna conta davvero — la varianza passa da 3,364 a 3,421
+livelli: **+1,7%**, cioè sei centesimi di livello aggiunti a un tremolio da
+movimento che è già cinquanta volte più grande. Quattro quinti dell'aumento
+totale stanno **fuori** da quei pixel, sparsi sul nevaio: è rumore di
+arrotondamento, non un difetto localizzato.
+
+**Conclusione: lo sfarfallio dei triangoli sotto il pixel non esiste in modo
+misurabile, e non si scrive nessuna mitigazione** — che era già la decisione
+presa qui sopra per ragioni di progetto, e adesso ha anche un numero.
+
 ## La prova
 
 L'impalcatura c'è già: `tools/prove/normalmap.c` rende su GPU dentro una
@@ -262,6 +321,46 @@ il rumore fosse stato del 4% questa riga direbbe un altro numero.
 È ciò che rende la soglia una previsione invece di una descrizione: una soglia
 scelta dopo aver visto il risultato fa esattamente quello che l'intestazione di
 `normalmap.c` vieta ai valori attesi.
+
+### Il risultato: le derivate non costano, e il perché non è quello che sembra
+
+Sei giri per copia, gli ultimi tre **alternati** — `prima`, `dopo`, `prima`,
+`dopo` — perché nella prima tornata tutti i giri di `prima` erano venuti prima
+di tutti quelli di `dopo`, e la macchina deriva verso l'alto man mano che si
+scalda: fra il primo e l'ultimo giro di `prima` ci sono 4,1%, cioè più del
+rumore dichiarato. L'alternanza è ciò che rende il confronto sano.
+
+| giro | prima | dopo |
+|---|---|---|
+| 1 | 2,486 ms | 2,422 ms |
+| 2 | 2,528 ms | 2,443 ms |
+| 3 | 2,527 ms | 2,471 ms |
+| 4 *(alternato)* | 2,550 ms | 2,481 ms |
+| 5 *(alternato)* | 2,553 ms | 2,485 ms |
+| 6 *(alternato)* | 2,588 ms | 2,490 ms |
+| **media** | **2,539 ms** | **2,465 ms** |
+
+**Differenza: −2,9%.** Le tre coppie alternate, prese una per una, danno
+−2,7%, −2,7% e −3,8%: sempre lo stesso segno, sempre della stessa taglia.
+
+La soglia era +5%. **Rispettata, e con il segno opposto a quello temuto: il
+passaggio principale è più veloce di prima.**
+
+**Ma il numero non risponde alla domanda che sembra.** Nella copia `dopo`
+`fragTangent` non viene più letto da nessuna parte del fragment shader: resta
+dichiarato, e diventa un varying morto che il compilatore GLSL può togliere —
+con lui l'interpolazione di quattro float per frammento su tutta la scena. Il
+−2,9% è quindi la **somma** di due effetti di segno opposto: le derivate che
+costano, e un varying che sparisce da solo. La sezione *Fuori ambito* voleva
+tenerli separati non rimuovendo `BuildTangents()` nello stesso passo; non
+bastava, perché il ramo morto se lo porta via il driver senza chiedere
+permesso.
+
+Quello che il numero dice con certezza, e che è la domanda che contava: **il
+cotangent frame non fa sforare il budget del fotogramma, in nessuna delle sei
+esecuzioni.** Quello che non dice: quanto costerebbero le derivate se il
+varying restasse vivo. Chi vorrà quel numero lo misurerà nel lavoro che toglie
+`BuildTangents()`, dove diventa il guadagno da attribuire.
 
 ### La rete, progettata e non scritta
 
