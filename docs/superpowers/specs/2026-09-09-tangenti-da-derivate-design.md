@@ -220,10 +220,17 @@ che ruota per campionare tutte le direzioni, 75 secondi, stesso tracciato.
 
 ### La rete, progettata e non scritta
 
-Se il passo 3 sfora la soglia: una uniform intera che viaggia **per lotto**,
-come `projMode` e `alphaCut` — stessa macchina, nessuna struttura nuova — che
-accende le derivate solo sulle mesh animate e lascia tutto il resto alle
-tangenti interpolate.
+Se il passo 3 sfora la soglia: una uniform intera che accende le derivate solo
+dove servono — le mesh animate — e lascia tutto il resto alle tangenti
+interpolate.
+
+**Non viaggia per lotto**, e la ragione è una scoperta che accorcia il lavoro:
+i personaggi non passano dall'instancing. I lotti di `instancing.c` sono i
+prop, e nessun prop è animato; giocatore e NPC si disegnano dal percorso non
+instanziato, in `game.c:574-579`. L'interruttore vive quindi accanto agli altri
+stati di `light.c`, si accende intorno ai personaggi e si rispegne subito dopo
+— come la soglia dell'alfa nei lotti, perché uno stato lasciato acceso lo paga
+chi viene dopo, qui in frammenti su tutta la scena.
 
 **Il codice non si scrive finché la misura non lo chiama**, per la stessa
 ragione per cui non si scrive la mitigazione del rumore: sarebbe una
