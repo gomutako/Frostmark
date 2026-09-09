@@ -73,16 +73,32 @@ float Pcf(sampler2D map, vec3 proj, float bias)
  * due pietre - ed e' meta' di cio' che fa sembrare realistico un asset.
  *
  * La mappa e' in spazio tangente, cioe' relativa alla superficie: per usarla
- * serve la terna (tangente, bitangente, normale). La tangente si raddrizza
- * rispetto alla normale (Gram-Schmidt) perche' interpolare fra vertici le
- * sfasa, e la bitangente si ricava dal prodotto vettore con il segno che il
- * .glb porta in w - i due versi esistono entrambi, e sbagliarlo ribalta il
- * rilievo.
+ * serve la terna (tangente, bitangente, normale). Quella terna NON viene
+ * dall'attributo del vertice ma dalle DERIVATE DI SCHERMO - il cotangent
+ * frame: dFdx e dFdy della posizione nel mondo e delle UV dicono come si
+ * muovono le une rispetto alle altre, e risolvere il sistema 2x2 da' gli assi
+ * della texture sulla superficie.
  *
- * Se la mesh non porta tangenti raylib passa un vettore nullo: normalizzarlo
- * darebbe NaN, quindi in quel caso si resta alla normale del vertice. E i
- * materiali senza normal map ne ricevono una piatta da light.c, cosi' qui non
- * serve sapere se ce n'e' una vera: il conto e' sempre lo stesso. */
+ * Il motivo e' l'animazione. UpdateModelAnimation() di raylib aggiorna
+ * posizioni e normali ma NON le tangenti: un personaggio con una normal map
+ * vera avrebbe il rilievo fermo alla posa di riposo. Le derivate lavorano su
+ * fragPosition, che esce dal vertex shader dopo matModel, cioe' su posizioni
+ * gia' deformate dallo scheletro - quindi non esiste una tangente da
+ * aggiornare, e la terna e' corretta per costruzione.
+ *
+ * Vale ovunque, non solo sugli animati: due percorsi che fanno la stessa cosa
+ * in modi diversi divergono in silenzio, ed e' gia' successo qui con lo
+ * sfalsamento della proiezione.
+ *
+ * Quello che le derivate NON risolvono sono le UV degeneri: li' le derivate
+ * delle UV sono nulle, il determinante e' zero e la terna esce indefinita. Il
+ * ripiego e' lo stesso di prima - la normale del vertice - su una condizione
+ * diversa. Il problema si sposta dal vertice al frammento, non sparisce.
+ *
+ * I materiali senza normal map ne ricevono una piatta da light.c, quindi qui
+ * non serve sapere se ce n'e' una vera: il conto e' sempre lo stesso. E su
+ * quelli la terna non conta affatto, perche' mat3(t,b,n) * (0,0,1) == n
+ * qualunque siano t e b. */
 /* --- Materiali proiettati --------------------------------------------------
  * I pezzi dei kit non hanno UV utilizzabili: il muro ha 64 vertici e tutte le
  * sue coordinate stanno in una cella della tavolozza. Per loro la texture si
@@ -155,13 +171,30 @@ vec4 CampionaMiscelato(sampler2D tex)
 vec3 SurfaceNormal()
 {
     vec3 n = normalize(fragNormal);
-    if (dot(fragTangent.xyz, fragTangent.xyz) < 1e-8) return n;
 
-    vec3 t = fragTangent.xyz - n * dot(n, fragTangent.xyz);
-    if (dot(t, t) < 1e-8) return n;          /* tangente parallela alla normale */
+    vec3 dp1 = dFdx(fragPosition);
+    vec3 dp2 = dFdy(fragPosition);
+    vec2 du1 = dFdx(fragTexCoord);
+    vec2 du2 = dFdy(fragTexCoord);
+
+    /* Il determinante del sistema 2x2. Zero significa UV degeneri - un
+     * triangolo che sull'atlante e' un punto o un segmento - e li' non esiste
+     * nessuna terna: si resta alla normale del vertice. */
+    float det = du1.x * du2.y - du2.x * du1.y;
+    if (abs(det) < 1e-12) return n;
+
+    vec3 t = ( du2.y * dp1 - du1.y * dp2) / det;
+    vec3 b = (-du2.x * dp1 + du1.x * dp2) / det;
+
+    /* Il raddrizzamento rispetto alla normale: le derivate danno gli assi
+     * della texture sul piano del triangolo, che su una superficie liscia non
+     * e' il piano della normale interpolata. */
+    t = t - n * dot(n, t);
+    b = b - n * dot(n, b);
+    if (dot(t, t) < 1e-12 || dot(b, b) < 1e-12) return n;
     t = normalize(t);
+    b = normalize(b);
 
-    vec3 b  = cross(n, t) * fragTangent.w;
     vec3 ts = texture(texture2, fragTexCoord).rgb * 2.0 - 1.0;
     return normalize(mat3(t, b, n) * ts);
 }
