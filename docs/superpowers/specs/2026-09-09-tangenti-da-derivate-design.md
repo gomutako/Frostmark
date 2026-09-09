@@ -218,6 +218,51 @@ che ruota per campionare tutte le direzioni, 75 secondi, stesso tracciato.
 3. **La misura del cambiamento.** Stesso percorso, binario nuovo. Il numero va
    nella spec qualunque sia, anche se è brutto.
 
+### Il banco, e come si cattura il tempo — 2026-09-09
+
+Due copie dei sorgenti fuori dal repo, dai commit `04cbe85` (terna
+dall'attributo) e `283da0e` (terna dalle derivate), con la **stessa identica**
+strumentazione: le due copie differiscono solo in `assets/shaders/scene.fs`, e
+i due eseguibili compilati sono byte per byte identici. Se differissero in
+qualcos'altro la misura non varrebbe niente.
+
+Lo strumento è `glFinish()` più orologio a parete attorno al **solo** blocco
+`BeginMode3D(g->cam) … EndMode3D()` di `DrawScene()`. `glFinish()` serializza
+la GPU e distorce il tempo assoluto del fotogramma: non importa, perché lo
+distorce allo stesso modo nelle due copie, e la domanda è di quanto **cambia**
+il passaggio, non quanto vale. Il passaggio d'ombra resta fuori dal cronometro,
+per la ragione detta sopra.
+
+Il resto del banco: vsync e `SetTargetFPS()` tolti, finestra nascosta,
+`GS_PLAY` forzato, il giocatore fermo al punto di partenza e la visuale che
+ruota di 0,013 rad a ogni fotogramma. Niente input e niente simulazione: così
+l'insieme degli yaw visitati è lo stesso in tutte le esecuzioni e non dipende
+da quanto è veloce la macchina. Settantacinque secondi, macchina WSL2 con
+WSLg, driver `d3d12` su NVIDIA RTX 5070.
+
+### Il rumore di fondo, e la soglia dichiarata
+
+**Il rumore di fondo.** Tre giri della copia `prima`, la stessa, non toccata:
+
+| giro | fotogrammi | passaggio principale |
+|---|---|---|
+| 1 | 9409 | **2,486 ms** |
+| 2 | 9218 | **2,528 ms** |
+| 3 | 9257 | **2,527 ms** |
+
+Media 2,514 ms, escursione fra il minimo e il massimo 0,042 ms, cioè
+**1,7%**.
+
+**La soglia: +5% sul passaggio principale**, cioè **2,64 ms**. Resta quella
+proposta, e il rumore la giustifica: 1,7% di rumore sta tre volte sotto il 5%,
+quindi la soglia distingue davvero qualcosa invece di fotografare il caso. Se
+il rumore fosse stato del 4% questa riga direbbe un altro numero.
+
+**Questo paragrafo è scritto e committato PRIMA di lanciare la copia `dopo`.**
+È ciò che rende la soglia una previsione invece di una descrizione: una soglia
+scelta dopo aver visto il risultato fa esattamente quello che l'intestazione di
+`normalmap.c` vieta ai valori attesi.
+
 ### La rete, progettata e non scritta
 
 Se il passo 3 sfora la soglia: una uniform intera che accende le derivate solo
