@@ -455,21 +455,39 @@ diverso — alternanza fin dal primo giro, o un plateau termico prima di
 misurare. Il risultato è utilizzabile perché cade lontano dalla soglia e dalla
 parte giusta, non perché il banco fosse preciso.
 
-**Ma il numero non risponde alla domanda che sembra.** Nella copia `dopo`
-`fragTangent` non viene più letto da nessuna parte del fragment shader: resta
-dichiarato, e diventa un varying morto che il compilatore GLSL può togliere —
-con lui l'interpolazione di quattro float per frammento su tutta la scena. Il
-−2,9% è quindi la **somma** di due effetti di segno opposto: le derivate che
+**Ma il numero non risponde alla domanda che sembra — e la spiegazione che
+segue è un'IPOTESI NON VERIFICATA.** Nella copia `dopo` `fragTangent` non viene
+più letto da nessuna parte del fragment shader: resta dichiarato, e diventa un
+varying morto che il compilatore GLSL **può** togliere — e con lui
+l'interpolazione di quattro float per frammento su tutta la scena. Se è andata
+così, il −2,9% è la **somma** di due effetti di segno opposto: le derivate che
 costano, e un varying che sparisce da solo. La sezione *Fuori ambito* voleva
 tenerli separati non rimuovendo `BuildTangents()` nello stesso passo; non
-bastava, perché il ramo morto se lo porta via il driver senza chiedere
+basterebbe, perché un ramo morto se lo porta via il driver senza chiedere
 permesso.
 
-**E il credito è almeno grande quanto dichiarato, probabilmente di più.** Con
-l'output morto cade anche l'ALU del vertex shader che lo calcola, e con ogni
-probabilità il prelievo dell'attributo `vertexTangent` stesso: sedici byte per
-vertice, su mesh da decine di migliaia di triangoli. Il costo vero delle
-derivate sta quindi nascosto sotto un credito di taglia ignota ma non piccola.
+**Perché è un'ipotesi e non un fatto: su questa macchina l'attributo risulta
+ancora legato.** `tools/prove/normalmap.c` stampa
+`gShader.locs[SHADER_LOC_VERTEX_TANGENT]` e lo trova diverso da −1, cioè il
+driver di oggi `vertexTangent` lo lega ancora. Le due affermazioni — «il
+compilatore ha portato via il ramo morto» e «l'attributo è legato» — non possono
+essere vere insieme sulla stessa macchina, almeno non nella forma forte, e
+questo documento le ha affermate entrambe per un po'. **Quale delle due valga
+qui non lo sappiamo**, e nessuna misura di oggi lo dice: una location legata non
+prova che il varying venga interpolato, ma toglie all'ipotesi la sua prova più
+comoda.
+
+**Che cosa scioglierebbe il nodo:** l'esperimento della *lettura inerte*
+descritto qui sotto. Finché non gira, il −2,9% va letto come «il ramo non sfora
+la soglia», che è la domanda a cui il banco doveva rispondere, e **non** come
+«le derivate costano meno delle tangenti».
+
+**E se il credito c'è, è almeno grande quanto dichiarato, probabilmente di
+più** — sempre condizionato all'ipotesi qui sopra. Con l'output morto cadrebbe
+anche l'ALU del vertex shader che lo calcola, e forse il prelievo
+dell'attributo `vertexTangent` stesso: sedici byte per vertice, su mesh da
+decine di migliaia di triangoli. Il costo vero delle derivate starebbe quindi
+nascosto sotto un credito di taglia ignota.
 
 **L'esperimento che li separa, scritto qui perché chi verrà dopo lo trovi
 pronto:** rilanciare la copia `dopo` con `fragTangent` **tenuto vivo** da una

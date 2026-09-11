@@ -36,6 +36,12 @@
 /* Sabotaggi eseguiti il 2026-09-09, a prova verde:
  *   b = -b                            -> 6a legge  79 invece di 129, FALLITO
  *   t = (1,0,0); b = cross(n,t)       -> 6b legge 104 invece di 129, FALLITO
+ * E il 2026-09-11, sul caso nuovo:
+ *   guardia "abs(det) < 1e-12" tolta  ->  7 legge  45 invece di 113, FALLITO
+ * Il 45 e' la sola luce ambiente su albedo 100: senza la guardia si divide per
+ * il determinante nullo, la terna esce NaN, il prodotto scalare col sole non e'
+ * piu' un numero e max(dot, 0) da' zero. Non e' solo "un valore diverso": la
+ * superficie si spegne.
  * I casi mordono. Chi tocca questa prova li rifaccia.
  * Il conto a mano per 6a rovesciato da' 78 e la GPU legge 79: e' lo stesso
  * arrotondamento che si vede da sempre sul caso "piegata via dal sole", e sta
@@ -118,6 +124,33 @@ static Mesh QuadratoUVRuotate(void)
     return m;
 }
 
+/* Lo stesso quadrato, ma con TUTTE LE UV A (0,0): sull'atlante il triangolo e'
+ * un punto. E' la condizione di fallimento nuova che la terna dalle derivate
+ * introduce - dFdx(fragTexCoord) e dFdy(fragTexCoord) sono nulli, quindi il
+ * determinante del sistema 2x2 e' nullo e nessuna terna esiste. La guardia di
+ * scene.fs (abs(det) < 1e-12) torna alla normale del vertice, e senza di lei
+ * si dividerebbe per zero.
+ *
+ * Le tangenti sono dichiarate valide apposta: cosi' il caso non puo' passare
+ * per un problema dell'attributo. L'attributo c'e' ed e' buono, e il risultato
+ * atteso resta quello della normale piatta perche' lo shader l'attributo non
+ * lo guarda e le UV non gli dicono niente. */
+static Mesh QuadratoUVDegeneri(void)
+{
+    static float v[18]  = { -2,0,-2,  -2,0,2,   2,0,2,
+                            -2,0,-2,   2,0,2,   2,0,-2 };
+    static float n[18]  = { 0,1,0, 0,1,0, 0,1,0, 0,1,0, 0,1,0, 0,1,0 };
+    static float uv[12] = { 0,0, 0,0, 0,0, 0,0, 0,0, 0,0 };
+    static float tg[24] = { 1,0,0,1, 1,0,0,1, 1,0,0,1, 1,0,0,1, 1,0,0,1, 1,0,0,1 };
+
+    Mesh m = { 0 };
+    m.vertexCount = 6;
+    m.triangleCount = 2;
+    m.vertices = v; m.normals = n; m.texcoords = uv; m.tangents = tg;
+    UploadMesh(&m, false);
+    return m;
+}
+
 /* Un pixel di normal map, in byte. (128,128,255) vale circa (0,0,1) - per
  * l'esattezza (0,0039, 0,0039, 1): non piegare. */
 static Texture2D PixelNormale(int r, int g, int b)
@@ -182,8 +215,19 @@ int main(void)
        HaUniform("shadowMap0") && HaUniform("shadowMap1"));
     Ok("uniform viewPos / splitDist",
        HaUniform("viewPos") && HaUniform("splitDist"));
-    Ok("attributo vertexTangent legato da raylib",
-       gShader.locs[SHADER_LOC_VERTEX_TANGENT] != -1);
+    /* La location si STAMPA, e il controllo accetta anche -1. Da quando la
+     * terna nasce dalle derivate, nel fragment shader vertexTangent non lo
+     * legge piu' nessuno: un driver che porta via il codice morto puo'
+     * legittimamente non legare l'attributo, ed e' proprio l'ipotesi con cui
+     * la spec spiega il -2,9% del banco. Pretendere qui che sia legato
+     * renderebbe rossa una prova su una macchina che ottimizza meglio, e
+     * affermerebbe il contrario di quel che afferma la spec. Il controllo
+     * serve quindi a mettere agli atti cosa fa il driver di oggi, non a
+     * pretendere un comportamento: il numero stampato e' il dato. */
+    printf("  location di vertexTangent: %d\n",
+           gShader.locs[SHADER_LOC_VERTEX_TANGENT]);
+    Ok("location di vertexTangent: legata o portata via (-1)",
+       gShader.locs[SHADER_LOC_VERTEX_TANGENT] >= -1);
 
     /* --- 2. chi non ha normal map ne riceve una piatta -------------------- */
     Material nudo = LoadMaterialDefault();
@@ -283,6 +327,19 @@ int main(void)
     UnloadTexture(mat.maps[MATERIAL_MAP_NORMAL].texture);
     mat.maps[MATERIAL_MAP_NORMAL].texture = PixelNormale(191, 128, 238);
     Near("tangente: dalle UV, non inchiodata a +X", Centro(rt, qr, mat), 129, 3);
+
+    /* --- 7. UV degeneri: la guardia sul determinante ---------------------- */
+    /* Con tutte le UV a (0,0) le derivate delle UV sono nulle, il determinante
+     * e' nullo e nessuna terna esiste: la guardia di scene.fs torna alla
+     * normale del vertice e ts non viene applicato affatto. Il valore atteso
+     * e' quindi quello della normale piatta, e per la stessa ragione:
+     *   n = (0,1,0), sole (0, 0.8, 0.6) -> diff 0.800
+     *   0.45 + 0.85 * 0.800 = 1.130, per albedo 100 -> 113
+     * La normal map e' inclinata (ts = (0.5, 0, 0.866)): se la terna si
+     * costruisse comunque, il numero non potrebbe restare 113. */
+    Mesh qd = QuadratoUVDegeneri();
+    Near("UV degeneri: si torna alla normale del vertice",
+         Centro(rt, qd, mat), 113, 3);
 
     CloseWindow();
     return ProveEsito();
