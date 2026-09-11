@@ -196,8 +196,8 @@ copia danno la stessa cifra fino alla quarta decimale.
 
 | | differenza media fra fotogrammi | pixel che cambiano | picco |
 |---|---|---|---|
-| prima | **0,2393** livelli | 18,165% | 115,30 |
-| dopo  | **0,2400** livelli | 18,218% | 116,23 |
+| prima | **0,23933** livelli | 18,165% | 115,30 |
+| dopo  | **0,24000** livelli | 18,218% | 116,23 |
 
 **+0,25%: sei decimillesimi di livello su 255 — e non è rumore di misura.** La
 stessa copia, rilanciata, si ripete entro ±0,0001 livelli; lo scarto fra le due

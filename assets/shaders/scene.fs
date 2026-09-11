@@ -97,8 +97,16 @@ float Pcf(sampler2D map, vec3 proj, float bias)
  *
  * I materiali senza normal map ne ricevono una piatta da light.c, quindi qui
  * non serve sapere se ce n'e' una vera: il conto e' sempre lo stesso. E su
- * quelli la terna non conta affatto, perche' mat3(t,b,n) * (0,0,1) == n
- * qualunque siano t e b. */
+ * quelli la terna conta pochissimo - ma NON zero, e la differenza va detta.
+ * L'identita' mat3(t,b,n) * (0,0,1) == n vale qualunque siano t e b, solo che
+ * ts non e' (0,0,1): la riserva di light.c e' la texture (128,128,255), che
+ * decodifica in (0.0039, 0.0039, 1). L'identita' e' vera in matematica e falsa
+ * di quattro millesimi in aritmetica a 8 bit, quindi qui vale mat3(t,b,n) * ts
+ * ~= n. Misurato in gioco fra il percorso vecchio e questo: il 9,25% dei pixel
+ * differisce di almeno un livello su 255, quasi tutti nevaio - cioe' proprio
+ * dove "la terna non conta". Sotto la soglia del visibile, ma non zero: chi
+ * usasse "terna spazzatura, risultato identico" per saltare un controllo deve
+ * sapere che e' un'approssimazione buona, non un teorema. */
 /* --- Materiali proiettati --------------------------------------------------
  * I pezzi dei kit non hanno UV utilizzabili: il muro ha 64 vertici e tutte le
  * sue coordinate stanno in una cella della tavolozza. Per loro la texture si

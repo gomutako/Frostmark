@@ -210,10 +210,17 @@ float LightShadowRadius(int cascade) { return cascade == 0 ? SHADOW_NEAR_R : SHA
  * un guaio che si manifesta lontano da dove e' stato commesso. Un pixel per
  * materiale non si misura. */
 /* --- Le tangenti ----------------------------------------------------------
- * Dicono come sta ruotata la texture sulla superficie: senza, una normal map
- * vera illumina storto, perche' lo shader non sa da che parte guarda la "u"
- * della mappa. raylib le legge dal .glb quando il pacchetto le ha esportate;
- * quando mancano vanno calcolate dalle UV.
+ * Dicono come sta ruotata la texture sulla superficie. raylib le legge dal
+ * .glb quando il pacchetto le ha esportate; quando mancano vanno calcolate
+ * dalle UV.
+ *
+ * Nota su chi le legge OGGI: il fragment shader non usa piu' questo attributo.
+ * SurfaceNormal() costruisce la terna dalle derivate di schermo, cioe' ricava
+ * la "u" dalle UV stesse, frammento per frammento - serviva per le mesh
+ * animate, dove UpdateModelAnimation() aggiorna posizioni e normali ma non le
+ * tangenti. Quello che segue resta quindi in piedi ma non lo consuma nessuno:
+ * toglierlo e' un lavoro suo, con la sua misura, e la condizione che lo
+ * sblocca sta in docs/06, domanda F.
  *
  * Perche' non GenMeshTangents() di raylib: quella legge i vertici a gruppi di
  * tre e ignora mesh->indices. Le mesh glTF sono quasi sempre indicizzate - i
@@ -228,8 +235,10 @@ float LightShadowRadius(int cascade) { return cascade == 0 ? SHADOW_NEAR_R : SHA
  * versi esistono entrambi e sbagliarlo ribalta il rilievo.
  *
  * Dove le UV sono degeneri (triangolo con area nulla nella texture) la
- * tangente resta nulla: lo shader se ne accorge e torna alla normale del
- * vertice, che e' esattamente il comportamento di prima. */
+ * tangente resta nulla. Il ripiego c'e' ancora, ma non e' piu' qui che si
+ * decide: lo shader non guarda questo attributo, si accorge del caso degenere
+ * dal determinante delle derivate delle UV - che li' e' nullo - e torna alla
+ * normale del vertice. Stessa uscita di prima, su una condizione diversa. */
 static void BuildTangents(Mesh *m)
 {
     if (m->vertices == NULL || m->texcoords == NULL || m->normals == NULL) return;

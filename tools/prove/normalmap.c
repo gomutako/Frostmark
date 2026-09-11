@@ -34,9 +34,13 @@
  * ------------------------------------------------------------------------ */
 
 /* Sabotaggi eseguiti il 2026-09-09, a prova verde:
- *   b = -b                            -> 6a legge  78 invece di 129, FALLITO
+ *   b = -b                            -> 6a legge  79 invece di 129, FALLITO
  *   t = (1,0,0); b = cross(n,t)       -> 6b legge 104 invece di 129, FALLITO
- * I casi mordono. Chi tocca questa prova li rifaccia. */
+ * I casi mordono. Chi tocca questa prova li rifaccia.
+ * Il conto a mano per 6a rovesciato da' 78 e la GPU legge 79: e' lo stesso
+ * arrotondamento che si vede da sempre sul caso "piegata via dal sole", e sta
+ * dentro la tolleranza 3 di Near(). Il sabotaggio non da' un numero diverso da
+ * quello previsto, lo da' con un livello di scarto. */
 #include "../../src/light.c"
 #include "prova.h"
 
