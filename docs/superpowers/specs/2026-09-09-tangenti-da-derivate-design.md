@@ -24,8 +24,12 @@ storto.
 **Nessun personaggio in gioco ha una normal map vera.** `LightApplyToModel()`
 costruisce le tangenti solo per le mesh che ne hanno una
 (`src/light.c:350-356`), e i sei modelli KayKit non ne hanno: ricevono la
-normale piatta di riserva installata da `FitFlatNormal()`, quindi `ts` vale
-`(0,0,1)` e `SurfaceNormal()` restituisce esattamente la normale del vertice.
+normale piatta di riserva installata da `FitFlatNormal()`, quindi
+`SurfaceNormal()` restituisce la normale del vertice a meno di quattro
+millesimi. *A meno di*, non *esattamente*: quella riserva è la texture
+`(128,128,255)` di `light.c:326`, che decodifica in `(0,0039, 0,0039, 1)` e non
+in `(0,0,1)`. La differenza sta sotto la soglia del visibile, ma non è zero —
+vedi *Il rischio dichiarato*.
 
 Ne discende una cosa che va detta forte, o chi riprende perde tempo:
 **questo è un prerequisito, non una riparazione.** Non esiste in gioco un
@@ -98,13 +102,24 @@ fotogramma all'altro, dove la tangente interpolata di oggi è stabile.
 
 Il rischio **non colpisce tutta la scena**, e capire perché dice anche dove
 guardare. I materiali senza normal map vera ricevono da `light.c` quella
-piatta, cioè `ts = (0,0,1)`, e vale l'identità
+piatta, e vale l'identità
 
     mat3(t, b, n) * (0,0,1) == n
 
-**qualunque** siano `t` e `b`. Terna spazzatura, risultato identico. Il rumore
-può quindi comparire solo dove c'è una normal map vera **e** il triangolo è
-minuscolo: i prop Poly Haven — erba, cespugli, massi, sottobosco — a distanza.
+**qualunque** siano `t` e `b`. Ma `ts` non è `(0,0,1)`: la riserva di
+`light.c:326` è la texture `(128,128,255)`, e `128/255 · 2 − 1 = 0,0039`.
+L'identità è vera in matematica e falsa di quattro millesimi in aritmetica a
+8 bit — **la terna filtra dentro anche lì**. E si misura: fra la copia con le
+tangenti e quella con le derivate, il **9,25% dei pixel** dell'inquadratura di
+prova differisce di almeno un livello, e sono quasi tutti nevaio: cioè proprio
+i pixel dove l'identità qui sopra prometteva che non potesse cambiare niente. Un livello su 255 sta
+sotto la soglia del visibile e nessuna conclusione di questo lavoro cambia; ma
+chi userà «terna spazzatura, risultato identico» per saltare un controllo deve
+sapere che è un'approssimazione buona, non un teorema.
+
+Il rumore vero e proprio può comparire solo dove c'è una normal map vera **e**
+il triangolo è minuscolo: i prop Poly Haven — erba, cespugli, massi,
+sottobosco — a distanza.
 
 **La mitigazione non si scrive, e la ragione va agli atti.** Commutare la terna
 sulla distanza vorrebbe una soglia, e una soglia va tarata contro una geometria
@@ -118,7 +133,7 @@ l'avrà reso inutile.
 Quello che si fa invece: **confronto a pixel su due inquadrature lontane** col
 binario strumentato, prima di chiudere. Se non si vede, non si scrive niente.
 
-#### Misurato il 2026-09-09: lo sfarfallio non c'è
+#### Misurato il 2026-09-09: lo sfarfallio c'è, ed è cinquanta volte sotto il tremolio
 
 Non è stato guardato, è stato **contato**: lo sfarfallio è varianza temporale.
 Stesso binario strumentato, modalità alternativa, sessanta fotogrammi
@@ -132,12 +147,34 @@ inclinazione **−0,10 rad**: il nevaio a nord-est. Nel campo visivo ci sono
 
 **Perché lì e non in una foresta.** In foresta la scena è fatta di alberi
 KayKit, che una normal map vera non ce l'hanno: la prova avrebbe misurato
-terreno e cielo. E perché non «a 150–260 m» come diceva il piano: **nessun prop
-Poly Haven viene disegnato oltre i 140 m.** `PropMaxDist()` taglia i massi e i
-tronchi a 140, i ceppi a 100, i cespugli e l'erba a 80, il sottobosco fra 40 e
-60. Oltre i 140 m restano solo alberi, case e torri — nessuno dei quali passa
-da `SurfaceNormal()` con una normal map vera. La fascia 150–260 m è vuota di
-ciò che si voleva guardare, per costruzione.
+terreno e cielo.
+
+**E perché non «a 150–260 m» come diceva il piano.** Nessun prop Poly Haven
+viene disegnato oltre i 140 m: `PropMaxDist()` taglia i massi e i tronchi a
+140, i ceppi a 100, i cespugli e l'erba a 80, il sottobosco fra 40 e 60. Più in
+là la fascia è **quasi** vuota di ciò che si voleva guardare — e «quasi» va
+detto, perché la prima stesura di questa sezione scriveva «vuota per
+costruzione», e quello è falso. Ci stanno dentro almeno due cose:
+
+- la **cripta**. `PROP_CRYPT` non compare in `gPropDetail`, quindi
+  `PropMaxDist()` (`src/world.c:1097`) le assegna il `default: 400.0f`.
+  `crypt.gltf` ha una normal map vera, 63 127 triangoli, e `projMode == 0`:
+  passa esattamente da `SurfaceNormal()`;
+- il **maschio del forte e la statua**. `BUILD_KEEP` e `BUILD_STATUE` in
+  `gBuildMat` (`src/world.c:295-296`) hanno mode 0 e `uvVere = true`: **non**
+  passano da `NormaleProiettata()` come le altre murature, passano da
+  `SurfaceNormal()`. `modular_fort_01.gltf` porta tre normal map,
+  `statua.gltf` 27 739 triangoli, e case e torri si vedono fino a 400 m.
+
+Attorno alla cripta ci sarebbe quindi stato il caso che il piano chiedeva: una
+statua da 27 739 triangoli vista a 200 m occupa nove pixel di lato scarsi, cioè
+circa **360 triangoli per pixel**. Il nevaio non era l'unico posto possibile.
+Era però il posto migliore, e la ragione è di copertura, non di esistenza:
+**dà la stessa densità di triangoli per pixel su 51 prop** invece che su un
+singolo manufatto in un singolo punto del mondo, e su una geometria — i massi —
+che il gioco disegna a migliaia. La deviazione dal piano resta giustificata; ma
+è una scelta argomentata, non un teorema, e chi ripeterà la misura sa adesso
+dove sta l'altro caso.
 
 Non è una rinuncia, perché **la distanza non è la condizione vera**: la
 condizione è il triangolo sotto il pixel, e `rock.gltf` ha 59 066 triangoli su
@@ -162,20 +199,32 @@ copia danno la stessa cifra fino alla quarta decimale.
 | prima | **0,2393** livelli | 18,165% | 115,30 |
 | dopo  | **0,2400** livelli | 18,218% | 116,23 |
 
-**+0,25%.** Sette decimillesimi di livello su 255.
+**+0,25%: sei decimillesimi di livello su 255 — e non è rumore di misura.** La
+stessa copia, rilanciata, si ripete entro ±0,0001 livelli; lo scarto fra le due
+copie è +0,0006, sei volte tanto. L'effetto c'è, ed è misurato: la domanda è
+quanto sia piccolo, non se esista.
 
 **E non è concentrato sui massi.** Una mappa per pixel della varianza
-temporale, confrontata fra le due copie, dice dove sta quel poco. Sui 114 pixel
-in cui i due shader danno risultati diversi di almeno due livelli — cioè sui
-massi, dove la terna conta davvero — la varianza passa da 3,364 a 3,421
-livelli: **+1,7%**, cioè sei centesimi di livello aggiunti a un tremolio da
-movimento che è già cinquanta volte più grande. Quattro quinti dell'aumento
-totale stanno **fuori** da quei pixel, sparsi sul nevaio: è rumore di
-arrotondamento, non un difetto localizzato.
+temporale, confrontata fra le due copie, dice dove sta quel poco. La maschera
+non è disegnata a mano: sono i pixel in cui i due shader danno risultati
+diversi, cioè dove la normal map è vera. Stringendola, l'effetto **cresce in
+modo monotono** — +0,4% sugli 85 252 pixel che differiscono di almeno un
+livello, +1,7% sui 114 che ne differiscono di due, +3,7% sui 39 che ne
+differiscono di cinque. Una rampa così è la firma di un effetto reale, non di
+un arrotondamento casuale, e va letta come tale. Sui 114 pixel più sensibili —
+i bordi dei massi, dove la terna conta davvero — la varianza passa da 3,364 a
+3,421 livelli: sei centesimi di livello aggiunti a un tremolio da movimento che
+è già cinquanta volte più grande, e a sua volta invisibile. Quattro quinti
+dell'aumento totale stanno comunque **fuori** da quelle maschere, sparsi sul
+nevaio: nessun difetto localizzato.
 
-**Conclusione: lo sfarfallio dei triangoli sotto il pixel non esiste in modo
-misurabile, e non si scrive nessuna mitigazione** — che era già la decisione
-presa qui sopra per ragioni di progetto, e adesso ha anche un numero.
+**Conclusione: lo sfarfallio dei triangoli sotto il pixel esiste, è stato
+misurato, e sta circa cinquanta volte sotto il tremolio da movimento e ben
+sotto la soglia del visibile. Non si scrive nessuna mitigazione** — che era già
+la decisione presa qui sopra per ragioni di progetto, e adesso ha anche un
+numero. La differenza rispetto a «non esiste» non è pignoleria: dice a chi
+rimisurerà con asset diversi che questo banco un effetto lo distingue, e quanto
+grande era quello di oggi.
 
 ## La prova
 
@@ -346,6 +395,25 @@ rumore dichiarato. L'alternanza è ciò che rende il confronto sano.
 La soglia era +5%. **Rispettata, e con il segno opposto a quello temuto: il
 passaggio principale è più veloce di prima.**
 
+**L'ordine non può aver fabbricato questo segno, e l'argomento è più forte
+dell'alternanza.** La macchina deriva verso l'alto scaldandosi. Nella prima
+tornata i tre giri `dopo` sono girati *dopo* tutti i `prima`, cioè a macchina
+più calda, e sono comunque risultati più veloci; dentro ogni coppia alternata
+il `dopo` è il secondo dei due, di nuovo il più caldo. In tutte e sei le
+esecuzioni **la deriva termica spinge contro il segno osservato**. Il −2,9% è
+quindi una stima conservativa — un minorante del guadagno vero — non un
+artefatto dell'ordine.
+
+**E va detto che il «rumore 1,7%» del passo 1 non era una stima di
+ripetibilità.** Erano i primi tre punti di una rampa monotona — la macchina che
+si scalda — non tre campioni indipendenti attorno a una media. La dispersione
+vera dell'ambiente è quel 4,1% fra il primo e l'ultimo giro di `prima`, che sta
+a **0,8 volte** la soglia dichiarata: con un risultato vicino al +4% questo
+banco non avrebbe potuto decidere niente, e sarebbe servito un protocollo
+diverso — alternanza fin dal primo giro, o un plateau termico prima di
+misurare. Il risultato è utilizzabile perché cade lontano dalla soglia e dalla
+parte giusta, non perché il banco fosse preciso.
+
 **Ma il numero non risponde alla domanda che sembra.** Nella copia `dopo`
 `fragTangent` non viene più letto da nessuna parte del fragment shader: resta
 dichiarato, e diventa un varying morto che il compilatore GLSL può togliere —
@@ -356,11 +424,30 @@ tenerli separati non rimuovendo `BuildTangents()` nello stesso passo; non
 bastava, perché il ramo morto se lo porta via il driver senza chiedere
 permesso.
 
+**E il credito è almeno grande quanto dichiarato, probabilmente di più.** Con
+l'output morto cade anche l'ALU del vertex shader che lo calcola, e con ogni
+probabilità il prelievo dell'attributo `vertexTangent` stesso: sedici byte per
+vertice, su mesh da decine di migliaia di triangoli. Il costo vero delle
+derivate sta quindi nascosto sotto un credito di taglia ignota ma non piccola.
+
+**L'esperimento che li separa, scritto qui perché chi verrà dopo lo trovi
+pronto:** rilanciare la copia `dopo` con `fragTangent` **tenuto vivo** da una
+lettura inerte e non ottimizzabile via — un contributo che il compilatore non
+possa dimostrare nullo, per esempio pesato da una uniform che a runtime vale
+zero — e confrontarla con la copia `dopo` di oggi. Quattro giri di banco,
+alternati.
+
+**Non si esegue ora, e questa è una decisione presa, non una dimenticanza.** Il
+banco è stato cancellato; la domanda che il piano poneva — *sfora la soglia?* —
+ha già risposta, negativa e per giunta conservativa; e nessuna decisione cambia
+col numero isolato, perché la mitigazione non si scrive in nessuno dei due
+casi. L'esperimento diventa il **primo passo del lavoro che toglierà
+`BuildTangents()`**, che è il lavoro di cui quel numero misura davvero il
+guadagno. Sta scritto in *Fuori ambito*, dove chi lo aprirà lo troverà.
+
 Quello che il numero dice con certezza, e che è la domanda che contava: **il
 cotangent frame non fa sforare il budget del fotogramma, in nessuna delle sei
-esecuzioni.** Quello che non dice: quanto costerebbero le derivate se il
-varying restasse vivo. Chi vorrà quel numero lo misurerà nel lavoro che toglie
-`BuildTangents()`, dove diventa il guadagno da attribuire.
+esecuzioni.**
 
 ### La rete, progettata e non scritta
 
@@ -413,6 +500,15 @@ La rimozione diventa un lavoro suo, che parte da una condizione precisa — *il
 percorso nuovo è provato in gioco su un personaggio con normal map vera* — e
 che a quel punto potrà misurare il proprio guadagno pulito. Tocca la
 disposizione degli attributi in `instancing.c`, che è delicata.
+
+**Il suo primo passo è già scritto**, ed è l'esperimento descritto in *Il
+risultato*: rilanciare la copia con le derivate tenendo vivo `fragTangent` con
+una lettura inerte, quattro giri di banco alternati. Separa il costo delle
+derivate dal credito del varying morto, e va fatto **prima** di togliere
+qualunque cosa — è la linea di base rispetto a cui la rimozione misurerà il
+proprio guadagno. Non è stato fatto in questo lavoro perché nessuna sua
+decisione dipendeva da quel numero; dipende invece interamente da quel numero
+il lavoro di rimozione.
 
 ## Come si verifica che regga
 
