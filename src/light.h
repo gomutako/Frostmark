@@ -51,10 +51,14 @@ void LightSetProjection(int mode, float tile);
  * personaggi. Senza, l'oggetto resta piatto come prima.
  *
  * Fanno anche il lavoro che serve alle normal map: chi non ne ha una ne riceve
- * una piatta (raylib altrimenti non legherebbe l'unita' di texture, e lo
- * shader leggerebbe l'albedo come rilievo), e le mesh che hanno una normal map
- * vera ma non le tangenti se le vedono calcolare. Va chiamata DOPO
- * LoadModel(), una volta sola. */
+ * una piatta, e senza quella raylib non legherebbe l'unita' di texture e lo
+ * shader leggerebbe l'albedo come rilievo. Va chiamata DOPO LoadModel(), una
+ * volta sola.
+ *
+ * Calcolano inoltre le tangenti alle mesh che hanno una normal map vera ma non
+ * le portano. Questo pezzo oggi NON serve a illuminare: la terna la costruisce
+ * SurfaceNormal() dalle derivate di schermo, e l'attributo non lo legge piu'
+ * nessuno. Resta perche' toglierlo e' un lavoro suo - docs/06, domanda F. */
 void LightApplyToMaterial(Material *m);
 void LightApplyToModel(Model *m);
 

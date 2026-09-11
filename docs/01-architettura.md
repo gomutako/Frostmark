@@ -231,7 +231,7 @@ a 8 bit. Un livello su 255 sta sotto la soglia del visibile, ma non è zero.
   temporale su sessanta fotogrammi consecutivi, camera che avanza di un
   centimetro a fotogramma, 51 prop Poly Haven con normal map vera in campo:
   l'effetto **esiste**, vale **sei centesimi di livello** sui 114 pixel più
-  sensibili, ed è circa **cinquanta volte** sotto il tremolio da movimento che
+  sensibili, ed è circa **sessanta volte** sotto il tremolio da movimento che
   quegli stessi pixel hanno comunque. Nessuna mitigazione è stata scritta, e la
   ragione è agli atti: lo sfarfallio dei triangoli sub-pixel è il problema che
   risolvono LOD e impostori, non la terna, e un cerotto qui resterebbe in
@@ -241,8 +241,11 @@ a 8 bit. Un livello su 255 sta sotto la soglia del visibile, ma non è zero.
 `discard` del ritaglio rende il flusso non uniforme dentro il quad 2 × 2, quindi
 le derivate al bordo del ritaglio sono approssimate. È la stessa approssimazione
 che le GPU fanno già oggi per scegliere il livello di mip di `texture()`, con le
-stesse corsie d'aiuto: non è una regressione introdotta da questo lavoro, ed è
-scritto qui perché chi lo incontrerà non lo scambi per uno.
+stesse corsie d'aiuto: **l'esposizione non è nuova, la conseguenza sì.** Una
+derivata di UV sbagliata sceglie un mip sbagliato, e non si vede; una derivata
+di posizione sbagliata dà una normale sbagliata, e quella si vede. Oggi non
+morde perché il fogliame di ritaglio una normal map vera non ce l'ha — il
+giorno in cui ce l'avrà, è qui che va guardato.
 
 ### Instancing
 

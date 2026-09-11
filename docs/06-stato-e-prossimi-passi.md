@@ -42,6 +42,7 @@ la risposta non è stata trovare l'oggetto ma **comporlo**:
 | 4 | **torre** | **fatto** — `tower_round`, il pezzo 12 dei venti di `modular_fort_01` |
 | 5 | **cripta** | **fatto** — un tumulo di massi con un varco. È la domanda **E** |
 | 6 | **personaggi** | aperto, il più grosso: serve un'altra fonte. Il vincolo delle tangenti non c'è più — la domanda **F** è chiusa — quindi resta solo la domanda **C** |
+| — | **le tangenti morte** — `BuildTangents()`, `vertexTangent`, `fragTangent` | **aperto**, ed è l'unico lavoro che la domanda **F** lascia dietro di sé: girano ancora, nessuno legge più ciò che producono. Sta dentro la F, che è intitolata *CHIUSA*, e per questo è scritto anche qui |
 
 ### Cosa è realistico in gioco, oggi
 
@@ -333,14 +334,14 @@ che il compilatore può portare via da solo, quattro float per frammento, e il �
 la somma dei due effetti. Separarli è il primo passo del lavoro che resta aperto
 qui sotto, e l'esperimento è già scritto nella spec.
 
-**Il rumore sui triangoli sotto il pixel: esiste, ed è cinquanta volte sotto il
+**Il rumore sui triangoli sotto il pixel: esiste, ed è sessanta volte sotto il
 tremolio da movimento.** Non è stato guardato, è stato **contato** — varianza
 temporale su sessanta fotogrammi consecutivi, camera che avanza di un centimetro
 a fotogramma sul nevaio a nord-est, con 51 prop Poly Haven con normal map vera
 in campo. La differenza media fra fotogrammi consecutivi passa da 0,23933 a
 0,24000 livelli, +0,25%; sui 114 pixel più sensibili — i bordi dei massi — la
 varianza passa da 3,364 a 3,421, cioè **sei centesimi di livello** aggiunti a un
-tremolio da movimento già cinquanta volte più grande e a sua volta invisibile.
+tremolio da movimento già sessanta volte più grande e a sua volta invisibile.
 **Nessuna mitigazione è stata scritta**, e la decisione è motivata: lo
 sfarfallio dei triangoli sub-pixel è il problema che risolvono LOD e impostori
 — la domanda **B** — non quello della terna, e una soglia sulla distanza andrebbe
@@ -351,6 +352,30 @@ del 9 settembre affermava il contrario, ed era falso. Dove le derivate delle UV
 sono nulle il determinante è zero e la terna non esiste; il ripiego è lo stesso
 di prima, la normale del vertice, su una condizione diversa. Il problema si è
 spostato dal vertice al frammento.
+
+**La regressione, ed è l'unica vera: fp32 in campo vicino e lontano
+dall'origine.** Le derivate si prendono su `fragPosition`, che è una posizione
+**assoluta in metri-mondo** e arriva a `WORLD_SIZE` = 4096 (`src/config.h`). In
+fp32 un ulp vale `x · 2⁻²³`: a `x ≈ 3000` sono circa `3,6·10⁻⁴ m`. Con
+`fovy = 70°` il passo di mondo per pixel a distanza *d* è
+`2 · tan(35°) · d / righe`, cioè `d · 1,3·10⁻³ m` su 1080 righe e
+`d · 1,9·10⁻³ m` sui 720 di `config.h`: **a un metro dalla superficie il passo
+vale tre o quattro ulp**, a mezzo metro uno e mezzo o due. E
+`dFdx(fragPosition)` è la differenza di due varying **già arrotondati**, con un
+errore dell'ordine dell'ulp su un passo che di ulp ne conta tre: la terna può
+arrivare con un **errore relativo del 15–30%**, dove la tangente interpolata di
+prima non aveva questo problema. **È proprio il caso per cui questo lavoro
+esiste: un volto a uno o due metri.** Ne risentono i prop Poly Haven a cui ci si
+accosta, `crypt.gltf` — dentro la cripta le pareti stanno sotto il metro — e
+`BUILD_KEEP` / `BUILD_STATUE`, che in `src/world.c:295-296` hanno mode 0 e
+`uvVere = true` e quindi passano da `SurfaceNormal()` con normal map vera. Il
+terreno no: riceve la normale piatta.
+La cura vera è costruire le derivate su una posizione **relativa alla camera**,
+calcolata nel vertex shader — non un ritocco, un lavoro suo, perché tocca
+entrambi i vertex shader e il varying che condividono. **La verifica costa
+quasi niente**, col banco già descritto nella spec: *lo stesso masso a un
+metro, una volta vicino all'origine e una volta all'angolo lontano della
+mappa.* Se la terna degrada col modulo della posizione, è questo.
 
 **Quello che resta da fare, ed è un lavoro suo.** `BuildTangents()`, l'attributo
 `vertexTangent` e il varying `fragTangent` sono oggi codice morto: nessuno legge

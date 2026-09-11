@@ -44,7 +44,14 @@ void main()
     /* La tangente segue la superficie come la normale, quindi la stessa
      * matrice. Il verso della bitangente (w) e' un segno, non una direzione:
      * non va trasformato. Se la mesh non porta tangenti raylib passa qui un
-     * vettore nullo, e il fragment se ne accorge. */
+     * vettore nullo.
+     *
+     * Chi legge fragTangent, oggi: nessuno. SurfaceNormal() costruisce la
+     * terna dalle derivate di schermo e non guarda piu' questo varying, e il
+     * caso degenere lo intercetta dal determinante delle derivate delle UV,
+     * non dal vettore nullo. Il calcolo resta in piedi perche' toglierlo -
+     * insieme all'attributo e al varying - e' un lavoro suo: docs/06,
+     * domanda F. */
     fragTangent  = vec4(vec3(matNormal * vec4(vertexTangent.xyz, 1.0)), vertexTangent.w);
 
     /* Scala e imbardata stanno dentro matModel: la scala e' la lunghezza delle

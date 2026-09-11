@@ -67,6 +67,47 @@ obbligatorio è lo stesso di oggi — tornare alla normale del vertice — solo 
 una condizione diversa. Le derivate **spostano** il problema dal vertice al
 frammento; non lo risolvono.
 
+### La regressione vera: fp32, in campo vicino e lontano dall'origine
+
+È **l'unica regressione** che questo ramo introduce — le UV degeneri erano
+scoperte anche prima, i triangoli sotto il pixel sono un rischio dichiarato e
+misurato — e cade proprio sul caso per cui il ramo esiste: **un volto a uno o
+due metri.** Va agli atti qui, non riparata ora.
+
+**Perché succede.** Le derivate si prendono su `fragPosition`, che è una
+posizione **assoluta in metri-mondo** e arriva a `WORLD_SIZE` = 4096
+(`src/config.h`). In fp32 un ulp vale `x · 2⁻²³`: a `x ≈ 3000` sono circa
+`3,6·10⁻⁴ m`. Con `fovy = 70°` il passo di mondo per pixel a distanza *d* vale
+`2 · tan(35°) · d / righe`, cioè `d · 1,3·10⁻³ m` su 1080 righe e
+`d · 1,9·10⁻³ m` sui 720 di `config.h` — **più fitta è l'immagine, peggio è.**
+A un metro dalla superficie il passo vale quindi tre o quattro ulp; a mezzo
+metro, uno e mezzo o due.
+
+`dFdx(fragPosition)` è la differenza di **due varying già arrotondati**: il suo
+errore assoluto è dell'ordine dell'ulp, su un passo che di ulp ne conta tre o
+quattro. In campo vicino e lontano dall'origine la terna può quindi arrivare
+con un **errore relativo dell'ordine del 15–30%**, dove la tangente interpolata
+di prima non aveva questo problema — l'interpolazione di un attributo non
+sottrae due numeri grandi quasi uguali.
+
+**Chi ne risente.** I prop Poly Haven a cui ci si accosta; `crypt.gltf`, dove
+dentro la cripta le pareti stanno sotto il metro; e `BUILD_KEEP` /
+`BUILD_STATUE`, che in `src/world.c:295-296` hanno mode 0 e `uvVere = true` e
+quindi passano da `SurfaceNormal()` con una normal map vera. **Il terreno no:**
+riceve la normale piatta.
+
+**La cura vera, e non è un ritocco.** Costruire le derivate su una posizione
+**relativa alla camera**, calcolata nel vertex shader: lì la sottrazione
+`posizione − viewPos` avviene una volta per vertice e il varying che arriva al
+fragment porta già numeri piccoli, dove l'ulp è quello del metro e non quello
+del chilometro. Tocca tutti e due i vertex shader e il varying che condividono:
+è un lavoro suo.
+
+**La verifica costa quasi niente**, col banco già descritto più avanti: **lo
+stesso masso a un metro, una volta vicino all'origine e una volta all'angolo
+lontano della mappa.** Se la terna degrada col modulo della posizione, è questo
+e non altro.
+
 ## Il cambiamento
 
 Un solo blocco di codice. `SurfaceNormal()` oggi legge `fragTangent`, lo
@@ -133,7 +174,7 @@ l'avrà reso inutile.
 Quello che si fa invece: **confronto a pixel su due inquadrature lontane** col
 binario strumentato, prima di chiudere. Se non si vede, non si scrive niente.
 
-#### Misurato il 2026-09-09: lo sfarfallio c'è, ed è cinquanta volte sotto il tremolio
+#### Misurato il 2026-09-09: lo sfarfallio c'è, ed è sessanta volte sotto il tremolio
 
 Non è stato guardato, è stato **contato**: lo sfarfallio è varianza temporale.
 Stesso binario strumentato, modalità alternativa, sessanta fotogrammi
@@ -214,12 +255,12 @@ differiscono di cinque. Una rampa così è la firma di un effetto reale, non di
 un arrotondamento casuale, e va letta come tale. Sui 114 pixel più sensibili —
 i bordi dei massi, dove la terna conta davvero — la varianza passa da 3,364 a
 3,421 livelli: sei centesimi di livello aggiunti a un tremolio da movimento che
-è già cinquanta volte più grande, e a sua volta invisibile. Quattro quinti
+è già sessanta volte più grande, e a sua volta invisibile. Quattro quinti
 dell'aumento totale stanno comunque **fuori** da quelle maschere, sparsi sul
 nevaio: nessun difetto localizzato.
 
 **Conclusione: lo sfarfallio dei triangoli sotto il pixel esiste, è stato
-misurato, e sta circa cinquanta volte sotto il tremolio da movimento e ben
+misurato, e sta circa sessanta volte sotto il tremolio da movimento e ben
 sotto la soglia del visibile. Non si scrive nessuna mitigazione** — che era già
 la decisione presa qui sopra per ragioni di progetto, e adesso ha anche un
 numero. La differenza rispetto a «non esiste» non è pignoleria: dice a chi
@@ -473,9 +514,19 @@ di scrivere.
 Sulle foglie il `discard` del ritaglio rende il flusso non uniforme dentro il
 quad 2×2, quindi le derivate al bordo del ritaglio sono approssimate. È la
 stessa approssimazione che le GPU fanno già oggi per scegliere il livello di
-mip di `texture()`, con le stesse corsie d'aiuto. **Non è una regressione
-introdotta da questo lavoro**, ed è il motivo per cui non compare fra i rischi:
-sta qui perché altrimenti sembrerà un difetto nuovo a chi lo incontrerà.
+mip di `texture()`, con le stesse corsie d'aiuto.
+
+**La classe di esposizione è identica; la conseguenza no, e la differenza va
+detta.** Una derivata di UV approssimata sceglie un livello di mip sbagliato, e
+un mip sbagliato al bordo di una foglia non si vede. Una derivata di posizione
+approssimata dà una *terna* sbagliata, cioè una normale sbagliata, e quella si
+vede: cambia come il frammento prende la luce. Quindi non è un'esposizione
+nuova — quei frammenti derivavano già — ma **è una conseguenza nuova**, e chi
+dovesse vedere bordi di foglia illuminati storti sappia che è qui che va
+guardato. Sta agli atti e non fra i rischi perché il ritaglio colpisce una
+fascia di frammenti larga un pixel su asset che una normal map vera non ce
+l'hanno; il giorno in cui una fogliame fotogrammetrica ne porti una, questa
+riga va riletta.
 
 ## Fuori ambito
 

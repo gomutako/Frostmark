@@ -100,9 +100,12 @@ InstBatch *InstCreate(Mesh mesh, Material mat)
     rlEnableVertexAttribute(2);
 
     /* Colore e tangente possono mancare. Si da' allora un valore fisso, come
-     * fa UploadMesh(): bianco per il colore, e zero per la tangente - il
-     * fragment shader sa gia' che una tangente nulla vuol dire "usa la normale
-     * del vertice". */
+     * fa UploadMesh(): bianco per il colore, e zero per la tangente. Zero non
+     * e' piu' un segnale per nessuno: il fragment shader non legge piu'
+     * l'attributo - la terna nasce dalle derivate di schermo - e il ripiego
+     * "usa la normale del vertice" scatta ora sul determinante delle derivate
+     * delle UV. Il valore fisso resta perche' l'attributo e' ancora dichiarato
+     * e un attributo abilitato senza buffer legge spazzatura. */
     if (mesh.vboId[3] != 0) {
         rlEnableVertexBuffer(mesh.vboId[3]);
         rlSetVertexAttribute(3, 4, RL_UNSIGNED_BYTE, true, 0, 0);

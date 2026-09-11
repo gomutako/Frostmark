@@ -54,7 +54,12 @@ static int HaUniform(const char *nome)
 
 /* Quadrato nel piano XZ, normale +Y, tangente +X dichiarata a mano: cosi' la
  * terna e' nota e il valore atteso si calcola con carta e penna, senza
- * dipendere da come si orientano le UV. */
+ * dipendere da come si orientano le UV.
+ *
+ * La w vale +1 ed e' in DISACCORDO con le UV di questo stesso quadrato. Non e'
+ * una svista: prima di "correggerla", leggi la nota in testa al file, "Perche'
+ * due fixture dichiarano tangenti SBAGLIATE". Metterla d'accordo spegne i casi
+ * 6a e 6b, che senza il disaccordo non distinguono piu' niente. */
 static Mesh Quadrato(void)
 {
     static float v[18]  = { -2,0,-2,  -2,0,2,   2,0,2,
@@ -113,7 +118,8 @@ static Mesh QuadratoUVRuotate(void)
     return m;
 }
 
-/* Un pixel di normal map, in byte. (128,128,255) vale (0,0,1): non piegare. */
+/* Un pixel di normal map, in byte. (128,128,255) vale circa (0,0,1) - per
+ * l'esattezza (0,0039, 0,0039, 1): non piegare. */
 static Texture2D PixelNormale(int r, int g, int b)
 {
     Image im = GenImageColor(1, 1, (Color){ (unsigned char)r, (unsigned char)g,
@@ -242,6 +248,12 @@ int main(void)
         Ok("tangenti indicizzate: (1,0,0) con verso -1", buona);
     }
 
+    /* Quello che prova BuildTangents() e' l'Ok() qui sopra, che gira su CPU e
+     * guarda l'array delle tangenti. Il Near() che segue no: da quando la
+     * terna nasce dalle derivate lo shader l'attributo non lo legge, e il 129
+     * verrebbe fuori identico anche con le tangenti azzerate. Resta perche'
+     * copre comunque il percorso di disegno di una mesh indicizzata con normal
+     * map vera, non perche' verifichi le tangenti. */
     iq.materials[0].maps[MATERIAL_MAP_DIFFUSE].color = (Color){ 100, 100, 100, 255 };
     Near("indicizzato, piegato verso il sole",
          Centro(rt, iq.meshes[0], iq.materials[0]), 129, 3);

@@ -79,8 +79,11 @@ void main()
     vec3 nrm = RuotaY(vertexNormal / sc, s, c);
 
     /* La tangente invece giace SULLA superficie: segue la matrice del modello
-     * come una posizione, quindi si moltiplica. La w resta com'e', e' un segno.
-     * Il fragment la raddrizza e la normalizza da se'. */
+     * come una posizione, quindi si moltiplica. La w resta com'e', e' un
+     * segno. Il fragment pero' non la legge piu': da quando SurfaceNormal()
+     * costruisce la terna dalle derivate di schermo, questo varying non lo
+     * consuma nessuno. Resta calcolato perche' toglierlo e' un lavoro suo -
+     * docs/06, domanda F. */
     vec3 tan = RuotaY(vertexTangent.xyz * sc, s, c);
 
     fragPosition = world;
