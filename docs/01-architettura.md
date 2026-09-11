@@ -138,8 +138,44 @@ dove raylib lega `MATERIAL_MAP_NORMAL`; le mappe d'ombra vivono negli slot 10 e
 11, apposta per non stare fra i piedi alle texture del materiale.
 
 La mappa è espressa **in spazio tangente**, cioè relativa alla superficie: per
-usarla serve la terna tangente/bitangente/normale. Tre trappole, tutte trovate
-scrivendola:
+usarla serve la terna tangente/bitangente/normale. Quella terna **non viene
+dall'attributo del vertice**: `SurfaceNormal()` in `scene.fs` la costruisce
+dalle **derivate di schermo** — `dFdx` e `dFdy` della posizione nel mondo e
+delle coordinate texture, cioè il *cotangent frame*. Le derivate dicono di
+quanto si muovono le une rispetto alle altre passando da un frammento al suo
+vicino; risolvere quel sistema 2 × 2 dà gli assi della texture sulla superficie,
+che poi vengono raddrizzati rispetto alla normale interpolata.
+
+**Il motivo è l'animazione.** `UpdateModelAnimation()` di raylib aggiorna
+posizioni e normali ma **non le tangenti**. Finché la terna nasceva
+dall'attributo, un personaggio animato con una normal map vera avrebbe avuto il
+rilievo fermo alla posa di riposo: la superficie si muove, il suo microrilievo
+no, e si vede sui volti. Le derivate lavorano su `fragPosition`, che esce dal
+vertex shader dopo `matModel`, cioè su posizioni **già deformate dallo
+scheletro**. Non c'è nessuna tangente da aggiornare, perché non c'è nessuna
+tangente: il difetto non è riparato, è tolto per costruzione.
+
+**Vale ovunque, non solo sugli animati**, ed è una scelta. Due percorsi che
+fanno la stessa cosa in modi diversi divergono in silenzio, ed è già successo
+qui: lo sfalsamento della proiezione, applicato all'albedo e dimenticato sulla
+normal map, ha lasciato per settimane il rilievo del tetto fuori posto rispetto
+alle sue scandole. I due rami proiettati invece non sono toccati:
+`NormaleProiettata()` si costruisce già la terna dagli assi della proiezione e
+l'attributo non l'ha mai letto.
+
+**Non è costato niente, e il numero va detto perché il rischio era esattamente
+quello:** le tangenti si pagavano una volta al caricamento, le derivate si
+pagano per frammento. Sei giri del banco da 75 secondi per copia, gli ultimi tre
+alternati per non farsi ingannare dalla macchina che si scalda: il passaggio
+principale passa da **2,539 a 2,465 ms, cioè −2,9%**, contro una soglia di +5%
+scritta e committata *prima* di guardare il risultato. Il segno è l'opposto di
+quello temuto, e il merito non è tutto delle derivate: nella versione nuova
+`fragTangent` non lo legge più nessuno, diventa un varying morto che il
+compilatore GLSL porta via da solo, e con lui l'interpolazione di quattro float
+per frammento su tutta la scena. Il −2,9% è la somma di due effetti di segno
+opposto, e separarli è il primo passo del lavoro che toglierà l'attributo.
+
+Tre trappole, tutte trovate scrivendo questa parte:
 
 - **Raylib lega `texture2` solo se il materiale ha davvero una normal map.**
   Senza, l'uniform resta a zero — cioè allo stesso slot dell'albedo — e lo
@@ -150,25 +186,62 @@ scrivendola:
   non una condivisa: `UnloadMaterial()` libera le texture delle mappe, e una
   texture sola liberata due volte è un guaio che si paga lontano da dove è stato
   commesso. Un pixel per materiale non si misura.
-- **Quando la mesh non porta tangenti raylib passa `{0,0,0,0}`.** Un
-  Gram-Schmidt su un vettore nullo dà NaN, quindi il fragment controlla prima di
-  costruire la terna e in quel caso resta alla normale del vertice.
+- **Il vettore nullo dà NaN, e la guardia si è solo spostata.** Quando la mesh
+  non porta tangenti raylib passa `{0,0,0,0}`, e un Gram-Schmidt su un vettore
+  nullo dà NaN: il fragment controllava prima di costruire la terna. Oggi
+  l'attributo non lo legge più, ma serve la stessa guardia una riga più in là —
+  dove le UV sono degeneri il determinante del sistema 2 × 2 è nullo e la terna
+  uscirebbe indefinita allo stesso modo. Il ripiego non è cambiato, è la normale
+  del vertice; è cambiata la condizione su cui scatta.
 - **`GenMeshTangents()` di raylib 5.5 ignora `mesh->indices`**: legge i vertici
   a gruppi di tre come se la mesh non fosse indicizzata, e le mesh glTF lo sono
   quasi sempre. Su quelle costruirebbe triangoli che non esistono. `light.c` ha
   quindi il suo `BuildTangents()`, che segue gli indici e accumula sui vertici
   condivisi, così la tangente non si spezza sui bordi.
 
-Il risultato è che **con gli asset di oggi non cambia un pixel** — misurato: un
-piano grigio illuminato da un sole a `(0.6, 0.8, 0)` dà 113 sul canale rosso
-prima e dopo — e un asset con normal map la usa da subito. Piegando la normale
-di 30° verso il sole lo stesso piano passa a 129, e piegandola dall'altra parte
-a 78: i valori che il conto prevede.
+`BuildTangents()` **è rimasto e continua a girare**, anche se dal fragment
+nessuno legge più ciò che produce. Toglierlo — insieme all'attributo
+`vertexTangent` e al varying `fragTangent` — è un lavoro suo, con una condizione
+che lo sblocca: il percorso nuovo provato in gioco su un personaggio con una
+normal map vera. Vedi `docs/06`, domanda F.
 
-**Limite noto:** `UpdateModelAnimation()` aggiorna posizioni e normali ma **non**
-le tangenti. Un personaggio animato con una normal map avrà quindi tangenti
-ferme alla posa di riposo. Sui personaggi attuali, che una normal map non ce
-l'hanno, non si vede; va risolto se ne arriverà uno che ce l'ha.
+Il risultato, misurato: sul quadrato di prova i tre numeri storici non si
+muovono — un piano grigio illuminato da un sole a `(0.6, 0.8, 0)` dà **113** sul
+canale rosso, **129** piegando la normale di 30° verso il sole e **78**
+piegandola dall'altra parte, gli stessi valori che il conto prevede e che dava
+la terna dall'attributo. In gioco però **non è vero che non cambia un pixel**, e
+vale la pena saperlo: fra le due copie il **9,25% dei pixel** dell'inquadratura
+di prova differisce di almeno un livello, e sono quasi tutti nevaio. Il motivo è
+che la normale piatta di riserva è la texture `(128,128,255)`, che decodifica in
+`(0,0039, 0,0039, 1)` e non in `(0,0,1)`: l'identità «con una normale piatta la
+terna non conta» è vera in matematica e falsa di quattro millesimi in aritmetica
+a 8 bit. Un livello su 255 sta sotto la soglia del visibile, ma non è zero.
+
+**Quello che resta scoperto, e non va dimenticato:**
+
+- **le UV degeneri non sono coperte.** Dove un triangolo sull'atlante è un punto
+  o un segmento, le derivate delle UV sono nulle e la terna non esiste: si torna
+  alla normale del vertice, come prima. Il problema si è spostato dal vertice al
+  frammento, non è sparito;
+- **i triangoli sotto il pixel sono il rischio dichiarato.** Le derivate si
+  calcolano per quad di 2 × 2 frammenti: su un triangolo grande come mezzo pixel
+  la terna può diventare rumorosa da un fotogramma all'altro, dove la tangente
+  interpolata era stabile. È stato contato invece che guardato — varianza
+  temporale su sessanta fotogrammi consecutivi, camera che avanza di un
+  centimetro a fotogramma, 51 prop Poly Haven con normal map vera in campo:
+  l'effetto **esiste**, vale **sei centesimi di livello** sui 114 pixel più
+  sensibili, ed è circa **cinquanta volte** sotto il tremolio da movimento che
+  quegli stessi pixel hanno comunque. Nessuna mitigazione è stata scritta, e la
+  ragione è agli atti: lo sfarfallio dei triangoli sub-pixel è il problema che
+  risolvono LOD e impostori, non la terna, e un cerotto qui resterebbe in
+  `scene.fs` a confondere chi legge anche dopo.
+
+**Un dettaglio che altrimenti sembrerà un difetto nuovo.** Sulle foglie il
+`discard` del ritaglio rende il flusso non uniforme dentro il quad 2 × 2, quindi
+le derivate al bordo del ritaglio sono approssimate. È la stessa approssimazione
+che le GPU fanno già oggi per scegliere il livello di mip di `texture()`, con le
+stesse corsie d'aiuto: non è una regressione introdotta da questo lavoro, ed è
+scritto qui perché chi lo incontrerà non lo scambi per uno.
 
 ### Instancing
 
@@ -588,6 +661,49 @@ moltiplicando la normale per la scala invece di dividerla **il cubo non se ne
 accorge**, perché le sue normali sono versori sugli assi e `(1,0,0)` diviso o
 moltiplicato per `(1, 2.5, 0.7)` resta `(1,0,0)`. Serve la sfera: con il solo
 cubo la prova darebbe falsa sicurezza proprio sull'errore più facile da fare.
+
+Quella della normal map (`tools/prove/normalmap.c`) rende su GPU dentro una
+`RenderTexture2D` di 64 × 64, legge il canale rosso al centro e lo confronta con
+valori calcolati a mano *prima* di guardarli — la regola sta in testa al file, e
+vale perché una prova i cui attesi si scrivono dopo si limita a fotografare ciò
+che il codice fa, errori compresi. Controlla, nell'ordine: che con una normale
+piatta il rendering resti quello di sempre (**113**), che una normal map piegata
+verso il sole schiarisca (**129**) e piegata dall'altra parte scurisca (**78**);
+che su una mesh **indicizzata** — il caso su cui `GenMeshTangents()` sbaglia —
+`BuildTangents()` produca `(1,0,0)` con verso −1 e l'illuminazione torni a 129;
+e due casi aggiunti quando la terna è passata alle derivate di schermo, che sono
+gli unici che distinguono le derivate dall'attributo del vertice:
+
+- **la bitangente viene dalle UV, non dalla `w` dichiarata.** Normal map
+  `(128,191,238)`, cioè una perturbazione lungo la sola bitangente, sul quadrato
+  di sempre. La terna presa dalle UV dà `(0, 0.866, 0.5)` e **129**; quella
+  presa dalla `w` darebbe `(0, 0.866, −0.5)` e **78**. Cinquantuno livelli di
+  distacco: il caso morde;
+- **la tangente viene dalle UV, non è inchiodata a +X.** Un quadrato con le UV
+  **ruotate** di 90 gradi — la u lungo +Z, la v lungo +X — con la stessa normal
+  map del caso storico. Serve contro un difetto che nessun altro caso vede:
+  un'implementazione che restituisse `t = (1,0,0)` fisso passerebbe tutto il
+  resto, perché in ogni altro quadrato del file la u cresce già lungo +X. La
+  terna vera dà **129**, la tangente fissa **104**.
+
+Sabotati a prova verde, come vuole la regola: rovesciando la bitangente il primo
+caso legge **79** invece di 129, inchiodando la tangente a `(1,0,0)` il secondo
+legge 104 invece di 129. Il livello di scarto fra 79 e il 78 calcolato è
+arrotondamento della GPU — lo stesso che si vede da sempre sul caso "piegata via
+dal sole" — e sta dentro la tolleranza di 3 con cui la prova confronta.
+
+**Due fixture dichiarano tangenti in disaccordo con le proprie UV, e non è un
+errore da correggere.** `Quadrato()` dichiara a mano `w = +1`, che dà
+`b = cross(n,t) = (0,0,−1)`; ma le sue UV fanno crescere la v lungo +Z, quindi
+la bitangente vera è `(0,0,+1)`. È proprio quel disaccordo a rendere
+discriminanti i due casi qui sopra: una terna costruita dalle derivate segue le
+UV e ignora la `w`, una costruita dall'attributo segue la `w`, e se le due
+concordassero i due percorsi darebbero lo stesso numero. Chi "aggiusta" quelle
+tangenti non corregge niente e uccide i due casi — sta scritto anche in testa al
+file, per lo stesso motivo per cui la sfera dell'instancing va lasciata dov'è.
+Ed è per giunta il caso vero in miniatura: una mesh animata porta una tangente
+che non corrisponde più alla sua superficie, perché `UpdateModelAnimation()` non
+la aggiorna.
 
 Giocatore ed entità non si attraversano: `EntitiesPushPlayer()` in `entity.c`
 li separa come due cerchi sul piano, dopo che tutti si sono mossi — sta lì e

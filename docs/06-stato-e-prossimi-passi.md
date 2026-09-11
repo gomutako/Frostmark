@@ -5,7 +5,7 @@
 > aperte. Gli altri documenti spiegano *come funziona* il gioco; questo dice
 > *a che punto siamo*.
 
-**Ultimo aggiornamento:** 9 settembre 2026.
+**Ultimo aggiornamento:** 11 settembre 2026.
 
 > **L'obiettivo dichiarato è un clone di Skyrim, anche più semplice, ma
 > realistico** — non qualcosa di "fumettoso". Detto dall'utente il 9 settembre
@@ -41,7 +41,7 @@ la risposta non è stata trovare l'oggetto ma **comporlo**:
 | 3 | **edifici** | **fatto** — materiali proiettati sui dieci pezzi modulari |
 | 4 | **torre** | **fatto** — `tower_round`, il pezzo 12 dei venti di `modular_fort_01` |
 | 5 | **cripta** | **fatto** — un tumulo di massi con un varco. È la domanda **E** |
-| 6 | **personaggi** | aperto, il più grosso: serve un'altra fonte, e prima va tolto il vincolo delle tangenti. Sono le domande **C** e **F** |
+| 6 | **personaggi** | aperto, il più grosso: serve un'altra fonte. Il vincolo delle tangenti non c'è più — la domanda **F** è chiusa — quindi resta solo la domanda **C** |
 
 ### Cosa è realistico in gioco, oggi
 
@@ -187,18 +187,23 @@ volta sola, che è come li fanno i giochi grandi oltre una certa distanza;
 a un conteggio scelto da noi invece che subito dal catalogo; **un'altra fonte**
 con licenza compatibile. Nessuna delle tre è stata misurata.
 
-### C. I personaggi — aperta, e la più grossa
+### C. I personaggi — aperta, la più grossa, e senza più prerequisiti tecnici
 
 Non è un lavoro Poly Haven: giocatore e cinque NPC sono **riggati e animati**,
 con un sistema `.attach` che aggancia le armi alle ossa, e servirebbe un'altra
 fonte di modelli riggati con le animazioni da ri-targettare.
 
-Due cose misurate che riguardano questa domanda: i personaggi sono **il costo
-dominante del fotogramma** — togliendo `EntitiesDraw()` e `PlayerDraw()` dal
-blocco d'ombra il passaggio scende da 3,3 a **0,26 ms** — e
-`UpdateModelAnimation()` aggiorna posizioni e normali ma **non** le tangenti.
-Quest'ultima è la domanda **F**, ed è il primo lavoro da fare: viene prima di
-scaricare qualunque modello.
+Due cose misurate che riguardano questa domanda. I personaggi sono **il costo
+dominante del fotogramma**: togliendo `EntitiesDraw()` e `PlayerDraw()` dal
+blocco d'ombra il passaggio scende da 3,3 a **0,26 ms**. E
+`UpdateModelAnimation()` aggiorna posizioni e normali ma **non** le tangenti —
+era la domanda **F**, cioè l'unico prerequisito tecnico di questa, e **non
+blocca più**: la terna della normal map si costruisce dalle derivate di schermo,
+che lavorano su posizioni già deformate dallo scheletro. Un personaggio scaricato
+oggi porta in gioco il suo rilievo animato senza altro lavoro sullo shader.
+
+Quello che resta da decidere qui è quindi solo **la fonte**, e l'ordine rispetto
+alla domanda **B**.
 
 #### Le fonti, cercate il 9 settembre 2026
 
@@ -301,50 +306,68 @@ Due cose imparate qui:
   promette massi e dà ciottoli, e l'ingombro giusto di un volume che è quasi
   tutto aria.
 
-### F. Le tangenti sulle mesh animate — design pronto, **non approvato**
+### F. Le tangenti sulle mesh animate — **CHIUSA**
 
-È il prossimo lavoro, e viene prima di scaricare qualunque personaggio.
+Era il prerequisito dei personaggi, ed è fatto: nel ramo `projMode == 0` di
+`scene.fs`, `SurfaceNormal()` non legge più `fragTangent` e costruisce la terna
+tangente/bitangente/normale dalle **derivate di schermo** — `dFdx` e `dFdy`
+della posizione nel mondo e delle UV, il *cotangent frame*.
 
-**Cosa blocca.** `UpdateModelAnimation()` di raylib aggiorna posizioni e normali
-ma **non le tangenti**: un personaggio con una normal map vera avrebbe il rilievo
-fermo alla posa di riposo, e si vedrebbe sui volti.
+**Cosa bloccava.** `UpdateModelAnimation()` di raylib aggiorna posizioni e
+normali ma **non le tangenti**: un personaggio con una normal map vera avrebbe
+avuto il rilievo fermo alla posa di riposo, e si sarebbe visto sui volti. Le
+derivate lavorano su `fragPosition`, che esce dal vertex shader dopo `matModel`,
+cioè su posizioni già deformate dallo scheletro: non c'è nessuna tangente da
+aggiornare, perché non c'è nessuna tangente. Il difetto non è riparato, è tolto
+per costruzione. Ed era un prerequisito, non una riparazione: in gioco non c'era
+niente da andare a cercare, perché nessun personaggio ha una normal map vera.
 
-**Perché oggi non si vede niente.** Nessun personaggio ha una normal map vera:
-`LightApplyToModel()` costruisce le tangenti solo per le mesh che ne hanno una
-(`light.c:350-356`), e i modelli KayKit non ne hanno — ricevono la normale piatta
-di riserva, quindi `SurfaceNormal()` torna alla normale del vertice. **È un
-prerequisito, non una riparazione**, e chi riprende non deve aspettarsi di
-trovare un difetto in gioco.
+**Il costo, che era il rischio vero.** Le tangenti si pagavano una volta al
+caricamento, le derivate si pagano per frammento. Soglia dichiarata e committata
+*prima* di guardare il risultato: +5% sul passaggio principale. Misurato con sei
+giri del banco da 75 secondi per copia, gli ultimi tre alternati perché la
+macchina deriva verso l'alto man mano che si scalda — il passaggio principale
+passa da **2,539 a 2,465 ms, cioè −2,9%**, col segno opposto a quello temuto. Il
+merito non è tutto delle derivate: `fragTangent` è diventato un varying morto
+che il compilatore porta via da solo, quattro float per frammento, e il −2,9% è
+la somma dei due effetti. Separarli è il primo passo del lavoro che resta aperto
+qui sotto, e l'esperimento è già scritto nella spec.
 
-**Il design presentato il 9 settembre, in attesa di approvazione:**
+**Il rumore sui triangoli sotto il pixel: esiste, ed è cinquanta volte sotto il
+tremolio da movimento.** Non è stato guardato, è stato **contato** — varianza
+temporale su sessanta fotogrammi consecutivi, camera che avanza di un centimetro
+a fotogramma sul nevaio a nord-est, con 51 prop Poly Haven con normal map vera
+in campo. La differenza media fra fotogrammi consecutivi passa da 0,23933 a
+0,24000 livelli, +0,25%; sui 114 pixel più sensibili — i bordi dei massi — la
+varianza passa da 3,364 a 3,421, cioè **sei centesimi di livello** aggiunti a un
+tremolio da movimento già cinquanta volte più grande e a sua volta invisibile.
+**Nessuna mitigazione è stata scritta**, e la decisione è motivata: lo
+sfarfallio dei triangoli sub-pixel è il problema che risolvono LOD e impostori
+— la domanda **B** — non quello della terna, e una soglia sulla distanza andrebbe
+tarata su una geometria che è destinata a essere sostituita.
 
-- nel ramo `projMode == 0` di `scene.fs`, `SurfaceNormal()` smette di usare
-  `fragTangent` e costruisce la terna dalle **derivate di schermo** — `dFdx` e
-  `dFdy` della posizione nel mondo e delle UV, il *cotangent frame*. Su una mesh
-  animata è corretto **per costruzione**: le derivate lavorano sulle posizioni
-  già deformate dallo scheletro, quindi non esiste una tangente da aggiornare;
-- **ovunque, non solo sugli animati.** Due percorsi che fanno la stessa cosa in
-  modi diversi divergono in silenzio — è già successo con lo sfalsamento della
-  proiezione — e in più le derivate coprono il caso che `BuildTangents()` lascia
-  scoperto: le UV degeneri, dove la tangente resta nulla e il rilievo sparisce;
-- i due rami proiettati **non cambiano**: si costruiscono già la loro terna dagli
-  assi della proiezione;
-- **il rischio è il costo**, che si paga per frammento su tutta la scena invece
-  che una volta al caricamento. Va **misurato** col binario strumentato sullo
-  stesso percorso di 75 secondi, non dichiarato gratis. Ripiego se il passaggio
-  principale peggiora: un interruttore per materiale che usa le derivate solo
-  dove servono;
-- **la prova**: una mesh statica con UV note e una normal map inclinata,
-  illuminata di taglio; la terna dalle derivate deve dare la **stessa**
-  illuminazione di quella dalle tangenti, entro tolleranza. Se concordano sullo
-  statico, l'animato segue per costruzione — ed è l'unico modo di provarlo finché
-  non esiste in gioco un personaggio con una normal map vera. Sabotaggio:
-  invertire la bitangente derivata deve far fallire il confronto;
-- **fuori ambito, da fare dopo:** se la sostituzione regge, `BuildTangents()`,
-  l'attributo `vertexTangent` e il varying `fragTangent` diventano codice morto,
-  e toglierli restituirebbe quattro float di varying su tutta la scena. Tocca la
-  disposizione degli attributi in `instancing.c`, che è delicata: si fa quando il
-  percorso nuovo è provato in gioco, non prima.
+**Quello che resta scoperto.** Le UV degeneri **non** sono coperte: il design
+del 9 settembre affermava il contrario, ed era falso. Dove le derivate delle UV
+sono nulle il determinante è zero e la terna non esiste; il ripiego è lo stesso
+di prima, la normale del vertice, su una condizione diversa. Il problema si è
+spostato dal vertice al frammento.
+
+**Quello che resta da fare, ed è un lavoro suo.** `BuildTangents()`, l'attributo
+`vertexTangent` e il varying `fragTangent` sono oggi codice morto: nessuno legge
+più ciò che producono, e toglierli restituirebbe quattro float di varying su
+tutta la scena. Non sono stati tolti qui, per due ragioni scritte nella spec —
+avrebbero reso il numero del costo non attribuibile, e `normalmap.c` dichiara le
+tangenti a mano proprio per essere lo strumento con cui questo lavoro si misura.
+**La condizione che sblocca la rimozione: il percorso nuovo provato in gioco su
+un personaggio con una normal map vera**, cioè dopo la domanda **C**. Tocca la
+disposizione degli attributi in `instancing.c`, che è delicata, e il suo primo
+passo è già scritto: rilanciare il banco tenendo vivo `fragTangent` con una
+lettura inerte, per separare il costo delle derivate dal credito del varying
+morto.
+
+Design, misure e tabelle in
+`docs/superpowers/specs/2026-09-09-tangenti-da-derivate-design.md`; il
+funzionamento sta in `docs/01`, sezione *Normal map*.
 
 ## Come si verifica che tutto regga
 
@@ -455,4 +478,9 @@ legge una schermata vuota.
   per la torre, e perché un indice non basta senza l'ingombro atteso
 - `docs/superpowers/specs/2026-09-08-tumulo-della-cripta-design.md` — la domanda
   E, e perché una cripta non esiste nel catalogo
+- `docs/superpowers/specs/2026-09-09-tangenti-da-derivate-design.md` — la domanda
+  F: il cotangent frame, la misura del costo con la soglia dichiarata prima, e il
+  conto dello sfarfallio sui triangoli sotto il pixel
+- `docs/superpowers/plans/2026-09-09-tangenti-da-derivate.md` — il piano eseguito
+  per quel lavoro
 - i piani eseguiti stanno accanto ai design, in `docs/superpowers/plans/`
