@@ -212,8 +212,10 @@ viene spostato di lato dallo script:
 ```
 
 **Nessun asset del catalogo porta le tangenti nel file.** Le calcola
-`BuildTangents()` al caricamento — 1 ms per il sasso — e senza, ogni normal map
-illuminerebbe storto. Poly Haven resta utile anche per le **texture**.
+`BuildTangents()` al caricamento — 1 ms per il sasso — ma oggi quel calcolo non
+serve più a illuminare: il fragment shader costruisce la terna dalle derivate
+di schermo e non legge le tangenti. Toglierlo è un lavoro già previsto ma non
+ancora fatto. Poly Haven resta utile anche per le **texture**.
 
 **Attenzione ai .glb di Kenney: vanno riparati.** I kit sono esportati con
 UniGLTF (Unity), che indica come radice della scena un nodo che ha già un

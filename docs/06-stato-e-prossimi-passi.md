@@ -329,7 +329,7 @@ giri del banco da 75 secondi per copia, gli ultimi tre alternati perché la
 macchina deriva verso l'alto man mano che si scalda — il passaggio principale
 passa da **2,539 a 2,465 ms, cioè −2,9%**, col segno opposto a quello temuto. Il
 merito non è tutto delle derivate: `fragTangent` è diventato un varying morto
-che il compilatore porta via da solo, quattro float per frammento, e il −2,9% è
+che il compilatore può portare via da solo, quattro float per frammento, e il −2,9% è
 la somma dei due effetti. Separarli è il primo passo del lavoro che resta aperto
 qui sotto, e l'esperimento è già scritto nella spec.
 

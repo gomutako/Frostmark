@@ -172,7 +172,7 @@ principale passa da **2,539 a 2,465 ms, cioè −2,9%**, contro una soglia di +5
 scritta e committata *prima* di guardare il risultato. Il segno è l'opposto di
 quello temuto, e il merito non è tutto delle derivate: nella versione nuova
 `fragTangent` non lo legge più nessuno, diventa un varying morto che il
-compilatore GLSL porta via da solo, e con lui l'interpolazione di quattro float
+compilatore GLSL può portare via da solo, e con lui l'interpolazione di quattro float
 per frammento su tutta la scena. Il −2,9% è la somma di due effetti di segno
 opposto, e separarli è il primo passo del lavoro che toglierà l'attributo.
 
@@ -183,7 +183,7 @@ Tre trappole, tutte trovate scrivendo questa parte:
   shader leggerebbe il *colore* come rilievo: ogni asset senza normal map, cioè
   tutti quelli di oggi, si illuminerebbe a caso. Perciò `LightApplyToMaterial()`
   installa su chi non ce l'ha una normale **piatta**, un pixel `(128,128,255)`
-  che vale `(0,0,1)` e significa "non piegare niente". Una copia per materiale e
+  che vale circa `(0,0,1)` e significa "non piegare niente". Una copia per materiale e
   non una condivisa: `UnloadMaterial()` libera le texture delle mappe, e una
   texture sola liberata due volte è un guaio che si paga lontano da dove è stato
   commesso. Un pixel per materiale non si misura.
@@ -539,8 +539,8 @@ tetto hanno lo stesso passo delle assi del muro, e il rilievo non è storto.
 
 **La normal map non usa le tangenti del vertice**, che i pezzi del kit non
 hanno: la terna si costruisce dagli **assi della proiezione**, che sono gli
-assi dell'oggetto. Chi ha UV vere continua a passare da `SurfaceNormal()` e
-dalla tangente del `.glb`.
+assi dell'oggetto. Chi ha UV vere continua a passare da `SurfaceNormal()`, che
+però la terna la costruisce dalle derivate di schermo.
 
 **La bitangente si dichiara, non si ricava da `cross(n, t)`.** Qui `t` e `bt`
 non sono una terna generica: sono gli assi della proiezione, e la V ha una
@@ -696,7 +696,8 @@ dal sole" — e sta dentro la tolleranza di 3 con cui la prova confronta.
 **Due fixture dichiarano tangenti in disaccordo con le proprie UV, e non è un
 errore da correggere.** `Quadrato()` dichiara a mano `w = +1`, che dà
 `b = cross(n,t) = (0,0,−1)`; ma le sue UV fanno crescere la v lungo +Z, quindi
-la bitangente vera è `(0,0,+1)`. È proprio quel disaccordo a rendere
+la bitangente vera è `(0,0,+1)`. `QuadratoUVRuotate()` dichiara la tangente
+inchiodata a `(1,0,0)`, ma le sue UV fanno crescere la u lungo +Z. È proprio quel disaccordo a rendere
 discriminanti i due casi qui sopra: una terna costruita dalle derivate segue le
 UV e ignora la `w`, una costruita dall'attributo segue la `w`, e se le due
 concordassero i due percorsi darebbero lo stesso numero. Chi "aggiusta" quelle

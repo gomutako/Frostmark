@@ -202,7 +202,7 @@ float LightShadowRadius(int cascade) { return cascade == 0 ? SHADOW_NEAR_R : SHA
  * oggi - si illuminerebbero a caso.
  *
  * Rimedio: chi non ne ha una ne riceve una piatta, un pixel (128,128,255),
- * che in spazio tangente vale (0,0,1) e vuol dire "non piegare niente". Cosi'
+ * che in spazio tangente vale circa (0,0,1) e vuol dire "non piegare niente". Cosi'
  * lo shader non ha bisogno di sapere come stanno le cose e non ha rami.
  *
  * Una copia per materiale, non una condivisa: UnloadMaterial() e UnloadModel()
@@ -352,10 +352,10 @@ void LightApplyToModel(Model *m)
     /* Le tangenti prima della normale piatta: dopo, ogni materiale avrebbe una
      * normal map e non si distinguerebbe piu' quella vera dal tappabuchi.
      *
-     * Le tangenti dicono come sta ruotata la texture sulla superficie, e senza
-     * di esse una normal map vera illumina storto. raylib le legge dal .glb se
-     * il pacchetto le ha esportate; se mancano le calcola BuildTangents(), una
-     * volta al caricamento e non a ogni fotogramma. */
+     * BuildTangents() riempie ancora le tangenti del vertice - raylib le legge
+     * dal .glb se il pacchetto le ha esportate, altrimenti le calcola qui, una
+     * volta al caricamento e non a ogni fotogramma - ma il fragment shader
+     * costruisce la terna dalle derivate di schermo e non le legge piu'. */
     for (int i = 0; i < m->meshCount; i++) {
         if (m->meshes[i].tangents != NULL) continue;
         int mat = (m->meshMaterial != NULL) ? m->meshMaterial[i] : 0;
