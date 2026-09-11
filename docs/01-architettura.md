@@ -60,6 +60,7 @@ main()
      └─ GameDraw(g)
          ├─ BeginMode3D → terreno, prop, entità, proiettili, acqua
          └─ 2D → marker, HUD, schermata attiva
+```
 
 `PlayerUpdate()` in discesa si **aggancia al terreno**: senza, a ogni passo il
 suolo scende sotto i piedi, il giocatore resta in aria per un fotogramma e la
@@ -717,7 +718,6 @@ volta per entità a fine aggiornamento, qualunque cosa abbia deciso l'IA: prima
 stava dentro il movimento, e un nemico fermo lasciato a mezz'aria non cadeva
 mai. Non prendono danno da caduta: un lupo che si butta da una rupe darebbe
 esperienza e bottino senza che nessuno lo abbia ucciso.
-```
 
 Nota su `dt`: viene limitato a 0,05 s in `main.c`. Senza questo limite, dopo una
 pausa del sistema operativo il giocatore attraverserebbe il terreno in un frame.
