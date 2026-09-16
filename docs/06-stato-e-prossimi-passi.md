@@ -37,7 +37,7 @@ la risposta non è stata trovare l'oggetto ma **comporlo**:
 | # | pezzo | stato |
 |---|---|---|
 | 1 | **erba** | **fatto** — `celandine_01`, cinque varianti |
-| 2 | **alberi e pini** | **ripiego, ma ora con dei numeri**: restano stilizzati e il suolo sotto è vero. Misurato il 16 settembre: un albero realistico da 4.600 vertici costa **+16%** sul passo principale, da 23.000 **+89%**, quindi gli alberi generati bastano e gli impostori non sono obbligatori. È la domanda **B**, con **B bis** e **B ter** |
+| 2 | **alberi e pini** | **ripiego, ma ora con dei numeri e uno strumento**: un albero realistico da 4.600 vertici costa **+16%** sul passo principale, da 23.000 **+89%**. Sapling gira senza interfaccia e il conteggio è una manopola da 400 a 231.528 vertici — ma il budget si compra svuotando la chioma. Domande **B**, **bis**, **ter**, **quater**, **quinquies** |
 | 3 | **edifici** | **fatto** — materiali proiettati sui dieci pezzi modulari |
 | 4 | **torre** | **fatto** — `tower_round`, il pezzo 12 dei venti di `modular_fort_01` |
 | 5 | **cripta** | **fatto** — un tumulo di massi con un varco. È la domanda **E** |
@@ -260,10 +260,75 @@ dopo Poly Haven, **non ha modelli 3D di piante**: nei primi 300 asset ci sono
 258 materiali, 38 HDRI, 2 decal, 2 terreni e **zero** `3DModel`. Questa strada
 ha ancora bisogno di un candidato con un nome.
 
-**Blender non è installato**, e `bpy` su pip **non ha una build per Python
-3.14**, che è quello di questa macchina. Sia gli alberi generati sia gli
-impostori passano da lì: sbloccarli vuol dire installare Blender.
+**Blender era il blocco di entrambe queste strade, e non lo è più**: come si è
+risolto sta in **B quater** qui sotto.
 
+### B quater — Sapling gira, e il conteggio è una manopola (16 settembre 2026)
+
+Il blocco è caduto. **Blender non era installato e `bpy` su pip non ha una build
+per Python 3.14**, che è quello di questa macchina; la via d'uscita è stata il
+tarball ufficiale estratto in `~/opt`, senza `sudo`, senza pacchetti di sistema,
+e si disfa con un `rm -rf`.
+
+**Sapling non è più nel pacchetto.** Dalla 4.2 gli addon di serie sono passati
+alla piattaforma *extensions*, e nella 5.0.1 ne restano tredici. Sapling **non è
+stato ripubblicato**: cercato su tutte le 1.447 estensioni del catalogo, non
+c'è. Il suo sorgente GPL però è ancora online, sono due file più nove preset, e
+**gira sulla 5.0 in `--background`**: `bpy.ops.curve.tree_add` risponde. Come si
+riprende sta in testa a `tools/sapling_tree.py`.
+
+Fra i nove preset ci sono `douglas_fir` e `small_pine`, cioè i due casi che
+servono a questo mondo.
+
+**Il conteggio dei vertici è un parametro**, su tre ordini di grandezza. Su
+`douglas_fir`:
+
+| configurazione | vertici | com'è |
+|---|---|---|
+| `levels 2` | **400** | gli stessi 396 dell'albero KayKit di oggi |
+| `levels 3`, rami ridotti | 1.788 | solo struttura, niente chioma |
+| ...più foglie rade | **7.624** | abete riconoscibile **ma spoglio** |
+| rami fitti, `leaves 40` | 58.940 | più folto, ma la chioma legge come brina |
+| default del preset | 231.528 | **oltre il tetto** del vincolo 1 |
+
+**E qui la cosa che i numeri non dicevano, e che si è vista solo rendendo
+l'albero:** il budget di vertici si compra **svuotando la chioma**. A 7.624
+vertici la forma è giusta — tronco rastremato, rami a verticilli, silhouette da
+conifera — e l'albero è spoglio come a febbraio. Un bosco di abeti nudi non è
+più vicino a Skyrim di un bosco di cartone. **Guardare l'albero era necessario:
+nessun conteggio lo avrebbe detto.**
+
+La ragione è che Sapling spende geometria in **migliaia di foglioline
+minuscole**, ed è lo strumento sbagliato per la densità.
+
+### B quinquies — la strada che ne esce, e i due dettagli che la fanno fallire
+
+I giochi risolvono la densità con **poche schede grandi e una texture di ciuffo
+con canale alfa**. Quella texture è prendibile, ed è la scoperta che rende la
+strada percorribile: le mappe del ciuffo di `pine_tree_01` si scaricano
+**separatamente dalla geometria** — `twig_diff` 0,51 MB, `twig_alpha` 0,20 MB,
+`twig_nor_gl` 0,80 MB, più `bark_diff` e `bark_nor_gl`, tutte CC0 a 1k. **I 949
+MB che non possiamo caricare non servono.**
+
+Due dettagli che, se non si sanno prima, fanno sembrare rotto il risultato:
+
+- **il ritaglio alfa si accende dal FORMATO della texture**, non
+  dall'`alphaMode` del glTF: `LightAlphaCutFor()` in `src/light.c:151-169`
+  guarda se il formato ha un canale alfa. `twig_diff` e `twig_alpha` sono due
+  file separati e vanno **uniti in un RGBA**, o il ritaglio resta spento. È lo
+  stesso motivo per cui **il ritaglio di `bush` non è mai stato attivo in
+  gioco**: il suo glTF dichiara `alphaMode: MASK`, ma la diffusa è un JPEG RGB
+  senza alfa. Vale la pena saperlo anche fuori da qui;
+- **l'albero esce con due mesh e zero materiali.** `tree` 4.010 vertici e
+  `leaves` 4.908, entrambe sotto il tetto, ma senza materiali né immagini:
+  Sapling non ne assegna. Sono due materiali da costruire, e solo il secondo
+  vuole il ritaglio. Le due mesh si toccano in XZ, quindi la macchina delle
+  varianti le riconosce come **un individuo solo** — che è giusto.
+
+**Quello che resta da misurare, ed è l'ultimo buco:** il costo del ritaglio alfa
+e della sovrascrittura di una chioma vera. Il banco non l'ha mai visto, perché
+nessuno dei quattro candidati dello sweep aveva l'alfa attivo. Si misura col
+primo albero texturizzato, non prima.
 ### C. I personaggi — aperta, la più grossa, e senza più prerequisiti tecnici
 
 Non è un lavoro Poly Haven: giocatore e cinque NPC sono **riggati e animati**,
@@ -663,4 +728,6 @@ legge una schermata vuota.
   torto, e come si è separata la terna dalla rasterizzazione
 - `tools/banco/README.md` — il banco di misura, ora a tre modalità: costo,
   rumore e precisione
+- `tools/sapling_tree.py` — come si genera un albero, con in testa come si
+  rimette Sapling dentro un Blender che non ce l'ha più
 - i piani eseguiti stanno accanto ai design, in `docs/superpowers/plans/`
