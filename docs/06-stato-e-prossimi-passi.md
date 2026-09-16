@@ -37,7 +37,7 @@ la risposta non è stata trovare l'oggetto ma **comporlo**:
 | # | pezzo | stato |
 |---|---|---|
 | 1 | **erba** | **fatto** — `celandine_01`, cinque varianti |
-| 2 | **alberi e pini** | **ripiego**: restano stilizzati e il suolo sotto è vero. Con l'obiettivo dichiarato non basta più. È la domanda **B** |
+| 2 | **alberi e pini** | **ripiego, ma ora con dei numeri**: restano stilizzati e il suolo sotto è vero. Misurato il 16 settembre: un albero realistico da 4.600 vertici costa **+16%** sul passo principale, da 23.000 **+89%**, quindi gli alberi generati bastano e gli impostori non sono obbligatori. È la domanda **B**, con **B bis** e **B ter** |
 | 3 | **edifici** | **fatto** — materiali proiettati sui dieci pezzi modulari |
 | 4 | **torre** | **fatto** — `tower_round`, il pezzo 12 dei venti di `modular_fort_01` |
 | 5 | **cripta** | **fatto** — un tumulo di massi con un varco. È la domanda **E** |
@@ -149,7 +149,7 @@ disegnare dalla posizione. Il mondo cotto non è stato toccato. Design in
 Restano fuori e restano YAGNI: i **pesi per variante** (una comune, tre rare) e
 le varianti dichiarate a mano.
 
-### B. Gli alberi — risolta con un ripiego, **riaperta dall'obiettivo**
+### B. Gli alberi — ripiego riaperto dall'obiettivo, e ora **misurato**
 
 Non si scrive nessuno spezzatore di mesh, e la ragione sta nel vincolo 2 qui
 sopra: reindicizzare risolve gli indici, non il peso, e sbloccherebbe un asset
@@ -181,12 +181,88 @@ invece diventare un arbusto.
 **E con l'obiettivo dichiarato il 9 settembre, "risolta diversamente" diventa un
 ripiego, non una risposta.** Un bosco di alberi stilizzati è l'80% di quello che
 si vede a 260 m: è il singolo ostacolo più grande fra il gioco di oggi e un
-Skyrim semplificato. Le strade non ancora esplorate, in ordine di costo
-crescente: **impostori** — pannelli con l'immagine di un albero vero reso una
-volta sola, che è come li fanno i giochi grandi oltre una certa distanza;
-**alberi generati** da uno strumento tipo Sapling o TreeGen di Blender, esportati
-a un conteggio scelto da noi invece che subito dal catalogo; **un'altra fonte**
-con licenza compatibile. Nessuna delle tre è stata misurata.
+Skyrim semplificato. Le tre strade erano **impostori** — pannelli con l'immagine
+di un albero vero reso una volta sola, come li fanno i giochi grandi oltre una
+certa distanza; **alberi generati** da uno strumento tipo Sapling o TreeGen di
+Blender, a un conteggio scelto da noi invece che subìto dal catalogo;
+**un'altra fonte** con licenza compatibile.
+
+### B bis — quanto pesa un albero vero, misurato il 16 settembre 2026
+
+Quel «nessuna delle tre è stata misurata» non vale più. Due lo sono.
+
+**Il numero che ribalta la domanda: gli alberi di oggi costano già quanto un
+impostore.** `tree.glb` ha **396 vertici** e `pine.glb` **444** — 226 e 254
+triangoli. Un impostore ne ha otto. Il problema di B non è il costo: è
+l'aspetto.
+
+**Il denominatore.** Alberi e pini sono **121.567 prop su 204.386**, cioè il
+**59,5%** del mondo. Nel punto più fitto ce ne sono 3.897 entro i 260 m di
+distanza di disegno, e nel cono visivo da 102° ne cadono circa **1.108**: alla
+taglia di oggi sono **0,44 M di vertici**, che su un passo principale da 2,2 ms
+non è niente. Il budget è largo.
+
+**La misura.** Banco in modalità costo, otto giri da 75 s, con tre baseline a
+inizio, metà e fine — 2,244 / 2,249 / 2,280 ms, deriva **1,6%**. La macchina
+delle scale tara ogni candidato a 6,5 m d'altezza, quindi l'ingombro verticale
+sullo schermo resta lo stesso e cambia la ricchezza geometrica:
+
+| albero | vert/albero | largh. a 6,5 m | passo principale | vs oggi |
+|---|---|---|---|---|
+| `tree.glb` (oggi) | 396 | 2,55 m | **2,244 ms** | — |
+| `bush` | 4.649 | 7,69 m | **2,605 ms** | **+16%** |
+| `statua` | 23.314 | 5,84 m | **4,252 ms** | **+89%** |
+| `rock` | 30.165 | 8,63 m | 10,006 ms | +346% |
+
+**Due candidati sono stati scartati, e il perché è la trappola di questa
+misura.** `ceppo` (22.472 vertici, 10,811 ms) e `tronco` (46.112, 9,776 ms) sono
+bassi e larghi in origine: `perAltezza` li scala sull'altezza nativa e li
+trasforma in oggetti larghi **18 e 25 metri**. Non sono alberi più ricchi, sono
+un'altra scena. Chi rifà lo sweep deve controllare la **larghezza risultante**,
+non solo il conteggio dei vertici.
+
+**La conclusione: gli alberi generati bastano, gli impostori non sono
+obbligatori.** A quattro-cinquemila vertici per albero si sta dentro il +16%, ed
+è il conteggio che Sapling o TreeGen danno se glielo si chiede. Tutti e quattro
+i candidati portano una normal map vera, che l'albero KayKit non ha: quel +16%
+non è solo geometria, è il passaggio da cartone ad asset fotogrammetrico nel suo
+insieme.
+
+**Tre limiti della misura, e vanno letti insieme ai numeri.**
+
+- **È al punto di partenza, non al peggiore.** Da `1365,96 / 474,31` si vedono
+  **1.608** alberi entro 260 m; il punto più fitto ne ha 3.897. Scalando
+  linearmente — estrapolazione, non misura — il +16% varrebbe +0,87 ms e il
+  +89% circa +4,9 ms;
+- **la curva non è lineare, e c'è un salto non spiegato.** Fra `statua` e `rock`
+  i vertici crescono di 1,29× e l'area frontale di 1,5×, ma il costo di
+  **2,35×**. Né i vertici né la copertura da soli lo spiegano. È il primo posto
+  dove guardare se un giorno il conto non torna;
+- **il fogliame con ritaglio alfa non c'è dentro.** Nessuno dei quattro
+  candidati ce l'ha. Un albero vero ha foglie su quadrati ritagliati:
+  sovrascrittura, più una lettura di texture che si paga **anche nel passaggio
+  d'ombra** (`docs/01`, sezione *Normal map*). Potrebbe dominare tutto il resto,
+  e **resta da misurare**.
+
+### B ter — cosa è chiuso delle altre due strade
+
+**Gli impostori sono bloccati dove lo sono gli alberi generati.** Non sono
+un'ottimizzazione — qui non c'è niente da ottimizzare — ma una tecnica di
+qualità: disaccoppiano l'aspetto dal budget. Per generarne uno però serve
+renderizzare un albero vero **una volta, offline**, e lì il blocco è confermato:
+`pine_tree_01` ha **949 MB di sola geometria, identici a tutte e quattro le
+risoluzioni** — la risoluzione cambia solo le texture (9, 33, 111, 346 MB). Il
+numero del vincolo 2 era giusto, e non esiste una variante geometrica più
+leggera da caricare.
+
+**Un'altra fonte: un vicolo cieco in meno.** ambientCG, il candidato più ovvio
+dopo Poly Haven, **non ha modelli 3D di piante**: nei primi 300 asset ci sono
+258 materiali, 38 HDRI, 2 decal, 2 terreni e **zero** `3DModel`. Questa strada
+ha ancora bisogno di un candidato con un nome.
+
+**Blender non è installato**, e `bpy` su pip **non ha una build per Python
+3.14**, che è quello di questa macchina. Sia gli alberi generati sia gli
+impostori passano da lì: sbloccarli vuol dire installare Blender.
 
 ### C. I personaggi — aperta, la più grossa, e senza più prerequisiti tecnici
 
