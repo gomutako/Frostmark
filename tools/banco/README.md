@@ -17,7 +17,7 @@ qualcuno — non dietro un flag, non dietro una `#define` spenta di default: un
 gioca, per misurare le prestazioni di chi sviluppa.
 
 Per questo il banco non è un bersaglio del Makefile né un file che vive dentro
-`src/`. È una **procedura**: si applicano due diff a due copie dei sorgenti
+`src/`. È una **procedura**: si applicano i diff a copie dei sorgenti
 tenute *fuori* dal repository, si compila lì, ci si misura lì, e le copie si
 buttano. Quello che resta nel repo sono i diff — il metodo, non l'eseguibile.
 
@@ -38,31 +38,55 @@ sistemate a mano in **entrambe** le copie, o il binario non parte o carica gli
 asset sbagliati:
 
 - **`assets/models/` e `assets/textures/`** sono in `.gitignore` (insieme a
-  `assets/fonts/`, `assets/audio/`, `assets/heightmap.png`): vanno copiati a
-  mano dalla checkout di lavoro dentro ciascuna copia, identici nelle due;
+  `assets/fonts/` e `assets/audio/`): vanno copiati a mano dalla checkout di
+  lavoro dentro ciascuna copia, identici nelle due. `assets/heightmap.png`
+  è nominato dal `.gitignore` ma non esiste più: le quote stanno in
+  `assets/world/height.bin`, che è tracciato;
 - **`vendor/raylib`** è il submodule dei sorgenti di raylib, anch'esso escluso
   da `git archive`. Non ha senso ricompilarlo due volte: si collega con un
   link simbolico dalla checkout di lavoro (o da una copia compilata una sola
-  volta) dentro ciascun albero —
-  `ln -s /percorso/alla/checkout/vendor/raylib /tmp/banco/prima/vendor/raylib`
+  volta) dentro ciascun albero. **`git archive` lascia al posto del submodule
+  una cartella vuota**, quindi va tolta prima o il link finisce *dentro* di
+  lei e il `make` si ferma su `raylib.h: No such file or directory`:
+  `rm -rf /tmp/banco/prima/vendor/raylib && ln -s /percorso/alla/checkout/vendor/raylib /tmp/banco/prima/vendor/raylib`,
   e lo stesso per `dopo`.
 
 A questo punto in ciascuna copia si applica il diff di questa cartella e si
 compila con `make` normale:
 
 ```bash
-cd /tmp/banco/prima && patch -p1 < strumentazione-main.c.diff \
-                     && patch -p1 < strumentazione-game.c.diff && make
-cd /tmp/banco/dopo  && patch -p1 < strumentazione-main.c.diff \
-                     && patch -p1 < strumentazione-game.c.diff && make
+cd /tmp/banco/prima
+patch src/main.c < tools/banco/strumentazione-main.c.diff
+patch src/game.c < tools/banco/strumentazione-game.c.diff
+make frostmark
 ```
 
+e lo stesso per `dopo`. Due dettagli, e tutti e due sono costati tempo a chi
+li ha scoperti:
+
+- **si nomina il file, non si usa `-p1`.** I due diff del 9 settembre portano
+  nell'intestazione i percorsi **assoluti** dello scratchpad in cui sono nati,
+  quindi nessun valore di `-p` li riduce a `src/main.c` e `patch` si ferma
+  chiedendo `File to patch:`. I due diff `-fp32-` sono nati con percorsi
+  relativi e si applicano con `patch -p0` dalla radice della copia;
+- **`make frostmark`, non `make`.** Il `make` liscio costruisce anche
+  `frostmark.exe`, e per farlo compila raylib con mingw **dentro
+  `$(RAYLIB_SRC)`**, che nella copia è il symlink alla checkout vera: si
+  finisce a scrivere oggetti nel submodule di lavoro per un binario Windows
+  che il banco non usa. Il bersaglio Linux basta e non tocca niente fuori
+  dalla copia.
+
 (I diff qui dentro sono stati generati con `diff -u` fra un originale e una
-copia modificata, non con `git diff`; `patch -p1` li applica lo stesso. Se il
-sorgente della copia si è mosso da quello con cui i diff sono stati fatti —
-è successo una volta, il 9 settembre 2026 — si applicano a mano leggendo le
-`@@` come guida, che è il motivo per cui il resto di questo file spiega le
-modifiche una per una invece di limitarsi a dire "applica il diff".)
+copia modificata, non con `git diff`. Se il sorgente della copia si è mosso da
+quello con cui i diff sono stati fatti — è successo una volta, il 9 settembre
+2026 — si applicano a mano leggendo le `@@` come guida, che è il motivo per
+cui il resto di questo file spiega le modifiche una per una invece di
+limitarsi a dire "applica il diff".)
+
+**La modalità precisione vuole diff diversi:** `strumentazione-fp32-main.c.diff`
+al posto di `strumentazione-main.c.diff` — è **completo**, contiene anche le
+modalità costo e rumore, quindi non si sommano — più
+`strumentazione-fp32-light.c.diff`, e `strumentazione-game.c.diff` come sempre.
 
 `assets/world/` (il mondo cotto) è tracciato e arriva con `git archive`, non
 va copiato a mano.
@@ -100,10 +124,10 @@ commenti dicono `BANCO` — ma vale la pena spiegare perché ciascuna c'è.
   ogni fotogramma: così l'insieme delle direzioni viste è lo stesso in tutte
   le esecuzioni, indipendentemente da quanto è veloce la macchina che gira il
   banco.
-- **Le due modalità**, lette dalla variabile d'ambiente `FROSTMARK_BANCO` — la
+- **Le tre modalità**, lette dalla variabile d'ambiente `FROSTMARK_BANCO` — la
   sezione seguente le spiega.
 
-## Le due modalità
+## Le tre modalità
 
 Una sola variabile d'ambiente sceglie cosa fare, letta in `main()`:
 
@@ -150,6 +174,63 @@ d'ambiente opzionali:
 ```bash
 FROSTMARK_BANCO=rumore FROSTMARK_SCATTO=prima.png FROSTMARK_MAPPA=prima.bin ./frostmark
 ```
+
+### `FROSTMARK_BANCO=fp32` — modalità **precisione**
+
+Le altre due misurano il tempo e la varianza fra fotogrammi consecutivi.
+Questa risponde a una domanda diversa: **due fotogrammi che in aritmetica
+esatta sarebbero identici, differiscono?** Serve alla regressione fp32 della
+domanda F di `docs/06`, dove la terna della normal map si costruisce dalle
+derivate di una posizione che in fp32 perde precisione man mano che ci si
+allontana dall'origine del mondo.
+
+Disegna **un masso solo** — `namaqualand_boulder_04`, normal map vera, modo di
+proiezione 0 — alla posizione letta da `FROSTMARK_FP32_POS`, con la camera a
+`FROSTMARK_FP32_DIST` metri dalla sua **superficie**, e salva un PNG in
+`FROSTMARK_SCATTO`. Cinque fotogrammi di riscaldamento, poi lo scatto.
+
+```bash
+FROSTMARK_BANCO=fp32 FROSTMARK_FP32_POS=64,64     FROSTMARK_FP32_DIST=1.0 \
+  FROSTMARK_SCATTO=vicino.png  ./frostmark
+FROSTMARK_BANCO=fp32 FROSTMARK_FP32_POS=4032,4032 FROSTMARK_FP32_DIST=1.0 \
+  FROSTMARK_SCATTO=lontano.png ./frostmark
+python3 tools/banco/confronta_png.py vicino.png lontano.png
+```
+
+`confronta_png.py` stampa gli **stessi quattro nomi** della modalità rumore —
+`diff_media`, `pixel`, `frazione_cambiati`, `diff_max` — perché misura la
+stessa grandezza su una coppia diversa: lì fotogrammi consecutivi, qui due
+posizioni di mondo.
+
+**Cosa spegne, e perché non è pulizia.** Niente terreno, niente entità, niente
+ombre — queste ultime con tre righe in `LightFrame()` che forzano `shadowOn` a
+zero. La quota del terreno e le matrici `lightVP` dipendono dalla posizione
+**assoluta**: a `64,64` e a `4032,4032` sono diverse, e sarebbero differenze
+**vere** fra i due fotogrammi, grandi abbastanza da coprire quella cercata,
+che vale frazioni di livello.
+
+Tutto il resto è **relativo al masso** — camera, sguardo, sole, scala — quindi
+in aritmetica esatta i due PNG sarebbero identici bit per bit.
+
+#### Le tre trappole di questa modalità
+
+- **il masso che non riempie il fotogramma.** `diff_media` è una media su
+  *tutti* i pixel, e lo sfondo nero è identico per costruzione: se il masso ne
+  occupa un decimo, il numero è diviso per dieci e sembra zero. L'inquadratura
+  si **calcola dall'ingombro** (`GetMeshBoundingBox` sulle mesh della variante)
+  e non si indovina con una quota a occhio — il primo tentativo del 16
+  settembre lo faceva, e il masso usciva decentrato su un quarto dello schermo.
+  Anche così il masso è circa il **27%** dei pixel, quindi le medie
+  sull'intero fotogramma vanno lette sapendo che sono diluite di ~3,7×;
+- **la variante scelta dalla posizione.** `PropVariantOf()` sceglie la variante
+  dall'hash della posizione: usata qui disegnerebbe due massi **diversi** nei
+  due punti, e il confronto misurerebbe la differenza fra due modelli invece
+  che fra due precisioni. La variante è **fissa a 0**;
+- **il pavimento di rumore non è zero.** Due esecuzioni alla **stessa**
+  posizione danno `diff_media=0.00082` e `diff_max=11.98` — probabilmente il
+  risolvere dell'MSAA. Prima di leggere qualunque differenza va misurato quel
+  pavimento, e la differenza va dichiarata solo se gli sta molto sopra: il 16
+  settembre il segnale era **138 volte** il pavimento.
 
 ## Il metodo
 

@@ -1,0 +1,32 @@
+--- src/light.c	2026-09-16 12:20:36.109346310 +0200
++++ /tmp/banco/fp32/src/light.c	2026-09-16 22:45:19.426980861 +0200
+@@ -4,6 +4,8 @@
+ #include "config.h"
+ #include <stddef.h>
+ #include <math.h>
++#include <stdlib.h>    /* BANCO: getenv() */
++#include <string.h>    /* BANCO: strcmp()  */
+ 
+ /* DUE mappe, non una. Con una sola bisogna scegliere fra ombre nitide e ombre
+  * lontane: a 2048 texel su 80 m un texel copre 3,9 cm, che a tre metri dalla
+@@ -447,6 +449,20 @@
+     float split = SHADOW_SPLIT;
+     int   on    = (gMap[0].depth.id > 0) ? 1 : 0;
+ 
++    /* BANCO fp32: le ombre vanno spente, e non e' pulizia. Le matrici
++     * lightVP dipendono dalla posizione ASSOLUTA nel mondo, quindi la stessa
++     * geometria a 64,64 e a 4032,4032 riceve ombra diversa: sarebbe una
++     * differenza vera fra i due fotogrammi, e maschererebbe quella cercata,
++     * che vale frazioni di livello. */
++    {
++        static int bancoFp32 = -1;
++        if (bancoFp32 < 0) {
++            const char *m = getenv("FROSTMARK_BANCO");
++            bancoFp32 = (m != NULL && strcmp(m, "fp32") == 0) ? 1 : 0;
++        }
++        if (bancoFp32) on = 0;
++    }
++
+     /* Le mappe vivono in slot alti: i bassi servono alle texture del
+      * materiale, e raylib li riassegna a ogni DrawMesh. Le texture si legano
+      * una volta sola - lo slot e' stato globale, non del programma - ma il
