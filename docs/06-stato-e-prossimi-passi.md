@@ -479,6 +479,11 @@ in `GameNewWorld()`, si fa ruotare `g->player.yaw` per campionare tutte le
 direzioni, e si gira 75 secondi. Tutti i numeri di prestazioni di questo
 documento vengono da lì, sempre dallo stesso percorso.
 
+Il procedimento non è più solo a parole: `tools/banco/` versiona i due diff di
+strumentazione e un `README.md` che spiega come costruire le due copie, cosa
+ciascuna modifica fa e perché, le due modalità — costo e rumore — e il metodo
+che rende le misure confrontabili fra loro invece che con l'assoluto.
+
 Lo stesso binario serve per le verifiche visive, che nessuna prova può fare:
 confrontare due inquadrature a pixel dice se un cambiamento ha toccato solo
 quello che doveva. Due dettagli che fanno perdere tempo se non si sanno: al

@@ -1,0 +1,64 @@
+--- /tmp/claude-1000/-home-gomutako-progetti-Frostmark/8a61d315-0a62-4d66-958f-7983dce595f4/scratchpad/game_orig.c	2026-09-09 14:41:20.470934823 +0200
++++ /tmp/claude-1000/-home-gomutako-progetti-Frostmark/8a61d315-0a62-4d66-958f-7983dce595f4/scratchpad/banco/prima/src/game.c	2026-09-09 14:09:57.223310119 +0200
+@@ -12,6 +12,17 @@
+ #include <stdlib.h>
+ #include <string.h>
+ 
++/* ===== STRUMENTAZIONE DEL BANCO - non fa parte del gioco ==================
++ * Cronometro del solo PASSAGGIO PRINCIPALE. glFinish() serializza la GPU e
++ * distorce il tempo assoluto del fotogramma: non importa, perche' distorce
++ * allo stesso modo nelle due copie e la domanda e' di quanto CAMBIA il
++ * passaggio, non quanto vale. Il passaggio d'ombra sta fuori apposta:
++ * SurfaceNormal() non viene mai chiamata con depthOnly == 1. */
++#include <GL/gl.h>
++double gPassoMs = 0.0;
++long   gPassoN  = 0;
++/* ========================================================================= */
++
+ /* ------------------------------------------------------------------------ */
+ /*  Utilita'                                                                 */
+ /* ------------------------------------------------------------------------ */
+@@ -135,6 +146,7 @@
+         WorldUpdateStreaming(&g->world, g->player.pos);
+ 
+     GameSubtitle(g, TextFormat("%s - le terre di Frostmark", g->world.towns[0].name));
++    g->state = GS_PLAY;         /* BANCO: si misura la scena, non il menu */
+     return true;
+ }
+ 
+@@ -143,14 +155,14 @@
+     LightInit();      /* prima del mondo: i materiali nascono gia' illuminati */
+     UILoadFonts();
+     memset(g, 0, sizeof(Game));
+-    g->state   = GS_MENU;
++    g->state   = GS_PLAY;   /* BANCO */
+     g->running = true;
+     g->cam.up  = (Vector3){ 0.0f, 1.0f, 0.0f };
+     g->cam.fovy = 70.0f;
+     g->cam.projection = CAMERA_PERSPECTIVE;
+     EntitiesLoadModels();          /* risorse: non dipendono dal mondo */
+     if (!GameNewWorld(g)) return false;
+-    g->state = GS_MENU;   /* GameNewWorld non cambia stato, ma restiamo espliciti */
++    g->state = GS_PLAY;   /* BANCO: si misura la scena, non il menu */
+     return true;
+ }
+ 
+@@ -567,6 +579,8 @@
+     }
+     LightFrame(g->cam);
+ 
++    glFinish();                 /* BANCO */
++    double t0 = GetTime();      /* BANCO */
+     BeginMode3D(g->cam);
+         DrawSkyBody(g);
+         WorldDrawTerrain(&g->world, g->cam, tint);
+@@ -593,6 +607,9 @@
+             DrawCube(hilt, 0.07f, 0.07f, 0.10f, (Color){ 92, 66, 44, 255 });
+         }
+     EndMode3D();
++    glFinish();                             /* BANCO */
++    gPassoMs += (GetTime() - t0) * 1000.0;  /* BANCO */
++    gPassoN++;                              /* BANCO */
+ }
+ 
+ void GameDraw(Game *g)

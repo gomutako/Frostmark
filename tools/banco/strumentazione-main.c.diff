@@ -1,0 +1,215 @@
+--- /tmp/claude-1000/-home-gomutako-progetti-Frostmark/8a61d315-0a62-4d66-958f-7983dce595f4/scratchpad/main_orig.c	2026-09-09 14:41:20.466934823 +0200
++++ /tmp/claude-1000/-home-gomutako-progetti-Frostmark/8a61d315-0a62-4d66-958f-7983dce595f4/scratchpad/banco/prima/src/main.c	2026-09-09 14:38:34.122971424 +0200
+@@ -42,6 +42,37 @@
+ #endif
+ }
+ 
++/* ===== STRUMENTAZIONE DEL BANCO - non fa parte del gioco ==================
++ * Un solo binario, due modalita' scelte da FROSTMARK_BANCO:
++ *   (assente)  costo   - 75 s di scena con la visuale che ruota, e il tempo
++ *                        del solo passaggio principale
++ *   "rumore"   rumore  - 60 fotogrammi consecutivi da una posizione fissa,
++ *                        e la differenza media fra fotogrammi consecutivi
++ *
++ * La posizione del rumore e' scritta qui e non scelta a caso. Nel campo
++ * visivo ci sono 51 prop Poly Haven con normal map VERA - 37 massi e 14
++ * cespugli - da 17 a 136 m, 24 dei quali oltre i 90 m, sul nevaio a nord-est
++ * senza un albero che li copra. Guardare in una foresta non serviva: li' la
++ * scena e' fatta di alberi di cartone, che una normal map vera non ce l'hanno,
++ * e la prova avrebbe misurato terreno e cielo. */
++#include "rlgl.h"
++#include <math.h>
++
++#define BANCO_SECONDI        75.0
++#define BANCO_YAW_PASSO      0.013f   /* radianti per fotogramma */
++
++#define BANCO_RUMORE_X       2350.0f
++#define BANCO_RUMORE_Z       2300.0f
++#define BANCO_RUMORE_YAW     1.04719755f   /* 60 gradi: verso nord-est */
++#define BANCO_RUMORE_PITCH   (-0.10f)      /* in giu': il nevaio, non il cielo */
++#define BANCO_RUMORE_PASSO   0.01f         /* metri per fotogramma */
++#define BANCO_RUMORE_N       60
++#define BANCO_RUMORE_SCALDA  40
++
++extern double gPassoMs;    /* game.c */
++extern long   gPassoN;
++/* ========================================================================= */
++
+ int main(int argc, char **argv)
+ {
+     /* --valida carica dati e mondo, elenca i problemi ed esce: si usa
+@@ -84,10 +115,13 @@
+ 
+     PreferGPUOnWSL();
+ 
+-    SetConfigFlags(FLAG_MSAA_4X_HINT | FLAG_WINDOW_RESIZABLE | FLAG_VSYNC_HINT);
++    /* BANCO: niente vsync e niente tetto di fotogrammi - con il vsync acceso
++     * la GPU resta ferma meta' del tempo e si raccolgono meno campioni.
++     * Finestra nascosta: la prova normalmap.c lo fa gia' con successo su
++     * questa macchina, e toglie di mezzo il compositore. */
++    SetConfigFlags(FLAG_MSAA_4X_HINT | FLAG_WINDOW_RESIZABLE | FLAG_WINDOW_HIDDEN);
+     InitWindow(SCREEN_W, SCREEN_H, GAME_NAME " " GAME_VERSION);
+     SetExitKey(KEY_NULL);          /* ESC serve al menu, non per uscire */
+-    SetTargetFPS(60);
+ 
+     static Game game;              /* statico: la struttura e' grande        */
+     if (!GameInit(&game)) {
+@@ -97,35 +131,130 @@
+         return 1;
+     }
+ 
+-    /* Passo fisso: la simulazione avanza sempre di SIM_STEP, indipendentemente
+-     * dal frame rate. Serve alla fisica, che con un dt variabile cambia
+-     * comportamento, e rende il gioco riproducibile. L'input si legge una volta
+-     * per fotogramma, la simulazione puo' girare piu' volte per recuperare. */
+-    double accumulator = 0.0;
+-
+-    while (!WindowShouldClose() && game.running) {
+-        double frame = GetFrameTime();
+-        if (frame > SIM_MAX_FRAME) frame = SIM_MAX_FRAME;  /* dopo un freeze,
+-                                                              non si recupera
+-                                                              all'infinito */
+-        accumulator += frame;
+-
+-        GameInput(&game);
+-
+-        int steps = 0;
+-        while (accumulator >= SIM_STEP && steps < SIM_MAX_STEPS) {
+-            GameSimulate(&game, (float)SIM_STEP);
+-            accumulator -= SIM_STEP;
+-            steps++;
+-        }
+-        if (steps == SIM_MAX_STEPS) accumulator = 0.0;      /* rinuncia al resto */
+-
+-        GameUpdateCamera(&game);
++    const char *modo = getenv("FROSTMARK_BANCO");
++    int rumore = (modo != NULL && strcmp(modo, "rumore") == 0);
+ 
+-        BeginDrawing();
+-            ClearBackground(BLACK);
+-            GameDraw(&game);
+-        EndDrawing();
++    if (!rumore) {
++        /* ---- Modalita' COSTO --------------------------------------------
++         * Il giocatore resta al punto di partenza e la visuale RUOTA di un
++         * passo fisso a ogni fotogramma: cosi' si campionano tutte le
++         * direzioni invece di una sola, e l'insieme degli yaw visitati e'
++         * lo stesso in tutte le esecuzioni - non dipende da quanto e' veloce
++         * la macchina. Niente GameInput e niente GameSimulate: la scena deve
++         * essere la stessa in tutte le esecuzioni, o si misura il caso. */
++        double t0 = GetTime();
++        while (!WindowShouldClose() && game.running) {
++            game.player.yaw += BANCO_YAW_PASSO;
++            GameUpdateCamera(&game);
++            BeginDrawing();
++                ClearBackground(BLACK);
++                GameDraw(&game);
++            EndDrawing();
++            if (GetTime() - t0 >= BANCO_SECONDI) break;
++        }
++        printf("fotogrammi=%ld passo_medio_ms=%.3f\n",
++               gPassoN, gPassoN > 0 ? gPassoMs / (double)gPassoN : 0.0);
++        fflush(stdout);
++    } else {
++        /* ---- Modalita' RUMORE -------------------------------------------
++         * Posizione fissa e riproducibile, camera che avanza di un passo
++         * piccolo e uguale a ogni fotogramma lungo la direzione dello
++         * sguardo. Il movimento serve: fermi, i fotogrammi sarebbero
++         * identici e la varianza sarebbe zero in tutte e due le copie. */
++        game.player.camMode = CAM_FIRST;
++        game.player.yaw   = BANCO_RUMORE_YAW;
++        game.player.pitch = BANCO_RUMORE_PITCH;
++        game.player.pos.x = BANCO_RUMORE_X;
++        game.player.pos.z = BANCO_RUMORE_Z;
++        game.player.pos.y = WorldHeight(&game.world, BANCO_RUMORE_X,
++                                        BANCO_RUMORE_Z);
++        game.player.vel = (Vector3){ 0.0f, 0.0f, 0.0f };
++        for (int i = 0; i < 400; i++)
++            WorldUpdateStreaming(&game.world, game.player.pos);
++
++        float dirx = sinf(BANCO_RUMORE_YAW);
++        float dirz = cosf(BANCO_RUMORE_YAW);
++
++        int w = SCREEN_W, h = SCREEN_H;
++        float *lum  = NULL, *prev = NULL, *acc = NULL;
++        double somma = 0.0, massimo = 0.0;
++        long   coppie = 0, cambiati = 0, pixel = 0;
++
++        for (int f = 0; f < BANCO_RUMORE_SCALDA + BANCO_RUMORE_N; f++) {
++            if (f >= BANCO_RUMORE_SCALDA) {
++                int k = f - BANCO_RUMORE_SCALDA;
++                game.player.pos.x = BANCO_RUMORE_X + dirx * BANCO_RUMORE_PASSO * (float)k;
++                game.player.pos.z = BANCO_RUMORE_Z + dirz * BANCO_RUMORE_PASSO * (float)k;
++            }
++            GameUpdateCamera(&game);
++            BeginDrawing();
++                ClearBackground(BLACK);
++                GameDraw(&game);
++                rlDrawRenderBatchActive();   /* il batch va svuotato PRIMA di
++                                                leggere il fotogramma */
++                if (f >= BANCO_RUMORE_SCALDA) {
++                    Image im = LoadImageFromScreen();
++                    if (im.data == NULL) { EndDrawing(); break; }
++                    if (lum == NULL) {
++                        w = im.width; h = im.height;
++                        pixel = (long)w * (long)h;
++                        lum  = (float *)malloc((size_t)pixel * sizeof(float));
++                        prev = (float *)malloc((size_t)pixel * sizeof(float));
++                        acc  = (float *)calloc((size_t)pixel, sizeof(float));
++                    }
++                    if (lum != NULL && prev != NULL &&
++                        (long)im.width * (long)im.height == pixel) {
++                        const unsigned char *p = (const unsigned char *)im.data;
++                        for (long i = 0; i < pixel; i++)
++                            lum[i] = 0.2126f * (float)p[i * 4 + 0]
++                                   + 0.7152f * (float)p[i * 4 + 1]
++                                   + 0.0722f * (float)p[i * 4 + 2];
++                        if (f > BANCO_RUMORE_SCALDA) {
++                            double s = 0.0;
++                            for (long i = 0; i < pixel; i++) {
++                                double d = lum[i] - prev[i];
++                                if (d < 0.0) d = -d;
++                                s += d;
++                                if (acc != NULL) acc[i] += (float)d;
++                                if (d > massimo) massimo = d;
++                                if (d >= 0.5) cambiati++;
++                            }
++                            somma += s / (double)pixel;
++                            coppie++;
++                        }
++                        float *t = prev; prev = lum; lum = t;
++                    }
++                    if (f == BANCO_RUMORE_SCALDA) {
++                        const char *scatto = getenv("FROSTMARK_SCATTO");
++                        ExportImage(im, scatto != NULL ? scatto
++                                                       : "banco_inquadratura.png");
++                    }
++                    UnloadImage(im);
++                }
++            EndDrawing();
++        }
++        printf("diff_media=%.4f coppie=%ld pixel=%ld "
++               "frazione_cambiati=%.5f diff_max=%.2f\n",
++               coppie > 0 ? somma / (double)coppie : 0.0, coppie, pixel,
++               (coppie > 0 && pixel > 0)
++                   ? (double)cambiati / ((double)coppie * (double)pixel) : 0.0,
++               massimo);
++        fflush(stdout);
++        /* La mappa per pixel della varianza temporale: senza, si sa solo che
++         * la media su tutto lo schermo cambia poco, e non si sa se il poco sta
++         * tutto sui massi o e' sparso sul nevaio. */
++        const char *mappa = getenv("FROSTMARK_MAPPA");
++        if (mappa != NULL && acc != NULL && coppie > 0) {
++            FILE *fm = fopen(mappa, "wb");
++            if (fm != NULL) {
++                for (long i = 0; i < pixel; i++) acc[i] /= (float)coppie;
++                fwrite(acc, sizeof(float), (size_t)pixel, fm);
++                fclose(fm);
++            }
++        }
++        free(acc);
++        free(lum);
++        free(prev);
+     }
+ 
+     GameShutdown(&game);
