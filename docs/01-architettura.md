@@ -151,10 +151,56 @@ che poi vengono raddrizzati rispetto alla normale interpolata.
 posizioni e normali ma **non le tangenti**. Finché la terna nasceva
 dall'attributo, un personaggio animato con una normal map vera avrebbe avuto il
 rilievo fermo alla posa di riposo: la superficie si muove, il suo microrilievo
-no, e si vede sui volti. Le derivate lavorano su `fragPosition`, che esce dal
+no, e si vede sui volti. Le derivate lavorano su `fragPosRel`, che esce dal
 vertex shader dopo `matModel`, cioè su posizioni **già deformate dallo
 scheletro**. Non c'è nessuna tangente da aggiornare, perché non c'è nessuna
 tangente: il difetto non è riparato, è tolto per costruzione.
+
+**E la posizione è relativa alla camera, non assoluta nel mondo.** Le derivate
+hanno un secondo nemico oltre all'animazione, ed è la precisione. `WORLD_SIZE`
+vale 4096 m; in fp32 un ulp a 3000 m vale 3,6·10⁻⁴ m, mentre il passo di mondo
+fra due pixel vicini a un metro di distanza vale 1,3·10⁻³ m su 1080 righe. La
+derivata era quindi la differenza di due valori **ciascuno già sporco di un
+terzo del passo**, e la terna arrivava storta proprio nel caso per cui questo
+meccanismo esiste: un volto a un metro.
+
+Due scorciatoie sembrano equivalenti e non lo sono, e vale la pena scriverlo
+perché sono le prime che vengono in mente:
+
+- **sottrarre `viewPos` nel fragment non ripara niente.** Il varying è già
+  stato interpolato e arrotondato con magnitudine 3000: i bit sono persi prima
+  che il fragment veda il numero;
+- **`world - viewPos` nel vertex shader non basta.** `world` è già arrotondato
+  a ulp(3000), e la sottrazione fra numeri vicini è esatta *su un operando
+  sporco*. La relativa si costruisce senza **mai formare il numero grande**:
+  `mat3(matModel) * vertexPosition + (matModel[3].xyz - viewPos)`, cioè una
+  posizione locale in metri sommata a una differenza fra due posizioni vicine.
+
+La ragione per cui funziona non è il fattore 10⁻⁷ contro 10⁻⁴, ed è la parte
+che conta: **l'errore residuo diventa per vertice invece che per frammento.**
+Un varying si interpola linearmente, quindi un errore per vertice diventa sulla
+superficie del triangolo un campo d'errore lineare, e la derivata di una
+funzione lineare è una costante — un bias piccolo. Prima l'errore era
+indipendente pixel per pixel, cioè rumore, e il rumore sopravvive alla
+differenza fra pixel adiacenti che è esattamente ciò che `dFdx` calcola.
+
+**Quanto valeva, e quanto ne resta.** Misurato con la modalità precisione del
+banco — lo stesso masso a un metro, una volta a `64,64` e una volta a
+`4032,4032` — sui pixel della superficie la differenza media passa da
+**0,409 a 0,206** livelli, e i pixel che cambiano di almeno un livello intero
+da **8,3% a 2,7%**. A mezzo metro, dove l'effetto è più forte perché il passo
+per pixel si dimezza e l'ulp resta fermo, da 0,754 a 0,311 e dal 18,1% al 3,3%.
+
+Non arriva a zero, e la ragione **non è la terna**: a monte c'è una seconda
+perdita fp32 indipendente. `mvp = proj · view · model` moltiplica una
+traslazione di −4032 per una di +4032, e la cancellazione lascia circa
+ulp(4032) = 4,9·10⁻⁴ m, cioè **un quarto di pixel** di scorrimento della
+geometria rasterizzata, che sposta le UV interpolate su tutta la superficie.
+Tre misure lo dicono: il massimo sul bordo della sagoma è **bit-identico**
+prima e dopo, la sagoma si sposta di 29 pixel **lo stesso numero** prima e
+dopo, e il residuo non cala erodendo la maschera di sedici pixel verso
+l'interno. È la domanda **G** di `docs/06`, e si risolve altrove: costruendo
+model-view relativa alla camera sulla CPU.
 
 **Vale ovunque, non solo sugli animati**, ed è una scelta. Due percorsi che
 fanno la stessa cosa in modi diversi divergono in silenzio, ed è già successo

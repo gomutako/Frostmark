@@ -244,6 +244,82 @@ non è solo il caso che conta, è anche l'unico in cui la misura ha segnale.
   che la riprende — ed è un banco, cioè va lanciato a mano, il che è un limite
   dichiarato e non un difetto nascosto.
 
+## Esito — 16 settembre 2026
+
+Il lavoro è stato fatto. **Il difetto c'era, la correzione ne toglie circa la
+metà, e l'altra metà si è rivelata un problema diverso.**
+
+### Il difetto, misurato prima di toccare il codice
+
+Sull'intero fotogramma, lo stesso masso a un metro a `64,64` contro `4032,4032`:
+
+| distanza | diff_media | frazione_cambiati | diff_max |
+|---|---|---|---|
+| 1,0 m | 0,11298 | 0,05799 | 67,78 |
+| 0,5 m | 0,38485 | 0,17212 | 90,57 |
+
+La direzione conferma il conto degli ulp: dimezzando la distanza il passo per
+pixel si dimezza, l'ulp resta fermo, e media e frazione triplicano.
+
+**Un controllo che la spec non aveva previsto e che serviva:** il pavimento di
+rumore. Due esecuzioni alla **stessa** posizione danno `diff_media=0,00082`,
+non zero — probabilmente il risolvere dell'MSAA. Il segnale gli sta 138 volte
+sopra, quindi la misura regge, ma senza quel controllo non lo si saprebbe.
+
+### Il guadagno, sui pixel che contano
+
+Il masso occupa il 26,9% del fotogramma, quindi le medie sull'intero schermo
+sono diluite di ~3,7×. Separando la superficie dal bordo con un'erosione di tre
+pixel:
+
+| | interno media | interno ≥1 livello | bordo max |
+|---|---|---|---|
+| prima, 1 m | 0,4090 | 8,34% | 49,5 |
+| **dopo, 1 m** | **0,2065** | **2,72%** | **49,5** |
+| prima, 0,5 m | 0,7535 | 18,14% | 83,3 |
+| **dopo, 0,5 m** | **0,3111** | **3,33%** | **83,3** |
+
+Il terzo confronto della spec — quello che prende gli errori di segno — passa:
+lo stesso masso vicino all'origine, prima contro dopo, dà 0,0067 sui pixel
+interni, contro un pavimento di 0,0022.
+
+### Dove la spec aveva torto
+
+**«dopo vicino vs dopo lontano → identici» era sbagliato.** Non lo diventa, e
+la ragione non è un difetto della correzione: a monte c'è una seconda perdita
+fp32, indipendente, che la spec non aveva visto. `mvp = proj · view · model`
+moltiplica una traslazione di −4032 per una di +4032, e la cancellazione lascia
+circa `ulp(4032)` = `4,9·10⁻⁴ m`, cioè **un quarto del passo di mondo per
+pixel** a un metro: la geometria rasterizzata scorre, e con lei scorrono tutte
+le varying interpolate, UV comprese.
+
+Tre misure lo separano dalla terna:
+
+- il massimo **sul bordo** è bit-identico prima e dopo — la correzione non lo
+  tocca e non poteva;
+- la sagoma si sposta di **29 pixel**, lo stesso numero prima e dopo; alla
+  stessa posizione, zero;
+- erodendo la maschera di sedici pixel il residuo resta 0,188 contro un
+  pavimento di 0,002, quindi non è sbavatura di bordo. E segue in parte il
+  gradiente della texture — 0,115 nel quartile più piatto contro 0,314 nel più
+  inciso — che è la firma di uno scorrimento sub-pixel.
+
+È diventata la domanda **G** di `docs/06`.
+
+### Il costo
+
+**Non misurato, come dichiarato.** La previsione a somma nulla resta una
+previsione, e questo è il posto dove dirlo.
+
+### Cosa è stato scritto per strada
+
+Il banco ha guadagnato una terza modalità e `tools/banco/confronta_png.py`, e
+il suo README quattro attriti veri incontrati costruendo la copia: `git archive`
+lascia una cartella vuota al posto del submodule e il symlink ci finisce dentro;
+i diff del 9 settembre hanno percorsi assoluti e `-p1` non li applica; `make`
+liscio ricompila raylib con mingw **dentro la checkout vera** attraverso il
+symlink; e `make frostmark` da solo salta il bersaglio `dirs`.
+
 ## Documenti collegati
 
 - `docs/06-stato-e-prossimi-passi.md`, domanda **F** — dove la regressione è

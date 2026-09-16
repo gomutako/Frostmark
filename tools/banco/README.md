@@ -58,10 +58,10 @@ compila con `make` normale:
 cd /tmp/banco/prima
 patch src/main.c < tools/banco/strumentazione-main.c.diff
 patch src/game.c < tools/banco/strumentazione-game.c.diff
-make frostmark
+make dirs frostmark
 ```
 
-e lo stesso per `dopo`. Due dettagli, e tutti e due sono costati tempo a chi
+e lo stesso per `dopo`. Tre dettagli, e tutti e tre sono costati tempo a chi
 li ha scoperti:
 
 - **si nomina il file, non si usa `-p1`.** I due diff del 9 settembre portano
@@ -69,12 +69,15 @@ li ha scoperti:
   quindi nessun valore di `-p` li riduce a `src/main.c` e `patch` si ferma
   chiedendo `File to patch:`. I due diff `-fp32-` sono nati con percorsi
   relativi e si applicano con `patch -p0` dalla radice della copia;
-- **`make frostmark`, non `make`.** Il `make` liscio costruisce anche
-  `frostmark.exe`, e per farlo compila raylib con mingw **dentro
-  `$(RAYLIB_SRC)`**, che nella copia è il symlink alla checkout vera: si
-  finisce a scrivere oggetti nel submodule di lavoro per un binario Windows
-  che il banco non usa. Il bersaglio Linux basta e non tocca niente fuori
-  dalla copia.
+- **il bersaglio è `frostmark`, non `make` liscio.** Il `make` senza argomenti
+  costruisce anche `frostmark.exe`, e per farlo compila raylib con mingw
+  **dentro `$(RAYLIB_SRC)`**, che nella copia è il symlink alla checkout vera:
+  si finisce a scrivere oggetti nel submodule di lavoro, per un binario
+  Windows che il banco non usa. Il bersaglio Linux basta e non tocca niente
+  fuori dalla copia;
+- **e va chiesto insieme a `dirs`.** `make frostmark` da solo non tira dentro
+  quel bersaglio, e la compilazione si ferma su
+  `opening dependency file build/balance.d: No such file or directory`.
 
 (I diff qui dentro sono stati generati con `diff -u` fra un originale e una
 copia modificata, non con `git diff`. Se il sorgente della copia si è mosso da
@@ -318,8 +321,12 @@ consecutivi passa da 0,23933 a 0,24000 livelli**, +0,25%, sessanta volte sotto
 il tremolio normale da movimento. Per il resto — il rumore di fondo, le sei
 misure alternate, la mappa per pixel della varianza — vedi la spec.
 
-La stessa spec propone una verifica non ancora eseguita, che questo banco
-rende possibile: misurare lo stesso masso a un metro di distanza, una volta
-vicino all'origine del mondo e una volta all'angolo lontano della mappa, per
-vedere se la terna costruita dalle derivate degrada con il modulo della
-posizione (la regressione fp32 discussa in `docs/06`, sezione **F**).
+Quella verifica è stata **eseguita il 16 settembre 2026**, ed è la ragione per
+cui esiste la modalità precisione. Lo stesso masso a un metro, a `64,64` e a
+`4032,4032`, differiva di **0,409 livelli medi** sulla superficie con l'8,3%
+dei pixel oltre un livello intero; costruendo le derivate su una posizione
+relativa alla camera si scende a **0,206** e al 2,7%. Non a zero, e il banco ha
+detto anche perché: la model-view si cancella a quattro chilometri e sposta la
+geometria di un quarto di pixel — la domanda **G** di `docs/06`. Design e
+tabelle in
+`docs/superpowers/specs/2026-09-16-derivate-relative-alla-camera-design.md`.
