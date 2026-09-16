@@ -7,6 +7,40 @@
 
 **Ultimo aggiornamento:** 16 settembre 2026.
 
+## Il prossimo passo, in concreto
+
+**Il primo albero vero in gioco.** Finisce con un abete texturizzato al posto
+del cartone, e con l'ultimo numero mancante misurato. Cinque passi, in ordine;
+il perché di ciascuno sta nelle sezioni **B quater** e **B quinquies**.
+
+1. **Scaricare le texture del ciuffo e della corteccia** di `pine_tree_01` —
+   `twig_diff`, `twig_alpha`, `twig_nor_gl`, `bark_diff`, `bark_nor_gl`. Pochi
+   MB, CC0, **separate dai 949 MB di geometria** che non si possono caricare.
+   `tools/polyhaven_tex.py` fa già metà del lavoro.
+2. **Unire diffusa e alfa in un RGBA.** `LightAlphaCutFor()` in
+   `src/light.c:151-169` accende il ritaglio guardando il **formato** della
+   texture, non l'`alphaMode` del glTF. Saltare questo passo dà foglie a
+   esagoni opachi, ed è già successo: il ritaglio di `bush` non è mai stato
+   attivo in gioco per questa ragione.
+3. **Assegnare i due materiali in `tools/sapling_tree.py`** — corteccia sulla
+   mesh `tree`, ciuffo col ritaglio su `leaves`. Oggi lo strumento esporta
+   **zero materiali**, ed è il pezzo che gli manca.
+4. **Metterlo in gioco** (una riga in `gExtProp`) **e guardarlo.** Non è
+   saltabile, ed è la lezione del 16 settembre: il conteggio diceva 7.624
+   vertici e il render diceva *spoglio*. Nessun numero avrebbe preso quel
+   difetto.
+5. **Rimetterlo sul banco**, modalità costo. Chiude l'ultimo buco — il costo del
+   ritaglio alfa e della sovrascrittura di una chioma vera — ed è **l'unica
+   cosa che può ancora ribaltare il +16%** misurato in **B bis**.
+
+I primi tre sono meccanici. Il quarto decide se la strada regge, il quinto è
+l'unico che può dire di no.
+
+**Cosa serve sulla macchina, e non sta nel repository:** Blender con Sapling
+dentro. Le istruzioni per rimetterlo stanno in testa a `tools/sapling_tree.py`;
+su questa macchina è già installato in `~/opt/blender-5.0.1-linux-x64`, con
+Sapling in `~/.config/blender/5.0/scripts/addons/add_curve_sapling`.
+
 > **L'obiettivo dichiarato è un clone di Skyrim, anche più semplice, ma
 > realistico** — non qualcosa di "fumettoso". Detto dall'utente il 9 settembre
 > 2026, e cambia il peso delle decisioni: finché l'obiettivo era "realistico
