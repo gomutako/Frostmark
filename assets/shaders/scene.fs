@@ -3,7 +3,11 @@
 /* Una sola luce direzionale - il sole - piu' un'ombra letta da una mappa di
  * profondita'. Lo stesso shader serve anche il passaggio d'ombra: li' scrive
  * solo la profondita', e il colore non interessa a nessuno. */
-in vec3 fragPosition;
+/* RELATIVA ALLA CAMERA, in metri, non assoluta nel mondo: sotto ci sono le
+ * derivate di schermo, e in fp32 una coordinata assoluta a 3000 m ha un ulp
+ * che vale un terzo del passo di mondo fra due pixel a un metro. Chi serve
+ * l'assoluta se la ricostruisce sommando viewPos - vedi ShadowFactor(). */
+in vec3 fragPosRel;
 in vec2 fragTexCoord;
 in vec4 fragColor;
 in vec3 fragNormal;
@@ -82,9 +86,23 @@ float Pcf(sampler2D map, vec3 proj, float bias)
  * Il motivo e' l'animazione. UpdateModelAnimation() di raylib aggiorna
  * posizioni e normali ma NON le tangenti: un personaggio con una normal map
  * vera avrebbe il rilievo fermo alla posa di riposo. Le derivate lavorano su
- * fragPosition, che esce dal vertex shader dopo matModel, cioe' su posizioni
+ * fragPosRel, che esce dal vertex shader dopo matModel, cioe' su posizioni
  * gia' deformate dallo scheletro - quindi non esiste una tangente da
  * aggiornare, e la terna e' corretta per costruzione.
+ *
+ * E fragPosRel e' RELATIVA ALLA CAMERA, non assoluta nel mondo, perche' le
+ * derivate hanno un secondo nemico oltre all'animazione: la precisione. In
+ * fp32 un ulp a 3000 m vale 3,6e-4 m e il passo di mondo fra due pixel a un
+ * metro ne vale 1,3e-3, quindi la derivata era la differenza di due valori
+ * ciascuno sporco di un terzo del passo. Misurato prima della correzione: lo
+ * stesso masso a un metro, a 64,64 e a 4032,4032, dava 68 livelli su 255 di
+ * differenza massima, e a mezzo metro 91.
+ *
+ * Due scorciatoie che NON funzionano, o qualcuno le riprovera'. Sottrarre
+ * viewPos qui nel fragment non ripara niente: i bit si perdono interpolando
+ * il varying, prima che questo codice lo veda. E nel vertex shader non basta
+ * 'world - viewPos': 'world' e' gia' arrotondato, e la sottrazione conserva
+ * l'errore. La relativa si costruisce senza mai formare il numero grande.
  *
  * Vale ovunque, non solo sugli animati: due percorsi che fanno la stessa cosa
  * in modi diversi divergono in silenzio, ed e' gia' successo qui con lo
@@ -180,8 +198,8 @@ vec3 SurfaceNormal()
 {
     vec3 n = normalize(fragNormal);
 
-    vec3 dp1 = dFdx(fragPosition);
-    vec3 dp2 = dFdy(fragPosition);
+    vec3 dp1 = dFdx(fragPosRel);
+    vec3 dp2 = dFdy(fragPosRel);
     vec2 du1 = dFdx(fragTexCoord);
     vec2 du2 = dFdy(fragTexCoord);
 
@@ -264,10 +282,18 @@ float ShadowFactor(vec3 n)
      * sulle facce illuminate. La mappa larga ha texel piu' grossi e ne chiede
      * di piu'. */
     float ndl = dot(n, lightDir);
-    float dist = length(fragPosition - viewPos);
+    float dist = length(fragPosRel);
+
+    /* Le matrici della luce vivono in coordinate di MONDO, quindi qui
+     * l'assoluta serve davvero. Si ricostruisce una volta sola e non tre, e
+     * la sua precisione e' quella di prima - ne' meglio ne' peggio, perche' a
+     * questo punto il numero grande si riforma comunque. Non e' un problema:
+     * a differenza della terna, un'ombra non nasce da una DIFFERENZA fra
+     * pixel vicini, quindi l'ulp non le viene amplificato. */
+    vec3 wp = fragPosRel + viewPos;
 
     if (dist < splitDist) {
-        vec4 lp = lightVP0 * vec4(fragPosition, 1.0);
+        vec4 lp = lightVP0 * vec4(wp, 1.0);
         vec3 proj = lp.xyz / lp.w * 0.5 + 0.5;
         if (proj.z <= 1.0 && proj.x > 0.0 && proj.x < 1.0 && proj.y > 0.0 && proj.y < 1.0) {
             float bias = max(0.0012 * (1.0 - ndl), 0.0003);
@@ -277,14 +303,14 @@ float ShadowFactor(vec3 n)
             float edge = smoothstep(splitDist * 0.82, splitDist, dist);
             if (edge <= 0.0) return f;
 
-            vec4 lp1 = lightVP1 * vec4(fragPosition, 1.0);
+            vec4 lp1 = lightVP1 * vec4(wp, 1.0);
             vec3 p1 = lp1.xyz / lp1.w * 0.5 + 0.5;
             if (p1.z > 1.0 || p1.x < 0.0 || p1.x > 1.0 || p1.y < 0.0 || p1.y > 1.0) return f;
             return mix(f, Pcf(shadowMap1, p1, max(0.0035 * (1.0 - ndl), 0.0009)), edge);
         }
     }
 
-    vec4 lp = lightVP1 * vec4(fragPosition, 1.0);
+    vec4 lp = lightVP1 * vec4(wp, 1.0);
     vec3 proj = lp.xyz / lp.w * 0.5 + 0.5;
     if (proj.z > 1.0 || proj.x < 0.0 || proj.x > 1.0 || proj.y < 0.0 || proj.y > 1.0)
         return 1.0;                       /* fuori da entrambe: niente ombra */

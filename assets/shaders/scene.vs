@@ -11,8 +11,20 @@ in vec4 vertexTangent;   /* xyz: tangente; w: verso della bitangente */
 uniform mat4 mvp;
 uniform mat4 matModel;
 uniform mat4 matNormal;
+/* La camera. light.c la mette gia' su ENTRAMBI i programmi, e un uniform e'
+ * del programma linkato, non dello stadio: dichiararla qui non costa una riga
+ * di C. */
+uniform vec3 viewPos;
 
-out vec3 fragPosition;
+/* La posizione RELATIVA ALLA CAMERA, in metri. Non e' un dettaglio di comodo:
+ * scene.fs ne prende le derivate di schermo per costruire la terna della
+ * normal map, e in fp32 un ulp di una coordinata ASSOLUTA a 3000 m vale
+ * 3,6e-4 m, cioe' un terzo del passo di mondo fra due pixel a un metro di
+ * distanza. Assoluta, la terna arrivava con un errore del 15-30% proprio dove
+ * serve - un volto a un metro. Misurato: lo stesso masso a un metro, a 64,64
+ * e a 4032,4032, dava 68 livelli su 255 di differenza massima. Vedi docs/06,
+ * domanda F. */
+out vec3 fragPosRel;
 out vec2 fragTexCoord;
 out vec4 fragColor;
 out vec3 fragNormal;
@@ -36,7 +48,15 @@ out vec3 fragProjOffset;
 
 void main()
 {
-    fragPosition = vec3(matModel * vec4(vertexPosition, 1.0));
+    /* Non si calcola la posizione di mondo per poi sottrarre la camera: a
+     * quel punto il numero grande e' GIA' arrotondato, e la sottrazione - per
+     * quanto esatta, i due operandi sono vicini - si porta dietro quell'errore.
+     * Si somma invece la posizione locale (metri) a una differenza fra
+     * posizioni grandi e VICINE, che in fp32 e' esatta o quasi, e il numero
+     * grande non si forma mai. matModel e' affine, quindi mat3() ne prende la
+     * parte lineare e [3].xyz la traslazione. */
+    vec3 local  = mat3(matModel) * vertexPosition;
+    fragPosRel  = local + (matModel[3].xyz - viewPos);
     fragTexCoord = vertexTexCoord;
     fragColor    = vertexColor;
     fragNormal   = normalize(vec3(matNormal * vec4(vertexNormal, 1.0)));

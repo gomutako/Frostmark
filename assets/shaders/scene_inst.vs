@@ -28,8 +28,16 @@ layout(location = 9) in vec4 instScaleCos;    /* xyz: scala,     w: cos */
  * manda da se' solo per DrawMesh(). */
 uniform mat4 matView;
 uniform mat4 matProjection;
+/* La camera. light.c la mette gia' su ENTRAMBI i programmi, e un uniform e'
+ * del programma linkato, non dello stadio: dichiararla qui non costa una riga
+ * di C. */
+uniform vec3 viewPos;
 
-out vec3 fragPosition;
+/* La posizione RELATIVA ALLA CAMERA, in metri - stessa regola di scene.vs, e
+ * per la stessa ragione: scene.fs ne prende le derivate di schermo, e in fp32
+ * una coordinata assoluta a 3000 m ha un ulp che vale un terzo del passo di
+ * mondo fra due pixel a un metro. Vedi docs/06, domanda F. */
+out vec3 fragPosRel;
 out vec2 fragTexCoord;
 out vec4 fragColor;
 out vec3 fragNormal;
@@ -68,7 +76,8 @@ void main()
     /* Stesso ordine di DrawModelEx: prima la scala, poi la rotazione, poi la
      * posizione. Invertire scala e rotazione sposta gli oggetti scalati in
      * modo non uniforme, e sono proprio quelli che si notano - le falde. */
-    vec3 world = RuotaY(vertexPosition * sc, s, c) + instPosSin.xyz;
+    vec3 local = RuotaY(vertexPosition * sc, s, c);
+    vec3 world = local + instPosSin.xyz;
 
     /* La normale si trasforma con l'inversa trasposta, che per una scala piu'
      * una rotazione attorno a Y vuol dire DIVIDERE per la scala e poi ruotare.
@@ -86,7 +95,12 @@ void main()
      * docs/06, domanda F. */
     vec3 tan = RuotaY(vertexTangent.xyz * sc, s, c);
 
-    fragPosition = world;
+    /* Stessa regola di scene.vs: mai formare il numero grande. La differenza
+     * fra la posizione dell'istanza e la camera e' fra due numeri vicini,
+     * quindi in fp32 e' esatta o quasi; sommarle la posizione locale, che e'
+     * in metri, non la sporca. Sottrarre viewPos da 'world' non basterebbe:
+     * 'world' e' gia' arrotondato a ulp(3000). */
+    fragPosRel = local + (instPosSin.xyz - viewPos);
     fragTexCoord = vertexTexCoord;
     fragColor    = vertexColor;
     fragNormal   = normalize(nrm);
