@@ -173,8 +173,11 @@ scritta e committata *prima* di guardare il risultato. Il segno è l'opposto di
 quello temuto, e il merito non è tutto delle derivate: nella versione nuova
 `fragTangent` non lo legge più nessuno, diventa un varying morto che il
 compilatore GLSL può portare via da solo, e con lui l'interpolazione di quattro float
-per frammento su tutta la scena. Il −2,9% è la somma di due effetti di segno
-opposto, e separarli è il primo passo del lavoro che toglierà l'attributo.
+per frammento su tutta la scena. Che il −2,9% sia la somma di due effetti di
+segno opposto è **plausibile ma non verificato**: su questa macchina l'attributo
+`vertexTangent` risulta ancora legato, la prova ne stampa la location e vale 4.
+L'esperimento che scioglierebbe il dubbio è già descritto nella spec; separarli
+resta il primo passo del lavoro che toglierà l'attributo.
 
 Tre trappole, tutte trovate scrivendo questa parte:
 
@@ -675,8 +678,10 @@ piatta il rendering resti quello di sempre (**113**), che una normal map piegata
 verso il sole schiarisca (**129**) e piegata dall'altra parte scurisca (**78**);
 che su una mesh **indicizzata** — il caso su cui `GenMeshTangents()` sbaglia —
 `BuildTangents()` produca `(1,0,0)` con verso −1 e l'illuminazione torni a 129;
-e due casi aggiunti quando la terna è passata alle derivate di schermo, che sono
-gli unici che distinguono le derivate dall'attributo del vertice:
+e **tre** casi aggiunti quando la terna è passata alle derivate di schermo: i
+primi due sono gli unici che distinguono le derivate dall'attributo del
+vertice, il terzo è l'unica condizione di fallimento nuova che il ramo
+introduce:
 
 - **la bitangente viene dalle UV, non dalla `w` dichiarata.** Normal map
   `(128,191,238)`, cioè una perturbazione lungo la sola bitangente, sul quadrato
@@ -688,13 +693,23 @@ gli unici che distinguono le derivate dall'attributo del vertice:
   map del caso storico. Serve contro un difetto che nessun altro caso vede:
   un'implementazione che restituisse `t = (1,0,0)` fisso passerebbe tutto il
   resto, perché in ogni altro quadrato del file la u cresce già lungo +X. La
-  terna vera dà **129**, la tangente fissa **104**.
+  terna vera dà **129**, la tangente fissa **104**;
+- **con UV degeneri la terna non esiste, e si torna alla normale del
+  vertice.** Un quadrato con tutte le UV a `(0,0)`: le derivate delle UV sono
+  nulle, il determinante del sistema 2 × 2 è zero, e la guardia di `scene.fs`
+  ripiega sulla normale piatta senza applicare la normal map, che qui è
+  inclinata apposta. Il valore atteso è quindi quello della normale piatta,
+  **113**, anche se la normal map da sola sposterebbe il numero.
 
 Sabotati a prova verde, come vuole la regola: rovesciando la bitangente il primo
 caso legge **79** invece di 129, inchiodando la tangente a `(1,0,0)` il secondo
-legge 104 invece di 129. Il livello di scarto fra 79 e il 78 calcolato è
-arrotondamento della GPU — lo stesso che si vede da sempre sul caso "piegata via
-dal sole" — e sta dentro la tolleranza di 3 con cui la prova confronta.
+legge 104 invece di 129, e togliendo la guardia sul determinante da `scene.fs`
+il terzo legge **45** invece di 113 — la divisione per un determinante nullo
+manda la terna a NaN, il prodotto scalare col sole smette di essere un numero e
+la superficie resta con la sola luce ambiente. Il livello di scarto fra 79 e il
+78 calcolato è arrotondamento della GPU — lo stesso che si vede da sempre sul
+caso "piegata via dal sole" — e sta dentro la tolleranza di 3 con cui la prova
+confronta.
 
 **Due fixture dichiarano tangenti in disaccordo con le proprie UV, e non è un
 errore da correggere.** `Quadrato()` dichiara a mano `w = +1`, che dà

@@ -1,5 +1,6 @@
 /* ============================================================================
- * normalmap.c - La normal map nello shader, e le tangenti che la reggono.
+ * normalmap.c - La normal map nello shader, e la terna che la regge dalle
+ * derivate di schermo.
  *
  * Due cose da dimostrare, e la prima conta quanto la seconda:
  *   1. con gli asset senza normal map il rendering NON cambia;
@@ -58,9 +59,11 @@ static int HaUniform(const char *nome)
     return GetShaderLocation(gShader, nome) != -1;
 }
 
-/* Quadrato nel piano XZ, normale +Y, tangente +X dichiarata a mano: cosi' la
- * terna e' nota e il valore atteso si calcola con carta e penna, senza
- * dipendere da come si orientano le UV.
+/* Quadrato nel piano XZ, normale +Y, tangente +X dichiarata a mano - ma la
+ * terna che lo shader costruisce oggi dipende SOLO dalle UV, non da questa
+ * dichiarazione. I valori attesi 113/129/78 tornano perche' in questo
+ * quadrato la u cresce comunque lungo +X, non perche' la tangente dichiarata
+ * sia letta da qualcuno.
  *
  * La w vale +1 ed e' in DISACCORDO con le UV di questo stesso quadrato. Non e'
  * una svista: prima di "correggerla", leggi la nota in testa al file, "Perche'
@@ -215,19 +218,18 @@ int main(void)
        HaUniform("shadowMap0") && HaUniform("shadowMap1"));
     Ok("uniform viewPos / splitDist",
        HaUniform("viewPos") && HaUniform("splitDist"));
-    /* La location si STAMPA, e il controllo accetta anche -1. Da quando la
-     * terna nasce dalle derivate, nel fragment shader vertexTangent non lo
-     * legge piu' nessuno: un driver che porta via il codice morto puo'
-     * legittimamente non legare l'attributo, ed e' proprio l'ipotesi con cui
-     * la spec spiega il -2,9% del banco. Pretendere qui che sia legato
-     * renderebbe rossa una prova su una macchina che ottimizza meglio, e
-     * affermerebbe il contrario di quel che afferma la spec. Il controllo
-     * serve quindi a mettere agli atti cosa fa il driver di oggi, non a
-     * pretendere un comportamento: il numero stampato e' il dato. */
+    /* La location si STAMPA e basta, senza un Ok() intorno. Una location
+     * raylib e' per costruzione >= -1: un controllo scritto in quella forma
+     * sarebbe sempre vero, una riga verde che non puo' diventare rossa, e qui
+     * non serve un'asserzione che non prova niente. Da quando la terna nasce
+     * dalle derivate, nel fragment shader vertexTangent non lo legge piu'
+     * nessuno: un driver puo' legittimamente legarlo comunque o portarlo via
+     * come codice morto, ed e' proprio l'ipotesi con cui la spec spiega il
+     * -2,9% del banco. Non sappiamo quale dei due comportamenti sia quello
+     * giusto, e pretenderne uno vorrebbe dire inventare un requisito: il
+     * numero stampato e' il dato, non un atteso. */
     printf("  location di vertexTangent: %d\n",
            gShader.locs[SHADER_LOC_VERTEX_TANGENT]);
-    Ok("location di vertexTangent: legata o portata via (-1)",
-       gShader.locs[SHADER_LOC_VERTEX_TANGENT] >= -1);
 
     /* --- 2. chi non ha normal map ne riceve una piatta -------------------- */
     Material nudo = LoadMaterialDefault();

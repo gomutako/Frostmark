@@ -42,7 +42,7 @@ la risposta non è stata trovare l'oggetto ma **comporlo**:
 | 4 | **torre** | **fatto** — `tower_round`, il pezzo 12 dei venti di `modular_fort_01` |
 | 5 | **cripta** | **fatto** — un tumulo di massi con un varco. È la domanda **E** |
 | 6 | **personaggi** | aperto, il più grosso: serve un'altra fonte. Il vincolo delle tangenti non c'è più — la domanda **F** è chiusa — quindi resta solo la domanda **C** |
-| — | **le tangenti morte** — `BuildTangents()`, `vertexTangent`, `fragTangent` | **aperto**, ed è l'unico lavoro che la domanda **F** lascia dietro di sé: girano ancora, nessuno legge più ciò che producono. Sta dentro la F, che è intitolata *CHIUSA*, e per questo è scritto anche qui |
+| — | **le tangenti morte** — `BuildTangents()`, `vertexTangent`, `fragTangent` | **aperto**, uno dei **due** lavori che la domanda **F** lascia dietro di sé: girano ancora, nessuno legge più ciò che producono. L'altro è la regressione fp32 in campo vicino e lontano dall'origine — costruire le derivate su una posizione relativa alla camera, calcolata nel vertex shader — che non è un ritocco ma un lavoro suo. Sta dentro la F, che è intitolata *CHIUSA*, e per questo è scritto anche qui |
 
 ### Cosa è realistico in gioco, oggi
 
@@ -330,9 +330,12 @@ giri del banco da 75 secondi per copia, gli ultimi tre alternati perché la
 macchina deriva verso l'alto man mano che si scalda — il passaggio principale
 passa da **2,539 a 2,465 ms, cioè −2,9%**, col segno opposto a quello temuto. Il
 merito non è tutto delle derivate: `fragTangent` è diventato un varying morto
-che il compilatore può portare via da solo, quattro float per frammento, e il −2,9% è
-la somma dei due effetti. Separarli è il primo passo del lavoro che resta aperto
-qui sotto, e l'esperimento è già scritto nella spec.
+che il compilatore può portare via da solo, quattro float per frammento, ma che
+il −2,9% sia la somma dei due effetti è **plausibile, non verificato**: su
+questa macchina l'attributo `vertexTangent` risulta ancora legato, la prova ne
+stampa la location e vale 4. L'esperimento che scioglierebbe il dubbio è già
+scritto nella spec; separare i due effetti resta il primo passo del lavoro che
+resta aperto qui sotto.
 
 **Il rumore sui triangoli sotto il pixel: esiste, ed è sessanta volte sotto il
 tremolio da movimento.** Non è stato guardato, è stato **contato** — varianza
