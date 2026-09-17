@@ -522,6 +522,54 @@ mesh sbloccherebbe un asset solo.
 Nota sull'API: rifiuta lo User-Agent predefinito di Python con un 403. Va messa
 un'intestazione, o si usa `curl` come fa `fetch_assets.sh`.
 
+### Le mappe di un modello si scaricano senza il modello
+
+È la scoperta che ha sbloccato l'albero, e vale per tutto il catalogo. Un
+modello di Poly Haven non è un file solo: l'API elenca **una chiave per ogni
+mappa di ogni suo materiale** — `pine_tree_01` ne dichiara trentaquattro, da
+`bark_diff` a `twig_alpha` — e ognuna si scarica da sola. Le mappe del ciuffo e
+della corteccia del pino sono **tre megabyte a 1k**; la sua geometria, che non
+si potrebbe comunque caricare, è 958 MB.
+
+```bash
+./tools/fetch_assets.sh abete      # tools/polyhaven_mappe.py, cinque mappe
+```
+
+Da qui l'abete che sta in gioco: la **forma** la genera Sapling dentro Blender
+(`tools/sapling_tree.py`, istruzioni in testa al file), la **pelle** viene dal
+pino di Poly Haven. Nessuno dei due da solo bastava.
+
+```bash
+blender --background --python tools/sapling_tree.py -- douglas_fir \
+  '{"resU":1,"bevelRes":0,"curveRes":[5,3,2,2],"levels":3,
+    "branches":[0,45,12,8],"showLeaves":true,"leaves":16,
+    "leafShape":"rect","leafScale":5.0,"leafScaleX":0.6,"leafangle":-35}' \
+  assets/models/abete.glb assets/textures/abete
+```
+
+**La chioma è fatta di schede**, non di foglie: `leafShape: rect` dà quadrati da
+quattro vertici, e su ognuno si stampa un ramoscello intero con il canale alfa.
+Seicento schede sono 2.372 vertici e una chioma piena; le foglioline di Sapling,
+per riempire altrettanto, ne costerebbero decine di migliaia.
+
+**Tre cose da sapere prima, o il risultato sembra rotto.**
+
+- **Il ritaglio alfa si accende dal FORMATO della texture**, non
+  dall'`alphaMode` del glTF: `LightAlphaCutFor()` guarda se la diffusa ha un
+  canale alfa. Poly Haven spedisce `twig_diff` e `twig_alpha` come due jpg
+  separati, e un jpg l'alfa non ce l'ha: vanno **uniti in un PNG RGBA**, ed è
+  quello che fa `unisci_rgba()` dentro lo strumento. È lo stesso motivo per cui
+  il ritaglio di `bush` non è mai stato attivo in gioco — il suo glTF dichiara
+  `alphaMode: MASK`, ma la diffusa è un JPEG senza alfa;
+- **l'atlante non è fatto di schede.** `twig_diff` è lo spiegamento della mesh
+  originale del pino: due ramoscelli utilizzabili, delle pigne, e tutto intorno
+  il riempimento sbavato dei bordi, che nell'alfa è **bianco**, cioè opaco.
+  Mappare una scheda su tutto 0..1 darebbe una macchia marrone. Il rettangolo
+  buono — u 0,029..0,220, v 0,663..0,966 — è misurato sull'alfa e sta in
+  `CIUFFO_UV`;
+- **una chioma fotografata vuole i mipmap.** Senza, in gioco è nera e sgranata:
+  vedi `docs/01`, sezione *Il campionamento delle texture dei prop*.
+
 ### Due modi in cui un asset inganna
 
 Trovati misurando, e sono opposti.

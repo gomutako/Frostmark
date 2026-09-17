@@ -554,6 +554,36 @@ vegetazione, perché deve essere sparso e non tappezzare — e **sali d'hash tut
 suoi**: condividendoli, i tronchi comparirebbero sempre accanto agli stessi
 alberi.
 
+### Il campionamento delle texture dei prop
+
+Un prop esterno può portare due tipi di texture diversi, e vogliono filtri
+opposti. `FiltroDiProp()` in `src/world.c` sceglie **dalla taglia**: fino a
+512 px il filtro a punti, oltre la catena di mipmap e il trilineare.
+
+L'atlante dei kit di Kenney è una **tavolozza**: ogni faccia campiona una cella
+di colore pieno larga pochi pixel, e con i mipmap da lontano le celle vicine si
+mescolano in una tinta che non è nessuna delle due. Una mappa fotografica di
+Poly Haven è l'opposto: senza mipmap un pixel di schermo pesca **un texel a
+caso** fra le centinaia che gli cadono dentro, e l'immagine formicola appena la
+camera si muove.
+
+Per anni qui il filtro è stato a punti per tutti, ed è passato inosservato: sui
+massi e sui cespugli il difetto c'è ma è discreto. **Si è visto sull'abete**, il
+17 settembre 2026: una chioma fatta di schede con il ritaglio alfa è comparsa in
+gioco nera e sgranata, e la stessa inquadratura, con i mipmap, ha i rami. Il
+conteggio dei vertici e il log non dicevano niente di strano — il modello si
+caricava, le texture pure.
+
+Costa, e il numero è al banco in modalità costo: **+3,3%** sul passo principale
+(2,268 → 2,343 ms) per tutti i prop fotogrammetrici del mondo insieme.
+
+La soglia a 512 non è una legge di natura: è dove cade il confine fra ciò che c'è
+in questo gioco — tavolozze a 256 e 512, mappe di Poly Haven a 1024. Un kit con
+la tavolozza a 1k prenderebbe il filtro sbagliato, e lo si riconoscerebbe dal
+colore che sbava sui bordi delle celle. La prova `tools/prove/filtro.c` fissa la
+regola sulla metà che resta leggibile dopo — la catena di mipmap, perché il
+filtro impostato con `SetTextureFilter()` raylib non lo conserva.
+
 ### Materiali proiettati
 
 I pezzi modulari degli edifici vengono da due kit Kenney e **non hanno UV

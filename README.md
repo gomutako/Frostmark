@@ -122,7 +122,14 @@ build Linux resta buona per tutto il resto e avvisa all'avvio della partita.
 ./tools/fetch_assets.sh npc          # popolani, guardie, banditi, scheletri
 ./tools/fetch_assets.sh font         # i due font dell'interfaccia (OFL)
 ./tools/fetch_assets.sh heightmap    # genera anche una heightmap di prova
+./tools/fetch_assets.sh abete        # le mappe del pino, per l'albero generato
 ```
+
+L'ultima non lascia un modello ma cinque texture: l'albero realistico non si
+scarica, **si genera**. La forma la fa Sapling dentro Blender
+(`tools/sapling_tree.py`, istruzioni in testa al file), la pelle viene da quelle
+mappe. Senza Blender non cambia niente: `gExtProp` tiene l'albero del kit come
+ripiego.
 
 Lo script **verifica la licenza prima di usare** ogni pacchetto: se il file di
 licenza non dichiara CC0 (o OFL per i font) si ferma. Ogni file scaricato

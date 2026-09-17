@@ -5,36 +5,31 @@
 > aperte. Gli altri documenti spiegano *come funziona* il gioco; questo dice
 > *a che punto siamo*.
 
-**Ultimo aggiornamento:** 16 settembre 2026.
+**Ultimo aggiornamento:** 17 settembre 2026.
 
 ## Il prossimo passo, in concreto
 
-**Il primo albero vero in gioco.** Finisce con un abete texturizzato al posto
-del cartone, e con l'ultimo numero mancante misurato. Cinque passi, in ordine;
-il perché di ciascuno sta nelle sezioni **B quater** e **B quinquies**.
+**Il pino, con la stessa ricetta dell'abete.** L'albero è fatto — vedi **B
+sexies** — e il pino è l'ultimo prop del bosco rimasto di cartone. Non c'è
+niente da inventare: la strada è percorsa, lo strumento c'è, le texture sono
+già su disco.
 
-1. **Scaricare le texture del ciuffo e della corteccia** di `pine_tree_01` —
-   `twig_diff`, `twig_alpha`, `twig_nor_gl`, `bark_diff`, `bark_nor_gl`. Pochi
-   MB, CC0, **separate dai 949 MB di geometria** che non si possono caricare.
-   `tools/polyhaven_tex.py` fa già metà del lavoro.
-2. **Unire diffusa e alfa in un RGBA.** `LightAlphaCutFor()` in
-   `src/light.c:151-169` accende il ritaglio guardando il **formato** della
-   texture, non l'`alphaMode` del glTF. Saltare questo passo dà foglie a
-   esagoni opachi, ed è già successo: il ritaglio di `bush` non è mai stato
-   attivo in gioco per questa ragione.
-3. **Assegnare i due materiali in `tools/sapling_tree.py`** — corteccia sulla
-   mesh `tree`, ciuffo col ritaglio su `leaves`. Oggi lo strumento esporta
-   **zero materiali**, ed è il pezzo che gli manca.
-4. **Metterlo in gioco** (una riga in `gExtProp`) **e guardarlo.** Non è
-   saltabile, ed è la lezione del 16 settembre: il conteggio diceva 7.624
-   vertici e il render diceva *spoglio*. Nessun numero avrebbe preso quel
-   difetto.
-5. **Rimetterlo sul banco**, modalità costo. Chiude l'ultimo buco — il costo del
-   ritaglio alfa e della sovrascrittura di una chioma vera — ed è **l'unica
-   cosa che può ancora ribaltare il +16%** misurato in **B bis**.
+1. **Generarlo**, preset `small_pine` invece di `douglas_fir`, stessa riga di
+   comando di `tools/sapling_tree.py` e stessa cartella di texture. Il preset
+   dà una conifera più bassa e più larga: i numeri delle manopole vanno
+   rifatti, non copiati.
+2. **Guardarlo prima di metterlo in gioco**, con il render in Blender o con la
+   modalità **fotografia** del banco (`FROSTMARK_GUARDA`, in
+   `tools/banco/README.md`). È il passo che il 16 settembre non c'era e che ha
+   fatto perdere una giornata.
+3. **Una riga in `gExtProp`**, `[PROP_PINE]`, con il ripiego su `pine.glb` come
+   ha l'albero.
+4. **Banco, modalità costo.** Alberi e pini insieme sono il 59,5% dei prop del
+   mondo: il costo dell'abete da solo — **+27%** — è misurato su un mondo in cui
+   metà del bosco è ancora cartone, quindi il conto non è finito.
 
-I primi tre sono meccanici. Il quarto decide se la strada regge, il quinto è
-l'unico che può dire di no.
+Dopo di che il bosco è realistico e resta aperta la **domanda C**, i personaggi:
+la più grossa, e l'unica che Poly Haven non risolve.
 
 **Cosa serve sulla macchina, e non sta nel repository:** Blender con Sapling
 dentro. Le istruzioni per rimetterlo stanno in testa a `tools/sapling_tree.py`;
@@ -71,7 +66,7 @@ la risposta non è stata trovare l'oggetto ma **comporlo**:
 | # | pezzo | stato |
 |---|---|---|
 | 1 | **erba** | **fatto** — `celandine_01`, cinque varianti |
-| 2 | **alberi e pini** | **ripiego, ma ora con dei numeri e uno strumento**: un albero realistico da 4.600 vertici costa **+16%** sul passo principale, da 23.000 **+89%**. Sapling gira senza interfaccia e il conteggio è una manopola da 400 a 231.528 vertici — ma il budget si compra svuotando la chioma. Domande **B**, **bis**, **ter**, **quater**, **quinquies** |
+| 2 | **alberi e pini** | **l'albero è fatto, il pino no.** In gioco c'è un abete generato da Sapling con la pelle del pino di Poly Haven: 10.670 vertici, chioma a schede con ritaglio alfa, **+27%** sul passo principale. Il pino è ancora un cono del kit, e ha la stessa ricetta davanti. Domande **B**, **bis**, **ter**, **quater**, **quinquies**, **sexies** |
 | 3 | **edifici** | **fatto** — materiali proiettati sui dieci pezzi modulari |
 | 4 | **torre** | **fatto** — `tower_round`, il pezzo 12 dei venti di `modular_fort_01` |
 | 5 | **cripta** | **fatto** — un tumulo di massi con un varco. È la domanda **E** |
@@ -80,6 +75,12 @@ la risposta non è stata trovare l'oggetto ma **comporlo**:
 
 ### Cosa è realistico in gioco, oggi
 
+- **alberi**: un **abete generato**, non scaricato — la forma la fa Sapling
+  dentro Blender, la pelle viene dalle mappe di `pine_tree_01` prese senza la
+  sua geometria. *2 mesh, 10.670 vertici, chioma di 1.450 schede con
+  ritaglio alfa, → 6,5 m*. Non sta nel repository: si rigenera con
+  `tools/sapling_tree.py`, e chi non ha Blender vede l'albero del kit, che
+  `gExtProp` tiene come ripiego dichiarato;
 - **massi**: `namaqualand_boulder_04`, ×0,87 → 2,2 m;
 - **cespugli**: `shrub_02`, un set di quattro individui in un file — *4 mesh, 4
   varianti, ×0,85 → 1,4 m*, uno per prop;
@@ -105,11 +106,19 @@ la risposta non è stata trovare l'oggetto ma **comporlo**:
 
 ### Cosa è ancora stilizzato
 
-**Alberi, pini e personaggi.** I primi due per il vincolo 1 qui sotto, i
-personaggi perché sono riggati e animati e Poly Haven non ne ha nessuno. Torre e
-cripta sono uscite da questo elenco per la stessa ragione: quando l'oggetto non
-esiste come scansione, **si compone**. Una casa di villaggio il catalogo non ce
-l'ha, ma ha una fortezza; una cripta nemmeno, ma ha dei massi.
+**Pini e personaggi.** Il pino solo perché il suo turno non è ancora venuto: la
+ricetta dell'abete vale identica per lui, ed è il prossimo passo in testa a
+questo documento. I personaggi perché sono riggati e animati e Poly Haven non ne
+ha nessuno.
+
+L'albero è uscito da questo elenco il 17 settembre, e con lui il vincolo 2: **il
+catalogo non aveva un albero caricabile, e infatti non se n'è caricato nessuno.**
+Si è preso da Poly Haven quello che il catalogo dà bene — le **texture**, che si
+scaricano senza la geometria — e la forma l'ha fatta un generatore. È lo stesso
+rovesciamento di torre e cripta: quando l'oggetto non esiste come scansione,
+**si compone**. Una casa di villaggio il catalogo non ce l'ha, ma ha una
+fortezza; una cripta nemmeno, ma ha dei massi; un abete nemmeno, ma ha la sua
+corteccia e il suo ciuffo.
 
 ---
 
@@ -162,7 +171,22 @@ uniforme. Da qui i materiali proiettati: la coordinata si ricava dalla
 posizione. Come si riconosce il caso su un asset nuovo sta in `docs/03`,
 sezione *I kit modulari non hanno UV*.
 
-**5. Le piante da prato sono rosette, non ciuffi.** I tre fiori gialli del
+**5. Una mappa fotografica senza mipmap formicola, e su una chioma si vede
+subito.** Il filtro a punti era giusto per le tavolozze dei kit — celle di
+colore pieno larghe pochi pixel — ed è rimasto acceso per tutti i prop, comprese
+le mappe 1k di Poly Haven. Sui massi il difetto è discreto; sull'abete a schede
+con il ritaglio alfa la chioma è uscita **nera e sgranata**. Il confine è la
+taglia: 256 e 512 sono tavolozze, 1024 sono fotografie. Costa **+3,3%** sul
+passo principale per tutti i prop fotogrammetrici insieme, e la regola sta in
+`FiltroDiProp()` con la sua prova.
+
+**6. Il conteggio dei vertici di Blender non è quello del file.** L'esportatore
+glTF sdoppia i vertici sulle cuciture di UV e normali: l'abete passa da 9.696 a
+**10.670**. Il tetto del vincolo 1 lo misura raylib sul file, quindi
+controllarlo sul conteggio di Blender lascia passare modelli che in gioco
+escono sfregiati.
+
+**7. Le piante da prato sono rosette, non ciuffi.** I tre fiori gialli del
 catalogo sono alti 5-19 cm e più larghi che alti. Ne discende che la taglia
 dichiarata in `gExtProp` non può venire dal modello stilizzato che sostituisce,
 e che **`perAltezza` va messo a `false` per tutto ciò che cresce a terra**: la
@@ -183,15 +207,19 @@ disegnare dalla posizione. Il mondo cotto non è stato toccato. Design in
 Restano fuori e restano YAGNI: i **pesi per variante** (una comune, tre rare) e
 le varianti dichiarate a mano.
 
-### B. Gli alberi — ripiego riaperto dall'obiettivo, e ora **misurato**
+### B. Gli alberi — **CHIUSA per l'albero**, aperta per il pino
 
 Non si scrive nessuno spezzatore di mesh, e la ragione sta nel vincolo 2 qui
 sopra: reindicizzare risolve gli indici, non il peso, e sbloccherebbe un asset
 solo — `quiver_tree_01`, alto 2,72 m e di specie desertica.
 
-Gli alberi restano stilizzati. Diventa realistico **il suolo su cui poggiano**:
-cinque tipi di sottobosco, che il catalogo ha in abbondanza e della taglia
-giusta. Design in `docs/superpowers/specs/2026-09-08-sottobosco-design.md`,
+La risposta, arrivata il 17 settembre, è la seconda delle tre strade qui sotto:
+**l'albero si genera**, e dal catalogo si prende solo la pelle. Come, e quanto
+costa, sta in **B sexies**. Quello che segue è il percorso che ci ha portato, e
+resta valido per il pino.
+
+Nel frattempo era diventato realistico **il suolo su cui poggiano**: cinque tipi
+di sottobosco, che il catalogo ha in abbondanza e della taglia giusta. Design in `docs/superpowers/specs/2026-09-08-sottobosco-design.md`,
 funzionamento in `docs/01`, sezione *Prop di dettaglio*.
 
 Tre cose imparate qui:
@@ -359,10 +387,94 @@ Due dettagli che, se non si sanno prima, fanno sembrare rotto il risultato:
   vuole il ritaglio. Le due mesh si toccano in XZ, quindi la macchina delle
   varianti le riconosce come **un individuo solo** — che è giusto.
 
-**Quello che resta da misurare, ed è l'ultimo buco:** il costo del ritaglio alfa
-e della sovrascrittura di una chioma vera. Il banco non l'ha mai visto, perché
-nessuno dei quattro candidati dello sweep aveva l'alfa attivo. Si misura col
-primo albero texturizzato, non prima.
+**Quello che restava da misurare, ed era l'ultimo buco** — il costo del ritaglio
+alfa e della sovrascrittura di una chioma vera — è misurato: **B sexies**.
+
+### B sexies — il primo albero vero è in gioco (17 settembre 2026)
+
+**C'è un abete nel bosco, e non viene da nessun catalogo.** La forma la genera
+Sapling dentro Blender; la pelle sono le mappe del ciuffo e della corteccia di
+`pine_tree_01`, scaricate **senza** i 958 MB della sua geometria: cinque jpg a
+1k, **tre megabyte in tutto**. `./tools/fetch_assets.sh abete` le prende,
+`tools/sapling_tree.py` le monta sull'albero, `gExtProp` lo dichiara.
+
+**Cosa c'è dentro.** Due mesh e due materiali: `tree` con la corteccia e
+`leaves`, che sono **1.450 schede** — quadrati da quattro vertici, ognuno con
+sopra un ramoscello intero ritagliato dall'alfa. **10.670 vertici nel file**
+(4.870 e 5.800), ben sotto il tetto di 65.535.
+
+Quel numero non è quello di Blender, che ne conta 9.696, e la differenza va
+nella direzione che fa male: il glTF vuole un attributo per vertice, quindi
+l'esportatore **sdoppia** sulle cuciture di UV e normali. Il tetto lo misura
+raylib sul file. Lo strumento ora stampa tutti e due i conteggi, e controlla il
+tetto sul secondo.
+
+Il `.glb` pesa 4,4 MB, quasi tutti del PNG RGBA del ciuffo, e **non sta nel
+repository**: si versiona la ricetta, non il file, come per tutto il resto degli
+asset.
+
+**I numeri del banco, modalità costo, due giri da 75 s ciascuno.** Il punto è il
+solito — il punto di partenza, 1.608 alberi entro i 260 m.
+
+| cosa disegna | passo principale | vs prima |
+|---|---|---|
+| albero del kit, filtro a punti (com'era) | **2,268 ms** | — |
+| albero del kit, mipmap sulle mappe fotografiche | **2,343 ms** | +3,3% |
+| **abete a schede, ritaglio alfa, mipmap** | **2,880 ms** | **+27%** |
+
+I 2,268 ms combaciano con i 2,244 / 2,249 / 2,280 delle baseline del 16
+settembre: la macchina non si è mossa.
+
+**La risposta alla domanda che era rimasta aperta: il ritaglio alfa non domina.**
+B bis prevedeva +16% per un albero da 4.600 vertici e temeva che la
+sovrascrittura di una chioma vera potesse ribaltare tutto. Il nostro ne ha
+**10.670**, cioè più del doppio, e costa **+27%**: in linea con la crescita dei
+vertici, non oltre. La chioma a schede paga quel che pesa, e niente di più.
+
+**Il difetto che nessun numero avrebbe preso, di nuovo.** Messo in gioco, l'abete
+era **nero e sgranato**: una chioma fotografata campionata senza mipmap. Il log
+non diceva niente — modello caricato, texture caricate — e il conteggio dei
+vertici era quello giusto. Si vede solo guardando. La correzione è
+`FiltroDiProp()` in `world.c` (`docs/01`, *Il campionamento delle texture dei
+prop*): filtro a punti fino a 512 px, che è dove stanno le tavolozze dei kit,
+mipmap e trilineare sopra, che è dove stanno le mappe di Poly Haven. Vale per
+**tutti** i prop fotogrammetrici, non solo per l'albero, e costa quel +3,3%
+della riga di mezzo.
+
+**Due trappole in più, entrambe già agli atti perché costano tempo:**
+
+- **l'atlante del ciuffo non è fatto di schede.** `twig_diff` è lo spiegamento
+  della mesh originale del pino: due ramoscelli buoni, delle pigne, e intorno il
+  riempimento sbavato dei bordi, che nell'alfa è **bianco**, cioè opaco. Una
+  scheda mappata su 0..1 è una macchia marrone. Il rettangolo buono sta in
+  `CIUFFO_UV` dentro `tools/sapling_tree.py`, misurato sull'alfa;
+- **il ritaglio si accende dal FORMATO**, come da B quinquies: `twig_diff` e
+  `twig_alpha` sono due jpg, e un jpg l'alfa non ce l'ha. `unisci_rgba()` li
+  unisce in un PNG dentro Blender, ed è un giro **esatto**, non approssimato: i
+  tre canali del PNG riscritto sono identici al jpg di partenza.
+
+**Cosa è rimasto dietro, dichiarato:**
+
+- **il pino è ancora un cono del kit.** È il prossimo passo, in testa a questo
+  documento;
+- **l'albero del kit resta come ripiego.** `gExtProp` ha ora un secondo file per
+  riga, usato quando il primo manca: senza, chi non ha Blender perderebbe anche
+  l'albero di cartone e tornerebbe al cono procedurale;
+- **la chioma in gioco è più rada che nel render di Blender.** L'albero è alto
+  6,5 m e le schede si rimpiccioliscono con lui; i mipmap, assottigliando
+  l'alfa, tolgono ancora un po' di copertura. Si compra con `leafScale` e
+  `leaves`, e si paga sul passo principale: la manopola c'è, il numero anche;
+- **la taglia dell'albero non è stata toccata.** Restano 6,5 m, che per un abete
+  di Skyrim sono pochi. Cambiarla tocca il raggio di collisione cotto nel mondo,
+  quindi è una decisione a sé.
+
+**Strumenti nuovi, e tutti e tre servono anche al pino:**
+`tools/polyhaven_mappe.py` (le singole mappe di un modello, per nome),
+`./tools/fetch_assets.sh abete`, e la modalità **fotografia** del banco —
+`FROSTMARK_GUARDA="x,z,yaw,pitch"` mette il giocatore lì, scatta un PNG ed esce.
+Quest'ultima è la risposta operativa alla lezione del 16 settembre: *guardare
+non è un passo saltabile*, e adesso guardare costa una riga di comando.
+
 ### C. I personaggi — aperta, la più grossa, e senza più prerequisiti tecnici
 
 Non è un lavoro Poly Haven: giocatore e cinque NPC sono **riggati e animati**,
@@ -646,7 +758,7 @@ make prove      # le prove, esce non-zero se qualcosa non torna
 make valida     # dati e mondo cotto
 ```
 
-`make prove` compila ed esegue i **dieci** file in `tools/prove/`. Non c'è un
+`make prove` compila ed esegue gli **undici** file in `tools/prove/`. Non c'è un
 framework: una prova è un eseguibile che stampa una riga per controllo. Chi esce
 77 non ha trovato un contesto OpenGL e viene contata come saltata. **Cinque**
 non aprono nessuna finestra e girano ovunque: `scale`, che prova la collisione
@@ -655,7 +767,10 @@ e la scelta della variante; `mastio`, che prova la scelta di un pezzo per indice
 e la guardia sull'ingombro; `tumulo`, che prova l'anello della cripta — che il
 centro sia libero, che il varco sia uno solo e che l'anello sia chiuso altrove;
 e `sottobosco`, che prova la tabella dei prop di dettaglio, i due cerchi del
-tronco e il tetto per chunk. Geometria pura, senza GPU.
+tronco e il tetto per chunk. Geometria pura, senza GPU. L'undicesima, `filtro`,
+una finestra la vuole: fissa la regola del campionamento delle texture dei prop
+— mipmap sopra i 512 px, niente sotto — sulla metà che resta leggibile dopo, la
+catena di mipmap, perché il filtro impostato raylib non lo conserva.
 
 ### Le prove si verificano sabotandole, e non è una formalità
 

@@ -1,0 +1,66 @@
+--- src/main.c
++++ src/main.c
+@@ -22,6 +22,8 @@
+ #include <unistd.h>
+ #endif
+ #include <string.h>
++#include "rlgl.h"
++#include "player.h"
+ 
+ /* Sotto WSL Mesa sceglie llvmpipe, cioe' rendering software: misurato, il
+  * mondo gira a 23 fps con 2,6 passi di simulazione per fotogramma, e il gioco
+@@ -84,7 +86,10 @@
+ 
+     PreferGPUOnWSL();
+ 
+-    SetConfigFlags(FLAG_MSAA_4X_HINT | FLAG_WINDOW_RESIZABLE | FLAG_VSYNC_HINT);
++    /* BANCO: con FROSTMARK_GUARDA la finestra non si apre, si scatta e si esce. */
++    const char *guarda = getenv("FROSTMARK_GUARDA");
++    SetConfigFlags(FLAG_MSAA_4X_HINT | FLAG_WINDOW_RESIZABLE |
++                   (guarda != NULL ? FLAG_WINDOW_HIDDEN : FLAG_VSYNC_HINT));
+     InitWindow(SCREEN_W, SCREEN_H, GAME_NAME " " GAME_VERSION);
+     SetExitKey(KEY_NULL);          /* ESC serve al menu, non per uscire */
+     SetTargetFPS(60);
+@@ -101,6 +106,42 @@
+      * dal frame rate. Serve alla fisica, che con un dt variabile cambia
+      * comportamento, e rende il gioco riproducibile. L'input si legge una volta
+      * per fotogramma, la simulazione puo' girare piu' volte per recuperare. */
++    /* ===== BANCO: modalita' GUARDA - una fotografia, e basta ==============
++     * FROSTMARK_GUARDA="x,z,yaw,pitch" mette il giocatore li', aspetta che lo
++     * streaming abbia caricato i chunk, disegna qualche fotogramma e scrive il
++     * PNG di FROSTMARK_SCATTO. Serve alle verifiche visive: un asset nuovo si
++     * guarda, non si deduce dal conteggio dei vertici. */
++    if (guarda != NULL) {
++        float gx = 0.0f, gz = 0.0f, gyaw = 0.0f, gpitch = -0.05f;
++        sscanf(guarda, "%f,%f,%f,%f", &gx, &gz, &gyaw, &gpitch);
++        game.player.camMode = CAM_FIRST;
++        game.player.yaw = gyaw;
++        game.player.pitch = gpitch;
++        game.player.pos.x = gx;
++        game.player.pos.z = gz;
++        game.player.pos.y = WorldHeight(&game.world, gx, gz) + 1.7f;
++        game.player.vel = (Vector3){ 0.0f, 0.0f, 0.0f };
++        for (int i = 0; i < 400; i++)
++            WorldUpdateStreaming(&game.world, game.player.pos);
++        for (int f = 0; f < 45; f++) {
++            GameUpdateCamera(&game);
++            BeginDrawing();
++                ClearBackground(BLACK);
++                GameDraw(&game);
++                rlDrawRenderBatchActive();
++                if (f == 44) {
++                    Image im = LoadImageFromScreen();
++                    const char *s = getenv("FROSTMARK_SCATTO");
++                    ExportImage(im, s != NULL ? s : "guarda.png");
++                    UnloadImage(im);
++                }
++            EndDrawing();
++        }
++        GameShutdown(&game);
++        CloseWindow();
++        return 0;
++    }
++
+     double accumulator = 0.0;
+ 
+     while (!WindowShouldClose() && game.running) {

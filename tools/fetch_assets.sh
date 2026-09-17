@@ -17,6 +17,7 @@
 #        ./tools/fetch_assets.sh rocce      scarica un masso fotogrammetrico CC0
 #        ./tools/fetch_assets.sh polyhaven <asset> <nome>   un asset CC0 qualsiasi
 #        ./tools/fetch_assets.sh forte     scarica il kit modulare della fortezza
+#        ./tools/fetch_assets.sh abete     scarica le mappe del pino (senza la geometria)
 #        ./tools/fetch_assets.sh player     scarica il personaggio animato CC0
 #        ./tools/fetch_assets.sh npc        scarica i personaggi animati degli NPC
 #        ./tools/fetch_assets.sh font       scarica i font dell'interfaccia (OFL)
@@ -124,6 +125,55 @@ if [ "${1:-}" = "texture" ]; then
             "$DEST" "$ASSET" "$(date +%Y-%m-%d)" >> "$ASSETS/CREDITS.md"
         echo "  aggiunta la riga in assets/CREDITS.md"
     fi
+    exit 0
+fi
+
+# ---- mappe del pino, senza la sua geometria (Poly Haven) ------------------
+#  Il catalogo non ha un albero grande e caricabile - i veri pesano mezzo giga
+#  e sfondano il tetto dei vertici - ma le sue TEXTURE si scaricano da sole.
+#  Servono all'albero generato da tools/sapling_tree.py: corteccia sul tronco,
+#  ciuffo con canale alfa sulle schede della chioma.
+#
+#      ./tools/fetch_assets.sh abete
+#
+#  Lascia assets/textures/abete/ con cinque jpg a 1k, tre megabyte in tutto,
+#  contro i 958 MB del modello pine_tree_01 che non si potrebbe comunque
+#  caricare. Il canale alfa del ciuffo e' un file a se' - twig_alpha - e viene
+#  unito alla diffusa dentro Blender: senza quel passo il ritaglio resta
+#  spento, perche' light.c lo accende dal FORMATO della texture e un jpg non
+#  ha l'alfa. Vedi docs/06, sezione B quinquies.
+if [ "${1:-}" = "abete" ]; then
+    for cmd in curl python3; do
+        command -v "$cmd" >/dev/null 2>&1 || { echo "serve $cmd"; exit 1; }
+    done
+
+    ASSET="pine_tree_01"
+    mkdir -p "$ASSETS/textures/abete"
+
+    echo "cerco le mappe di $ASSET su polyhaven.com..."
+    curl -sSL "https://api.polyhaven.com/files/$ASSET" -o "$ASSETS/.ph.json"
+    python3 "$ROOT/tools/polyhaven_mappe.py" "$ASSETS/.ph.json" \
+            "$ASSETS/textures/abete" \
+            twig_diff twig_alpha twig_nor_gl bark_diff bark_nor_gl
+    rm -f "$ASSETS/.ph.json"
+
+    if ! grep -q "assets/textures/abete/" "$ASSETS/CREDITS.md" 2>/dev/null; then
+        printf '| assets/textures/abete/ (mappe di %s) | Poly Haven | https://polyhaven.com/a/%s | CC0 | %s |\n' \
+            "$ASSET" "$ASSET" "$(date +%Y-%m-%d)" >> "$ASSETS/CREDITS.md"
+        echo "  aggiunta la riga in assets/CREDITS.md"
+    fi
+
+    cat <<'NOTE'
+
+Fatto. Le mappe da sole non si vedono in gioco: ci vuole l'albero che le porta.
+
+    blender --background --python tools/sapling_tree.py -- douglas_fir \
+      '{"resU":1,"bevelRes":0,"curveRes":[5,3,2,2],"levels":3,
+        "branches":[0,40,10,6],"showLeaves":true,"leaves":10}' \
+      assets/models/tree.glb assets/textures/abete
+
+Le istruzioni per avere Blender e Sapling stanno in testa a quel file.
+NOTE
     exit 0
 fi
 

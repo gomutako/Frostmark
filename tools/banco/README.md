@@ -178,6 +178,34 @@ d'ambiente opzionali:
 FROSTMARK_BANCO=rumore FROSTMARK_SCATTO=prima.png FROSTMARK_MAPPA=prima.bin ./frostmark
 ```
 
+### `FROSTMARK_GUARDA` — modalità **fotografia**
+
+Le tre modalità qui sopra rispondono a domande con un numero. Questa risponde
+alla domanda che **non ha un numero**: *com'è venuto?* Un asset nuovo si
+guarda, e il 16 settembre 2026 è costato una giornata scoprirlo al contrario —
+il conteggio diceva 7.624 vertici e il render diceva *albero spoglio*.
+
+Vuole un diff diverso: `strumentazione-guarda-main.c.diff` al posto di
+`strumentazione-main.c.diff` — si applica con `patch src/main.c` come gli altri
+— più `strumentazione-game.c.diff` come sempre.
+
+`FROSTMARK_GUARDA="x,z,yaw,pitch"` mette il giocatore lì in prima persona,
+fa girare lo streaming finché i chunk sono dentro, disegna 45 fotogrammi e
+salva il PNG di `FROSTMARK_SCATTO`. Poi esce: niente ciclo di gioco, niente
+input.
+
+```bash
+FROSTMARK_GUARDA="1436,120,0.0,0.15" FROSTMARK_SCATTO=abete.png ./frostmark
+```
+
+Lo yaw è in radianti e 0 guarda verso z crescente; il pitch positivo guarda in
+su. Le due inquadrature dell'abete del 17 settembre sono `1400,180,0.8,-0.05`
+(un bosco intero) e quella dell'esempio (un albero a dieci metri).
+
+Serve anche per i confronti a pixel: due scatti dalla stessa riga di comando,
+uno per copia, e `tools/banco/confronta_png.py` dice se un cambiamento ha
+toccato solo quello che doveva.
+
 ### `FROSTMARK_BANCO=fp32` — modalità **precisione**
 
 Le altre due misurano il tempo e la varianza fra fotogrammi consecutivi.

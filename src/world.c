@@ -161,9 +161,21 @@ static Texture2D LoadTerrainTexture(const char *worldDir)
  *
  * 'perAltezza' dice quale dimensione conta: un albero si misura in altezza,
  * un sasso in larghezza. */
-static const struct { const char *file; float voluto; bool perAltezza; }
+/* 'ripiego' e' il file da provare se il primo non c'e'. Serve a una cosa sola,
+ * ed e' l'albero: quello vero lo GENERA tools/sapling_tree.py, quindi sta nel
+ * repository come ricetta e non come file, e chi non ha Blender non ce l'ha.
+ * Senza questa seconda scelta, dichiarare l'abete farebbe sparire anche
+ * l'albero del kit e si tornerebbe al cono procedurale - cioe' un passo
+ * indietro per chi non lancia niente. */
+static const struct { const char *file; float voluto; bool perAltezza;
+                      const char *ripiego; }
 gExtProp[PROP_COUNT] = {
-    [PROP_TREE] = { "assets/models/tree.glb",            6.5f, true  },
+    /* L'abete di Sapling: schede di fronda con la texture del ciuffo di
+     * pine_tree_01 e il ritaglio alfa, 9.696 vertici. Come si rigenera sta in
+     * testa a tools/sapling_tree.py; le texture le scarica
+     * ./tools/fetch_assets.sh abete. */
+    [PROP_TREE] = { "assets/models/abete.glb",           6.5f, true,
+                    "assets/models/tree.glb" },
     [PROP_PINE] = { "assets/models/pine.glb",            6.8f, true  },
     [PROP_ROCK] = { "assets/models/rock.glb",            2.2f, false },
     [PROP_BUSH] = { "assets/models/bush.glb",            1.4f, false },
@@ -626,6 +638,38 @@ static bool TroppiVertici(const Model *m, const char *file)
     return false;
 }
 
+/* Due campionamenti, e la scelta si fa dalla TAGLIA della texture.
+ *
+ * L'atlante di Kenney e' una TAVOLOZZA: ogni materiale campiona una cella di
+ * colore pieno larga pochi pixel, e con i mipmap da lontano le celle vicine si
+ * mescolano. Il filtro a punti lo evita.
+ *
+ * Una mappa FOTOGRAFICA no: senza mipmap un pixel dello schermo pesca un texel
+ * a caso fra le centinaia che gli finiscono dentro, e l'immagine formicola
+ * appena la camera si muove. Su una chioma fatta di schede con il ritaglio alfa
+ * non e' una sottigliezza: e' il difetto con cui l'abete e' comparso in gioco
+ * la prima volta, il 17 settembre 2026 - foglie nere e sgranate al posto di un
+ * ciuffo, e la stessa inquadratura con i mipmap ha i rami.
+ *
+ * La soglia e' 512 perche' li' cade il confine di quello che c'e' in questo
+ * gioco: le tavolozze dei kit sono 256x256 e 512x512, le mappe di Poly Haven
+ * 1024x1024. Non e' una legge di natura - un kit con la tavolozza a 1k
+ * prenderebbe il filtro sbagliato, e lo si riconoscerebbe dal colore che sbava
+ * sui bordi delle celle.
+ *
+ * Costa: misurato al banco, in modalita' costo, +3,3% sul passo principale
+ * (2,268 -> 2,343 ms) per tutti i prop fotogrammetrici insieme. */
+static void FiltroDiProp(Texture2D *t)
+{
+    if (t->id == 0) return;
+    if (t->width <= 512 && t->height <= 512) {
+        SetTextureFilter(*t, TEXTURE_FILTER_POINT);
+        return;
+    }
+    if (t->mipmaps <= 1) GenTextureMipmaps(t);
+    SetTextureFilter(*t, TEXTURE_FILTER_TRILINEAR);
+}
+
 /* Prima i lotti, poi gli array: i lotti puntano ai VBO delle mesh, e il
  * modello si scarica dopo di loro. */
 static void FreePropVariants(PropVariants *pv)
@@ -653,6 +697,8 @@ static void LoadExtProps(World *w)
 
         char alt[256];
         const char *file = TrovaModello(decl, alt, (int)sizeof alt);
+        if (file == NULL && det == NULL && gExtProp[t].ripiego != NULL)
+            file = TrovaModello(gExtProp[t].ripiego, alt, (int)sizeof alt);
         if (file == NULL) continue;
 
         Model m = LoadModel(file);
@@ -663,14 +709,11 @@ static void LoadExtProps(World *w)
         }
         if (TroppiVertici(&m, file)) { UnloadModel(m); continue; }
 
-        /* L'atlante di Kenney e' una tavolozza: ogni materiale campiona una
-         * cella di colore pieno larga pochi pixel. Con i mipmap, da lontano le
-         * celle vicine si mescolano. Il filtro a punti lo evita - qui non ho
-         * visto differenze a occhio, ma e' il campionamento giusto per una
-         * tavolozza, e la distanza massima di disegno arriva a 260 m. */
-        for (int i = 0; i < m.materialCount; i++)
-            SetTextureFilter(m.materials[i].maps[MATERIAL_MAP_DIFFUSE].texture,
-                             TEXTURE_FILTER_POINT);
+        for (int i = 0; i < m.materialCount; i++) {
+            static const int MAPPE[] = { MATERIAL_MAP_DIFFUSE, MATERIAL_MAP_NORMAL };
+            for (int k = 0; k < (int)(sizeof MAPPE / sizeof MAPPE[0]); k++)
+                FiltroDiProp(&m.materials[i].maps[MAPPE[k]].texture);
+        }
 
         LightApplyToModel(&m);
         w->extProp[t]    = m;

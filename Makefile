@@ -164,6 +164,10 @@ prove: $(RAYLIB_DEP)
 	      $(SRC_DIR)/fmath.c $(SRC_DIR)/light.c $(SRC_DIR)/instancing.c \
 	      $(SRC_DIR)/worldio.c $(SRC_DIR)/dataparse.c $(SRC_DIR)/propdefs.c \
 	      $(LDFLAGS) $(LDLIBS) -o $(PROVE_DIR)/tumulo
+	$(CC) $(PROVE_CF) $(TOOL_DIR)/prove/filtro.c \
+	      $(SRC_DIR)/fmath.c $(SRC_DIR)/light.c $(SRC_DIR)/instancing.c \
+	      $(SRC_DIR)/worldio.c $(SRC_DIR)/dataparse.c $(SRC_DIR)/propdefs.c \
+	      $(LDFLAGS) $(LDLIBS) -o $(PROVE_DIR)/filtro
 	$(CC) $(PROVE_CF) $(TOOL_DIR)/prove/sottobosco.c \
 	      $(SRC_DIR)/fmath.c $(SRC_DIR)/light.c $(SRC_DIR)/instancing.c \
 	      $(SRC_DIR)/worldio.c $(SRC_DIR)/dataparse.c $(SRC_DIR)/propdefs.c \
